@@ -14,6 +14,12 @@
  */
 
 var PERF_FOLDER_ID = '1rYBmUGSk2K0tyv4CcXd7XpiziVzLxgPh'; // 2026 KPI 현황 폴더
+
+// KPI 목표(연간/하반기)는 대표님/팀장님이 확정한 고정값 — 시트에서 다시 계산하지 않고 여기서만
+// 고정 관리(주간회의_대시보드.html의 KPI_GOAL과 동일 규칙). 공개 저장소(GitHub) 코드에는 이 숫자가
+// 안 보이도록 여기 Apps Script(비공개) 쪽에만 두고, 응답 JSON으로 내려줌.
+var KPI_GOAL_ANNUAL = 222;
+var KPI_GOAL_H2 = 101;
 var MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
 function getPassword_() {
@@ -110,7 +116,7 @@ function extractKpiStatusFromSheet_(sheet) {
 
 function getKpiData_() {
   var file = resolveLatestMonthFile_(PERF_FOLDER_ID);
-  if (!file) return { ok: true, monthAbbr: null, byWeek: {} };
+  if (!file) return { ok: true, monthAbbr: null, goal: KPI_GOAL_ANNUAL, h2Goal: KPI_GOAL_H2, byWeek: {} };
   var ss = SpreadsheetApp.openById(file.getId());
   var sheets = ss.getSheets();
   var byWeek = {};
@@ -120,5 +126,11 @@ function getKpiData_() {
     var status = extractKpiStatusFromSheet_(sh);
     if (status) byWeek[num] = status;
   });
-  return { ok: true, monthAbbr: monthAbbrFromTitle_(file.getName()), byWeek: byWeek };
+  return {
+    ok: true,
+    monthAbbr: monthAbbrFromTitle_(file.getName()),
+    goal: KPI_GOAL_ANNUAL,
+    h2Goal: KPI_GOAL_H2,
+    byWeek: byWeek,
+  };
 }

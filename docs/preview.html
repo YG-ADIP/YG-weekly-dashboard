@@ -144,7 +144,8 @@
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyF12lwBJbJHFF5af15lNBIhCxMxBDzGbG8m8c1PWXJLLvT23dOL92GKcNivl9QHaOn/exec";
 
   const KPI_RAW_URL = "https://docs.google.com/spreadsheets/d/1HlGmNBPK69IWX3OqfVV6Q-MezsXQAG6rC6tdi7cgJmA/edit?usp=sharing";
-  const KPI_GOAL = { goal: 222, h2Goal: 101 };
+  // 목표(연간/하반기) 숫자는 코드에 안 두고 Apps Script 응답에서 받아옴(비공개 저장소에만 두려고).
+  let KPI_GOAL = { goal: null, h2Goal: null };
 
   function el(tag, cls, html) {
     const e = document.createElement(tag);
@@ -353,6 +354,7 @@
   }
 
   function initKpi(data) {
+    KPI_GOAL = { goal: data.goal, h2Goal: data.h2Goal };
     const byWeek = data.byWeek || {};
     const weekNums = Object.keys(byWeek).map(n => parseInt(n, 10)).sort((a, b) => b - a);
     const select = document.getElementById("weekSelect");
