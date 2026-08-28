@@ -221,8 +221,8 @@
     transition: opacity .12s ease;
   }
   .teamcal-hover-panel .teamcal-event { white-space: normal; text-overflow: clip; }
-  .teamcal-cell.has-events:hover { z-index: 30; }
-  .teamcal-cell.has-events:hover .teamcal-hover-panel { opacity: 1; visibility: visible; pointer-events: auto; }
+  .teamcal-cell.has-events:hover { z-index: 30; overflow: visible; }
+  .teamcal-cell.has-events:hover .teamcal-hover-panel { opacity: 1; visibility: visible; pointer-events: auto; max-height: none; overflow: visible; }
 
   .card-news .card-head { border-bottom: 2px solid var(--border); padding: 16px 20px 10px; align-items: flex-end; }
   .card-news .news-eyebrow { font-size: 10px; letter-spacing: .18em; font-weight: 700; color: var(--ink-faint); margin-bottom: 3px; }
