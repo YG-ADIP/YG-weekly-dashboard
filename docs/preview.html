@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>주간 KPI 대시보드 (개발 서버)</title>
+<style>
+  :root {
+    --bg: #f3f2f7;
+    --surface: #ffffff;
+    --surface-2: #f1eff7;
+    --ink: #1c1a24;
+    --ink-soft: #5c5868;
+    --ink-faint: #918da0;
+    --border: #e6e3ef;
+    --accent: #7c5cd6;
+    --accent-soft: #ece7fa;
+    --accent-ink: #4a3a8c;
+    --good: #2e7d5b; --good-bg: #dcece3;
+    --bad: #b0463c; --bad-bg: #f4dcd9;
+    --shadow: 0 1px 2px rgba(28,26,40,0.05), 0 12px 30px -16px rgba(28,26,40,0.18);
+    --dark-card: #17151e;
+    --dark-item: #211f2b;
+    --dark-border: rgba(255,255,255,0.08);
+    --dark-ink: #f1efFA;
+    --dark-ink-soft: #a8a3bd;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    color: var(--ink);
+    font-family: "Apple SD Gothic Neo", "Malgun Gothic", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-variant-numeric: tabular-nums; line-height: 1.5; -webkit-font-smoothing: antialiased;
+    background-color: var(--bg);
+    background-image:
+      radial-gradient(ellipse 75% 55% at 12% 18%, rgba(191,222,251,0.65) 0%, rgba(191,222,251,0) 62%),
+      radial-gradient(ellipse 65% 55% at 88% 12%, rgba(255,214,232,0.65) 0%, rgba(255,214,232,0) 58%),
+      radial-gradient(ellipse 75% 65% at 82% 88%, rgba(220,201,251,0.6) 0%, rgba(220,201,251,0) 62%),
+      radial-gradient(ellipse 70% 60% at 15% 90%, rgba(200,225,251,0.55) 0%, rgba(200,225,251,0) 58%);
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 46px 32px 100px; }
+
+  header.top { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 30px; flex-wrap: wrap; }
+  header.top h1 { font-size: 32px; font-weight: 800; margin: 0; letter-spacing: -0.01em; }
+  header.top .eyebrow { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 6px; }
+  .top-actions { display: flex; align-items: center; gap: 10px; }
+  .week-select-label { font-size: 13px; font-weight: 700; color: var(--ink-faint); }
+  select.global-week-select { font-size: 14px; font-weight: 700; padding: 9px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+
+  .card { background: var(--surface); border-radius: 24px; box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; width: 100%; }
+  .card .card-head { display: flex; align-items: center; justify-content: space-between; padding: 24px 30px 10px; }
+  .card .card-head .htitle { display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 800; }
+  .card .card-head .htitle .icon-badge { width: 36px; height: 36px; border-radius: 11px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .card .card-head .badge { font-size: 12.5px; font-weight: 700; padding: 5px 13px; border-radius: 999px; background: var(--surface-2); color: var(--ink-faint); }
+  .card-head-right { display: flex; align-items: center; gap: 10px; }
+  .btn-detail { font-size: 12.5px; font-weight: 800; padding: 5px 14px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); text-decoration: none; white-space: nowrap; }
+  .btn-detail:hover { filter: brightness(1.08); }
+  .card .card-body { padding: 16px 30px 32px; flex: 1; }
+
+  .dark-card {
+    background: var(--dark-card); color: var(--dark-ink);
+    --surface: var(--dark-card); --surface-2: var(--dark-item); --border: var(--dark-border);
+    --ink: var(--dark-ink); --ink-soft: var(--dark-ink-soft); --ink-faint: var(--dark-ink-soft);
+    --accent: #b6a3f5; --accent-soft: rgba(124,92,214,0.25); --accent-ink: #b6a3f5;
+  }
+
+  .kpi-hero { display: flex; gap: 40px; align-items: center; }
+  .kpi-hero .kpi-stats { flex: 1.4; min-width: 0; }
+  .kpi-hero .kpi-chart { flex: 1; min-width: 0; }
+  @media (max-width: 760px) { .kpi-hero { flex-direction: column; align-items: stretch; } }
+  .sublabel { font-size: 13.5px; font-weight: 700; color: var(--ink-faint); margin: 18px 0 12px; }
+  .sublabel:first-child { margin-top: 4px; }
+  .stat-row { display: flex; gap: 12px; flex-wrap: nowrap; }
+  .stat-box { flex: 1; min-width: 0; background: var(--surface-2); border-radius: 16px; padding: 16px 14px; }
+  .stat-box .slabel { font-size: 12.5px; color: var(--ink-faint); margin-bottom: 7px; }
+  .stat-box .sval { font-size: 21px; font-weight: 800; color: var(--ink); }
+  .stat-box.placeholder .sval { color: var(--ink-faint); }
+  .stat-box.bad .sval { color: var(--bad); }
+  .stat-box.good .sval { color: var(--good); }
+  .stat-box.accent .sval { color: var(--accent); }
+
+  .chart-legend { display: flex; gap: 16px; font-size: 12.5px; color: var(--ink-soft); margin-bottom: 8px; }
+  .chart-legend .lg-item { display: flex; align-items: center; gap: 6px; }
+  .lg-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .kpi-example-tag { display: inline-block; font-size: 10.5px; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink-faint); vertical-align: middle; }
+
+  .state-msg { font-size: 14px; color: var(--ink-soft); padding: 14px 2px; }
+  .state-msg.err { color: var(--bad); }
+
+  footer.note { margin-top: 30px; font-size: 12.5px; color: var(--ink-faint); border-top: 1px solid var(--border); padding-top: 16px; }
+
+  /* ---- 비밀번호 게이트 ---- */
+  #pwGate { position: fixed; inset: 0; background: rgba(23,21,30,.55); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
+  #pwGate .pw-box { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); width: 100%; max-width: 320px; padding: 26px 24px; text-align: center; }
+  #pwGate .pw-box h2 { font-size: 15px; margin: 0 0 6px; }
+  #pwGate .pw-box p { font-size: 12px; color: var(--ink-faint); margin: 0 0 16px; }
+  #pwGate input { width: 100%; font-size: 14px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 10px; text-align: center; }
+  #pwGate button { width: 100%; font-size: 13px; font-weight: 800; padding: 10px 12px; border-radius: 10px; border: none; background: var(--accent); color: #fff; cursor: pointer; }
+  #pwGate button:hover { filter: brightness(1.06); }
+  #pwGate .pw-err { color: var(--bad); font-size: 11.5px; margin-top: 8px; min-height: 14px; }
+  body.locked .wrap { display: none; }
+
+  /* 개발 서버 표시 — 운영(index.html)과 구분되도록 항상 최상단에 고정 */
+  #devBanner { position: fixed; top: 0; left: 0; right: 0; z-index: 300; background: #e0973f; color: #201400; font-weight: 800; font-size: 13px; text-align: center; padding: 8px 12px; letter-spacing: 0.02em; }
+  body { padding-top: 36px; }
+</style>
+</head>
+<body class="locked">
+
+<div id="devBanner">🔧 개발 서버 — 팀원 공유용 아님 (엘라 확인 전용)</div>
+
+<div id="pwGate">
+  <div class="pw-box">
+    <h2>주간 KPI 대시보드</h2>
+    <p>팀 공용 비밀번호를 입력하세요</p>
+    <input type="password" id="pwInput" placeholder="비밀번호">
+    <button id="pwSubmit">입장</button>
+    <div class="pw-err" id="pwErr"></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">광고IP사업팀</p>
+      <h1>주간 KPI 대시보드</h1>
+    </div>
+    <div class="top-actions">
+      <label class="week-select-label" for="weekSelect">주차</label>
+      <select class="global-week-select" id="weekSelect"></select>
+    </div>
+  </header>
+
+  <div id="kpiSlot"></div>
+
+  <footer class="note">
+    데이터 출처: 2026 KPI 현황 구글시트(팀 내부 관리용) · 이 화면은 실시간 조회 전용이며 데이터를 저장하지 않습니다.
+  </footer>
+</div>
+
+<script>
+  const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyF12lwBJbJHFF5af15lNBIhCxMxBDzGbG8m8c1PWXJLLvT23dOL92GKcNivl9QHaOn/exec";
+
+  const KPI_RAW_URL = "https://docs.google.com/spreadsheets/d/1HlGmNBPK69IWX3OqfVV6Q-MezsXQAG6rC6tdi7cgJmA/edit?usp=sharing";
+  const KPI_GOAL = { goal: 222, h2Goal: 101 };
+
+  function el(tag, cls, html) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html != null) e.innerHTML = html;
+    return e;
+  }
+
+  // ---- 비밀번호 게이트 ----
+  function storedPw() { try { return sessionStorage.getItem("dashPw") || ""; } catch { return ""; } }
+  function setStoredPw(pw) { try { sessionStorage.setItem("dashPw", pw); } catch {} }
+
+  async function callBackend(section) {
+    const url = `${APPS_SCRIPT_URL}?section=${encodeURIComponent(section)}&password=${encodeURIComponent(storedPw())}`;
+    const res = await fetch(url);
+    return res.json();
+  }
+
+  async function tryUnlock(pw) {
+    setStoredPw(pw);
+    const data = await callBackend("kpi");
+    if (!data.ok) { setStoredPw(""); return false; }
+    document.body.classList.remove("locked");
+    document.getElementById("pwGate").remove();
+    initKpi(data);
+    return true;
+  }
+
+  document.getElementById("pwSubmit").addEventListener("click", submitPw);
+  document.getElementById("pwInput").addEventListener("keydown", (ev) => { if (ev.key === "Enter") submitPw(); });
+  async function submitPw() {
+    const pw = document.getElementById("pwInput").value;
+    const errEl = document.getElementById("pwErr");
+    errEl.textContent = "확인 중…";
+    const ok = await tryUnlock(pw).catch(() => false);
+    if (!ok) errEl.textContent = "비밀번호가 틀렸거나 서버에 연결할 수 없어요.";
+  }
+
+  // ---- KPI 카드 (주간회의_대시보드.html의 KPI 섹션 로직 재사용) ----
+  function kpiHeader(badgeText) {
+    const card = el("div", "card dark-card");
+    const head = el("div", "card-head");
+    head.appendChild(el("span", "htitle", `<span class="icon-badge">📊</span> 2026 KPI 현황`));
+    const right = el("div", "card-head-right");
+    right.appendChild(el("span", "badge", badgeText));
+    const rawLink = document.createElement("a");
+    rawLink.className = "btn-detail";
+    rawLink.href = KPI_RAW_URL;
+    rawLink.target = "_blank";
+    rawLink.rel = "noopener noreferrer";
+    rawLink.textContent = "상세보기 ↗";
+    right.appendChild(rawLink);
+    head.appendChild(right);
+    card.appendChild(head);
+    return card;
+  }
+
+  function statBox(label, value, cls) {
+    const box = el("div", "stat-box" + (cls ? " " + cls : ""));
+    box.appendChild(el("div", "slabel", label));
+    box.appendChild(el("div", "sval", value));
+    return box;
+  }
+
+  let sparkChartUid = 0;
+  function sparkChart(points, width) {
+    const W = width || 260, H = 100, padX = 14, padTop = 24, padBottom = 22;
+    const plotH = H - padTop - padBottom;
+    const n = points.length;
+    const baseY = padTop + plotH;
+    const vals = points.map(p => p.actual);
+    let vMin = Math.min(...vals), vMax = Math.max(...vals);
+    if (vMax - vMin < 0.03) { const mid = (vMax + vMin) / 2; vMin = mid - 0.015; vMax = mid + 0.015; }
+    const domPad = (vMax - vMin) * 0.3;
+    const domMin = Math.max(0, vMin - domPad), domMax = Math.min(1, vMax + domPad);
+    const xAt = i => padX + (n === 1 ? (W - 2 * padX) / 2 : (i / (n - 1)) * (W - 2 * padX));
+    const yAt = v => padTop + (1 - (Math.max(domMin, Math.min(domMax, v)) - domMin) / (domMax - domMin)) * plotH;
+    const actualPts = points.map((p, i) => [xAt(i), yAt(p.actual)]);
+    const line = pts => pts.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
+    const areaPath = line(actualPts)
+      + ` L${actualPts[n - 1][0].toFixed(1)},${baseY.toFixed(1)} L${actualPts[0][0].toFixed(1)},${baseY.toFixed(1)} Z`;
+    const dots = actualPts.map((p, i) => {
+      const last = i === n - 1;
+      return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${last ? 3.4 : 2.2}" style="fill:var(--accent)"/>`;
+    }).join("");
+    const labels = points.map((p, i) => {
+      const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
+      return `<text x="${xAt(i).toFixed(1)}" y="${H - 6}" text-anchor="${anchor}" style="font-size:8px;fill:var(--ink-faint)">${p.label}</text>`;
+    }).join("");
+    const badges = points.map((p, i) => {
+      const pct = Math.round(p.actual * 100) + "%";
+      const bw = 7 + pct.length * 4, bh = 11;
+      const bx = Math.max(1, Math.min(W - bw - 1, xAt(i) - bw / 2));
+      const by = Math.max(1, yAt(p.actual) - bh - 6);
+      return `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh}" rx="3.5" style="fill:var(--accent)"/>`
+        + `<text x="${(bx + bw / 2).toFixed(1)}" y="${(by + bh / 2 + 2.3).toFixed(1)}" text-anchor="middle" style="font-size:6.5px;font-weight:800;fill:#fff">${pct}</text>`;
+    }).join("");
+    const gid = "sparkFade" + (sparkChartUid++);
+    return `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" style="stop-color:var(--accent);stop-opacity:0.32"/>
+          <stop offset="100%" style="stop-color:var(--accent);stop-opacity:0"/>
+        </linearGradient>
+      </defs>
+      <line x1="${padX}" y1="${baseY}" x2="${W - padX}" y2="${baseY}" style="stroke:var(--border);stroke-width:1"/>
+      <path d="${areaPath}" style="fill:url(#${gid});stroke:none"/>
+      <path d="${line(actualPts)}" style="fill:none;stroke:var(--accent);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round"/>
+      ${dots}${badges}${labels}
+    </svg>`;
+  }
+
+  function kpiStatsBlock(rows) {
+    const wrap = el("div", "kpi-stats");
+    rows.forEach(r => {
+      wrap.appendChild(el("div", "sublabel", r.sublabel));
+      const row = el("div", "stat-row");
+      r.tiles.forEach(t => row.appendChild(statBox(t.label, t.value, t.cls)));
+      wrap.appendChild(row);
+    });
+    return wrap;
+  }
+  function kpiChartBlock(points) {
+    const wrap = el("div", "kpi-chart");
+    wrap.appendChild(el("div", "sublabel", "주별 달성률 추이"));
+    if (points && points.length >= 2) {
+      const legend = el("div", "chart-legend");
+      legend.innerHTML = `<span class="lg-item"><span class="lg-dot"></span>실제 달성률</span>`;
+      wrap.appendChild(legend);
+      wrap.appendChild(el("div", null, sparkChart(points)));
+    } else {
+      wrap.appendChild(el("div", "state-msg", "데이터가 쌓이는 중입니다 (현재 " + (points ? points.length : 0) + "건)."));
+    }
+    return wrap;
+  }
+  function kpiHeroBody(statsRows, chartPoints) {
+    const body = el("div", "card-body");
+    const hero = el("div", "kpi-hero");
+    hero.appendChild(kpiStatsBlock(statsRows));
+    hero.appendChild(kpiChartBlock(chartPoints));
+    body.appendChild(hero);
+    return body;
+  }
+
+  function formatRemainKpi(goal, actual) {
+    const diff = goal - actual;
+    if (diff > 0) return diff.toFixed(1) + "억원";
+    if (diff < 0) return "+" + Math.abs(diff).toFixed(1) + "억원";
+    return "0억원";
+  }
+
+  // 목표(goal/h2Goal)는 KPI_GOAL 고정값 사용, 실적(actual/h2Actual)만 서버가 내려준 값 사용.
+  function computeKpiFromStatus(status) {
+    if (!status.annual || isNaN(status.annual.actual)) return null;
+    const goal = KPI_GOAL.goal, h2Goal = KPI_GOAL.h2Goal;
+    const actual = status.annual.actual;
+    const h2Actual = status.h2 && !isNaN(status.h2.actual) ? status.h2.actual : null;
+    return {
+      goal, actual,
+      ach: (actual / goal) * 100,
+      remainLabel: formatRemainKpi(goal, actual),
+      h2Goal, h2Actual,
+      h2Ach: h2Actual != null ? (h2Actual / h2Goal) * 100 : null,
+    };
+  }
+
+  function buildTrendPoints(byWeek, kpiMonthAbbr, uptoWeekNum) {
+    return Object.keys(byWeek)
+      .map(k => parseInt(k, 10))
+      .filter(n => n <= uptoWeekNum)
+      .sort((a, b) => a - b)
+      .map(n => ({ status: byWeek[n], num: n }))
+      .filter(w => w.status.annual && !isNaN(w.status.annual.actual))
+      .map(w => ({ actual: w.status.annual.actual / KPI_GOAL.goal, label: kpiMonthAbbr + "_" + w.num }));
+  }
+
+  function renderKpi(byWeek, monthAbbr, num) {
+    const slotEl = document.getElementById("kpiSlot");
+    const status = byWeek[num];
+    const computed = status ? computeKpiFromStatus(status) : null;
+    const card = kpiHeader(num + "주차");
+    if (!computed) {
+      const body = el("div", "card-body");
+      body.appendChild(el("div", "state-msg", "이 주차엔 아직 실적이 입력되지 않았어요."));
+      card.appendChild(body);
+    } else {
+      const trendPoints = buildTrendPoints(byWeek, monthAbbr, num);
+      card.appendChild(kpiHeroBody([
+        { sublabel: "2026년 전체", tiles: [
+          { label: "2026 KPI 목표", value: computed.goal.toFixed(0) + "억원" },
+          { label: "실적", value: computed.actual.toFixed(1) + "억원" },
+          { label: "달성률", value: computed.ach.toFixed(0) + "%", cls: computed.ach >= 100 ? "good" : computed.ach < 60 ? "bad" : "accent" },
+          { label: "잔여 KPI", value: computed.remainLabel, cls: "accent" },
+        ] },
+        { sublabel: "하반기", tiles: computed.h2Actual != null ? [
+          { label: "하반기 KPI 목표", value: computed.h2Goal.toFixed(0) + "억원" },
+          { label: "하반기 실적", value: computed.h2Actual.toFixed(1) + "억원" },
+          { label: "달성률", value: computed.h2Ach.toFixed(0) + "%", cls: computed.h2Ach >= 100 ? "good" : computed.h2Ach < 60 ? "bad" : "accent" },
+        ] : [
+          { label: "하반기 실적", value: "-", cls: "placeholder" },
+        ] },
+      ], trendPoints));
+    }
+    slotEl.innerHTML = "";
+    slotEl.appendChild(card);
+  }
+
+  function initKpi(data) {
+    const byWeek = data.byWeek || {};
+    const weekNums = Object.keys(byWeek).map(n => parseInt(n, 10)).sort((a, b) => b - a);
+    const select = document.getElementById("weekSelect");
+    select.innerHTML = "";
+    weekNums.forEach(n => {
+      const opt = document.createElement("option");
+      opt.value = String(n);
+      opt.textContent = n + "주차";
+      select.appendChild(opt);
+    });
+    // 실적이 실제로 입력된 가장 최근 주차를 기본값으로.
+    let defaultNum = weekNums[0];
+    for (const n of weekNums) {
+      const s = byWeek[n];
+      if (s && s.annual && !isNaN(s.annual.actual)) { defaultNum = n; break; }
+    }
+    select.value = String(defaultNum);
+    select.addEventListener("change", () => renderKpi(byWeek, data.monthAbbr, parseInt(select.value, 10)));
+    renderKpi(byWeek, data.monthAbbr, defaultNum);
+  }
+
+  // 페이지 로드 시 이미 입력된 비밀번호가 있으면 바로 시도.
+  (async function initGate() {
+    if (storedPw()) {
+      const ok = await tryUnlock(storedPw()).catch(() => false);
+      if (ok) return;
+    }
+    document.getElementById("pwInput").focus();
+  })();
+</script>
+</body>
+</html>
