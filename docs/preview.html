@@ -128,7 +128,7 @@
   .agenda-col { flex: 1; min-width: 0; }
   .agenda-col .colhead { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; color: var(--ink-faint); margin-bottom: 10px; }
   .agenda-item { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; display: flex; gap: 10px; }
-  .agenda-item .num { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 10.5px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+  .agenda-item .cat-badge { flex-shrink: 0; height: fit-content; font-size: 9.5px; font-weight: 800; padding: 3px 8px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); color: var(--ink-soft); white-space: nowrap; margin-top: 1px; }
   .agenda-item .body-txt { min-width: 0; }
   .agenda-item .title { font-size: 12.5px; font-weight: 700; margin-bottom: 3px; }
   .agenda-item .title.placeholder { color: var(--ink-faint); font-weight: 600; }
@@ -136,10 +136,13 @@
   .agenda-col .colhead { display: flex; align-items: center; gap: 5px; }
   .agenda-col.col-wins .colhead { color: var(--good); }
   .agenda-col.col-wins .agenda-item { border-left: 3px solid var(--good); }
-  .agenda-col.col-wins .agenda-item .num { background: var(--good); }
+  .agenda-col.col-wins .agenda-item .cat-badge { color: var(--good); border-color: var(--good); }
+  .agenda-col.col-share .colhead { color: var(--accent-ink); }
+  .agenda-col.col-share .agenda-item { border-left: 3px solid var(--accent); }
+  .agenda-col.col-share .agenda-item .cat-badge { color: var(--accent-ink); border-color: var(--accent); }
   .agenda-col.col-challenges .colhead { color: #a15a2a; }
   .agenda-col.col-challenges .agenda-item { border-left: 3px solid #a15a2a; }
-  .agenda-col.col-challenges .agenda-item .num { background: #a15a2a; }
+  .agenda-col.col-challenges .agenda-item .cat-badge { color: #a15a2a; border-color: #a15a2a; }
 
   .cal-placeholder, .img-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 8px; background: var(--surface-2); border-radius: 14px; padding: 50px 20px; min-height: 260px; }
   .cal-placeholder .picon { width: 44px; height: 44px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 20px; }
@@ -553,22 +556,28 @@
     };
   }
 
-  function buildKpiTrendPoints(uptoWeekNum) {
+  function buildKpiTrendPoints(uptoKey) {
     const byWeek = (sectionCache.kpi && sectionCache.kpi.byWeek) || {};
-    const weeks = Object.keys(byWeek).map(k => parseInt(k, 10)).filter(n => n <= uptoWeekNum).sort((a, b) => a - b);
+    const target = byWeek[uptoKey];
+    if (!target) return [];
+    const uptoOrder = weekOrder(target.monthAbbr, target.weekNum);
+    const entries = Object.keys(byWeek).map(k => byWeek[k])
+      .filter(e => weekOrder(e.monthAbbr, e.weekNum) <= uptoOrder)
+      .sort((a, b) => weekOrder(a.monthAbbr, a.weekNum) - weekOrder(b.monthAbbr, b.weekNum));
     const points = [];
-    for (const n of weeks) {
-      const status = byWeek[n];
+    for (const e of entries) {
+      const status = e.data;
       if (!status || !status.annual || isNaN(status.annual.actual)) continue;
-      points.push({ actual: status.annual.actual / KPI_GOAL.goal, label: kpiMonthAbbr + "_" + n });
+      points.push({ actual: status.annual.actual / KPI_GOAL.goal, label: e.monthAbbr + "_" + e.weekNum });
     }
     return points;
   }
 
-  function loadKpiForWeek(num) {
-    const label = num + "주차";
+  function loadKpiForWeek(key) {
+    const entry = sectionCache.kpi && sectionCache.kpi.byWeek[key];
+    const label = weekLabel(entry, key);
     const slotEl = document.getElementById("kpiSlot");
-    const status = sectionCache.kpi && sectionCache.kpi.byWeek[num];
+    const status = entry && entry.data;
     if (!status) {
       slotEl.innerHTML = "";
       const card = kpiHeader(label);
@@ -593,7 +602,7 @@
       return;
     }
     currentKpiComputed = computed;
-    const trendPoints = buildKpiTrendPoints(num);
+    const trendPoints = buildKpiTrendPoints(key);
     const card = kpiHeader(label);
     card.appendChild(kpiHeroBody([
       { sublabel: "2026년 전체", tiles: [
@@ -769,6 +778,7 @@
     const slotEl = document.getElementById("monthlyTrackSlot");
     try {
       const data = await callBackend("monthlyTracking");
+      if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
       slotEl.innerHTML = "";
       slotEl.appendChild(buildMonthlyTrackCard(data.weeks, "9월", false));
     } catch (err) {
@@ -793,9 +803,9 @@
     return card;
   }
 
-  function agendaItem(n, title, desc, isPlaceholder) {
+  function agendaItem(catLabel, title, desc, isPlaceholder) {
     const item = el("div", "agenda-item");
-    item.appendChild(el("div", "num", String(n)));
+    item.appendChild(el("div", "cat-badge", catLabel || "-"));
     const bodyTxt = el("div", "body-txt");
     bodyTxt.appendChild(el("div", "title" + (isPlaceholder ? " placeholder" : ""), title));
     bodyTxt.appendChild(el("div", "desc", desc));
@@ -805,16 +815,23 @@
 
   const AGENDA_ICON = {
     wins: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M8 12.3l2.5 2.5L16 9" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    share: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="6" cy="12" r="2.6" stroke="currentColor" stroke-width="1.8"/><circle cx="17" cy="6" r="2.6" stroke="currentColor" stroke-width="1.8"/><circle cx="17" cy="18" r="2.6" stroke="currentColor" stroke-width="1.8"/><path d="M8.3 10.7L14.7 7.3M8.3 13.3L14.7 16.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
     challenges: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M10.3 3.9L2.9 17.1c-.5.9.1 2 1.2 2h15.8c1.1 0 1.7-1.1 1.2-2L13.7 3.9c-.6-1-2-1-2.6 0Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9.5v4M12 16.8h.01" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`,
   };
   function agendaColHead(kind, label) {
     return el("div", "colhead", `<span>${AGENDA_ICON[kind]}</span>${label}`);
   }
 
-  function agendaPlaceholderCol(kind, label, promptTitle, promptDesc) {
-    const col = el("div", "agenda-col col-" + kind);
-    col.appendChild(agendaColHead(kind, label));
-    for (let i = 1; i <= 3; i++) col.appendChild(agendaItem(i, promptTitle, promptDesc, true));
+  const AGENDA_SECTIONS = [
+    { key: "wins", cls: "col-wins", icon: "wins", label: "WINS", empty: "이번 주 작성된 Wins가 없습니다." },
+    { key: "share", cls: "col-share", icon: "share", label: "SHARE", empty: "이번 주 공유 사항이 없습니다." },
+    { key: "challenge", cls: "col-challenges", icon: "challenges", label: "CHALLENGE", empty: "이번 주 논의할 이슈가 없습니다." },
+  ];
+
+  function agendaPlaceholderCol(def, promptTitle, promptDesc) {
+    const col = el("div", "agenda-col " + def.cls);
+    col.appendChild(agendaColHead(def.icon, def.label));
+    for (let i = 1; i <= 3; i++) col.appendChild(agendaItem("광고", promptTitle, promptDesc, true));
     return col;
   }
 
@@ -822,44 +839,40 @@
     const card = agendaCard("예시");
     const body = el("div", "card-body");
     const cols = el("div", "agenda-cols");
-    cols.appendChild(agendaPlaceholderCol("wins", "WINS", "성과 제목을 입력하세요",
-      "예시: 이번 주 진행한 내용을 2~3문장으로 서술해 주세요. 어떤 브랜드와 어떤 단계까지 진행됐는지, 왜 의미 있는 성과인지 적으면 됩니다."));
-    cols.appendChild(agendaPlaceholderCol("challenges", "CHALLENGES & ASKS", "이슈·요청 제목을 입력하세요",
-      "예시: 어떤 문제가 있는지, 팀 차원에서 필요한 결정이나 도움이 무엇인지 구체적으로 적어 주세요."));
+    cols.appendChild(agendaPlaceholderCol(AGENDA_SECTIONS[0], "프로젝트명을 입력하세요",
+      "예시: 이번 주 있었던 긍정적인 실적/기회를 2~3문장으로 서술해 주세요."));
+    cols.appendChild(agendaPlaceholderCol(AGENDA_SECTIONS[1], "프로젝트명을 입력하세요",
+      "예시: 팀 전체에 공유해야 하는 공지/확정 사항을 적어 주세요."));
+    cols.appendChild(agendaPlaceholderCol(AGENDA_SECTIONS[2], "프로젝트명을 입력하세요",
+      "예시: 팀 차원에서 논의가 필요한 부정 이슈를 적어 주세요."));
     body.appendChild(cols);
     card.appendChild(body);
     return card;
   }
 
-  function loadAgendaForWeek(num) {
-    const label = num + "주차";
+  function loadAgendaForWeek(key) {
+    const entry = sectionCache.agenda && sectionCache.agenda.byWeek[key];
+    const label = weekLabel(entry, key);
     const slotEl = document.getElementById("agendaSlot");
-    const data = sectionCache.agenda && sectionCache.agenda.byWeek[num];
     const card = agendaCard(label);
     const body = el("div", "card-body");
-    if (!data) {
+    if (!entry) {
       body.appendChild(el("div", "state-msg", "이 주차 자료가 아직 없어요."));
       card.appendChild(body);
       slotEl.innerHTML = "";
       slotEl.appendChild(card);
       return;
     }
-    const { wins, ca } = data;
+    const data = entry.data || {};
     const cols = el("div", "agenda-cols");
-    const winsCol = el("div", "agenda-col col-wins");
-    winsCol.appendChild(agendaColHead("wins", "WINS"));
-    if (wins.length) wins.forEach((w, i) => winsCol.appendChild(agendaItem(i + 1, w.proj || w.team || "-", w.content || "")));
-    else winsCol.appendChild(el("div", "state-msg", "이번 주 작성된 Wins가 없습니다."));
-    const caCol = el("div", "agenda-col col-challenges");
-    caCol.appendChild(agendaColHead("challenges", "CHALLENGES & ASKS"));
-    if (ca.length) ca.forEach((c, i) => {
-      let desc = c.content || "";
-      if (c.target) desc += ` (요청대상: ${c.target}${c.due ? ", 기한: " + c.due : ""})`;
-      caCol.appendChild(agendaItem(i + 1, c.proj || c.team || "-", desc));
+    AGENDA_SECTIONS.forEach(def => {
+      const col = el("div", "agenda-col " + def.cls);
+      col.appendChild(agendaColHead(def.icon, def.label));
+      const items = data[def.key] || [];
+      if (items.length) items.forEach(it => col.appendChild(agendaItem(it.label, it.proj || "-", it.content || "")));
+      else col.appendChild(el("div", "state-msg", def.empty));
+      cols.appendChild(col);
     });
-    else caCol.appendChild(el("div", "state-msg", "이번 주 작성된 요청 사항이 없습니다."));
-    cols.appendChild(winsCol);
-    cols.appendChild(caCol);
     body.appendChild(cols);
     card.appendChild(body);
     slotEl.innerHTML = "";
@@ -1059,6 +1072,7 @@
     slotEl.appendChild(renderCalPlaceholder());
     try {
       const data = await callBackend("calendar");
+      if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
       const currentItems = data.items || [];
       const card = calCard("검토 Tracker");
       const body = el("div", "card-body");
@@ -1147,10 +1161,11 @@
     return news;
   }
 
-  function loadTrendForWeek(num) {
-    const label = num + "주차";
+  function loadTrendForWeek(key) {
+    const entry = sectionCache.trend && sectionCache.trend.byWeek[key];
+    const label = weekLabel(entry, key);
     const newsSlotEl = document.getElementById("trendSlot");
-    const sections = sectionCache.trend && sectionCache.trend.byWeek[num];
+    const sections = entry && entry.data;
     const news = newsCard(label);
     const newsBody = el("div", "card-body");
     if (!sections) {
@@ -1300,6 +1315,7 @@
       gridSlot.appendChild(el("div", "state-msg", "불러오는 중…"));
       try {
         const data = await callBackend("teamCalendar", { year, month });
+        if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
         const events = data.events || [];
         gridSlot.innerHTML = "";
         gridSlot.appendChild(renderTeamCalGrid(buildTeamCalWeeks(year, month, events)));
@@ -1336,9 +1352,15 @@
   // ============================================================
   // 전체 주차 토글 — KPI/팀 AGENDA/트렌드 리포트 3개 카드가 공유하는 단일 주차 선택
   // ============================================================
-  let GLOBAL_WEEKS = [];
-  let selectedWeekNum = null;
-  let kpiMonthAbbr = "AUG";
+  const MONTH_ABBR = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  function weekOrder(monthAbbr, weekNum) { return MONTH_ABBR.indexOf(monthAbbr) * 100 + weekNum; }
+  function krMonth(monthAbbr) { return MONTH_ABBR.indexOf(monthAbbr) + 1; }
+  function weekLabel(entry, fallbackKey) {
+    return entry ? `${krMonth(entry.monthAbbr)}월 ${entry.weekNum}주차` : (fallbackKey || "");
+  }
+
+  let GLOBAL_WEEKS = []; // [{key:"SEP_1", monthAbbr, weekNum, title}], 최신 순
+  let selectedWeekKey = null;
   const sectionCache = { kpi: null, agenda: null, trend: null };
   const globalWeekSelect = document.getElementById("globalWeekSelect");
 
@@ -1346,52 +1368,62 @@
     const [kpiData, agendaData, trendData] = await Promise.all([
       callBackend("kpi"), callBackend("agenda"), callBackend("trend"),
     ]);
+    if (!kpiData.ok) throw new Error(kpiData.message || kpiData.error || "알 수 없는 오류");
     sectionCache.kpi = kpiData;
     sectionCache.agenda = agendaData;
     sectionCache.trend = trendData;
-    kpiMonthAbbr = kpiData.monthAbbr || "AUG";
     currentInsightText = kpiData.insightText || "";
     KPI_GOAL = { goal: kpiData.goal, h2Goal: kpiData.h2Goal };
 
-    const numSet = new Set();
+    // 세 섹션(KPI/AGENDA/트렌드) 중 어느 하나라도 그 주차 시트가 있으면 토글에 포함 —
+    // 월+주차 조합 키를 쓰기 때문에 다음 달 시트("SEP_1" 등)가 새로 생기면 코드 수정 없이
+    // 자동으로 새 옵션이 나타난다.
+    const keyMap = new Map();
     [kpiData, agendaData, trendData].forEach(d => {
-      Object.keys(d.byWeek || {}).forEach(k => numSet.add(parseInt(k, 10)));
+      Object.keys(d.byWeek || {}).forEach(k => {
+        const e = d.byWeek[k];
+        keyMap.set(k, { monthAbbr: e.monthAbbr, weekNum: e.weekNum });
+      });
     });
-    GLOBAL_WEEKS = Array.from(numSet).sort((a, b) => b - a).map(n => ({ num: n, title: n + "주차" }));
+    GLOBAL_WEEKS = Array.from(keyMap.entries())
+      .map(([key, v]) => ({ key, monthAbbr: v.monthAbbr, weekNum: v.weekNum, title: `${krMonth(v.monthAbbr)}월 ${v.weekNum}주차` }))
+      .sort((a, b) => weekOrder(b.monthAbbr, b.weekNum) - weekOrder(a.monthAbbr, a.weekNum));
   }
 
   function renderGlobalWeekOptions() {
     globalWeekSelect.innerHTML = "";
     GLOBAL_WEEKS.forEach(w => {
       const opt = document.createElement("option");
-      opt.value = String(w.num);
+      opt.value = w.key;
       opt.textContent = w.title;
       globalWeekSelect.appendChild(opt);
     });
   }
 
-  function findDefaultWeekNum() {
+  function findDefaultWeekKey() {
     const kpiData = sectionCache.kpi;
-    if (!kpiData) return GLOBAL_WEEKS.length ? GLOBAL_WEEKS[0].num : null;
-    const sorted = Object.keys(kpiData.byWeek || {}).map(k => parseInt(k, 10)).sort((a, b) => b - a);
-    for (const n of sorted) {
-      const status = kpiData.byWeek[n];
-      if (status && status.annual && !isNaN(status.annual.actual)) return n;
+    if (kpiData) {
+      const sorted = Object.keys(kpiData.byWeek || {})
+        .map(k => kpiData.byWeek[k])
+        .sort((a, b) => weekOrder(b.monthAbbr, b.weekNum) - weekOrder(a.monthAbbr, a.weekNum));
+      for (const e of sorted) {
+        if (e.data && e.data.annual && !isNaN(e.data.annual.actual)) return `${e.monthAbbr}_${e.weekNum}`;
+      }
     }
-    return GLOBAL_WEEKS.length ? GLOBAL_WEEKS[0].num : null;
+    return GLOBAL_WEEKS.length ? GLOBAL_WEEKS[0].key : null;
   }
 
-  function renderForWeek(num) {
-    if (num == null) return;
-    selectedWeekNum = num;
-    globalWeekSelect.value = String(num);
-    loadKpiForWeek(num);
-    loadAgendaForWeek(num);
-    loadTrendForWeek(num);
+  function renderForWeek(key) {
+    if (key == null) return;
+    selectedWeekKey = key;
+    globalWeekSelect.value = key;
+    loadKpiForWeek(key);
+    loadAgendaForWeek(key);
+    loadTrendForWeek(key);
   }
 
   globalWeekSelect.addEventListener("change", () => {
-    renderForWeek(parseInt(globalWeekSelect.value, 10));
+    renderForWeek(globalWeekSelect.value);
   });
 
   // ============================================================
@@ -1421,9 +1453,9 @@
       try {
         await initGlobalWeeks();
         renderGlobalWeekOptions();
-        let target = (selectedWeekNum != null && GLOBAL_WEEKS.some(w => w.num === selectedWeekNum))
-          ? selectedWeekNum
-          : findDefaultWeekNum();
+        let target = (selectedWeekKey != null && GLOBAL_WEEKS.some(w => w.key === selectedWeekKey))
+          ? selectedWeekKey
+          : findDefaultWeekKey();
         renderForWeek(target);
       } catch (err) {
         const kpiSlot = document.getElementById("kpiSlot");
