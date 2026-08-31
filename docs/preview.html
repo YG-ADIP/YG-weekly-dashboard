@@ -563,6 +563,10 @@
     };
   }
 
+  // 주차가 쌓일수록(연말엔 20주 넘음) 스파크라인 한 줄에 점이 다 안 들어가고 %뱃지/라벨이
+  // 겹치므로, 선택 주차 기준 최근 TREND_WINDOW_WEEKS개만 보여주는 이동 구간 방식으로 제한한다.
+  const TREND_WINDOW_WEEKS = 6;
+
   function buildKpiTrendPoints(uptoKey) {
     const byWeek = (sectionCache.kpi && sectionCache.kpi.byWeek) || {};
     const target = byWeek[uptoKey];
@@ -577,7 +581,7 @@
       if (!status || !status.annual || isNaN(status.annual.actual)) continue;
       points.push({ actual: status.annual.actual / KPI_GOAL.goal, label: e.monthAbbr + "_" + e.weekNum });
     }
-    return points;
+    return points.slice(-TREND_WINDOW_WEEKS);
   }
 
   function loadKpiForWeek(key) {
