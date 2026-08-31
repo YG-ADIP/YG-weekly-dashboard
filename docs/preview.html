@@ -581,8 +581,6 @@
       body.appendChild(el("div", "state-msg", "이 주차 자료가 아직 없어요."));
       card.appendChild(body);
       slotEl.appendChild(card);
-      currentKpiComputed = null;
-      renderInsightBar();
       return;
     }
     const computed = computeKpiFromStatus(status);
@@ -593,11 +591,8 @@
       body.appendChild(el("div", "state-msg", "이 주차엔 아직 실적이 입력되지 않았어요."));
       card.appendChild(body);
       slotEl.appendChild(card);
-      currentKpiComputed = null;
-      renderInsightBar();
       return;
     }
-    currentKpiComputed = computed;
     const trendPoints = buildKpiTrendPoints(key);
     const card = kpiHeader(label);
     card.appendChild(kpiHeroBody([
@@ -617,7 +612,6 @@
     ], trendPoints, false));
     slotEl.innerHTML = "";
     slotEl.appendChild(card);
-    renderInsightBar();
   }
 
   // ============================================================
@@ -1271,20 +1265,49 @@
   }
 
   // ============================================================
-  // 최상단 AI 인사이트 바 — Apps Script(kpi 응답)의 insightText를 그대로 표시(엘라가 스크립트 속성에서 수동 갱신)
+  // 최상단 AI 인사이트 바 — 9월부터 하드코딩 대신, 이번 주 신규 실적 + 연간 기여 상위 프로젝트를
+  // 시트 데이터에서 자동으로 뽑아 문장으로 조합해서 보여줌(Apps Script "insight" 섹션 응답 사용).
   // ============================================================
-  let currentKpiComputed = null;
-  let currentInsightText = "";
+  let insightData = null;
+
+  function buildInsightText(data) {
+    if (!data || (!data.thisWeek.length && !data.topAnnual.length)) {
+      return "데이터가 쌓이면 이번 주 신규 실적과 연간 기여 상위 프로젝트를 자동으로 분석해서 보여드려요.";
+    }
+    const parts = [];
+    if (data.thisWeek.length) {
+      const items = data.thisWeek
+        .map(w => `${w.project}(${numOr0(w.actual)}억, 목표 기여 ${numOr0(w.contribPct)}%)`)
+        .join(", ");
+      parts.push(`${data.weekLabel} 신규 실적은 ${items}입니다.`);
+    } else if (data.weekLabel) {
+      parts.push(`${data.weekLabel}엔 새로 반영된 실적이 아직 없어요.`);
+    }
+    if (data.topAnnual.length) {
+      const top = data.topAnnual.slice(0, 3).map(p => `${p.name}(${p.amount}억)`).join(", ");
+      parts.push(`연간 실적에 가장 큰 영향을 미치고 있는 프로젝트는 ${top} 순이에요.`);
+    }
+    return parts.join(" ");
+  }
+
   function renderInsightBar() {
     const slot = document.getElementById("insightSlot");
     slot.innerHTML = "";
     const bar = el("div", "insight-bar");
     bar.appendChild(el("span", "insight-icon", "✨"));
-    const text = currentKpiComputed && currentInsightText
-      ? currentInsightText
-      : "데이터가 쌓이면 이번 달 달성 기여 상위 프로젝트를 AI가 자동으로 분석해서 보여드려요.";
-    bar.appendChild(el("div", "insight-text", text));
+    bar.appendChild(el("div", "insight-text", buildInsightText(insightData)));
     slot.appendChild(bar);
+  }
+
+  async function loadInsight() {
+    try {
+      const data = await callBackend("insight");
+      if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
+      insightData = data;
+    } catch (err) {
+      insightData = null;
+    }
+    renderInsightBar();
   }
 
   // ============================================================
@@ -1310,7 +1333,6 @@
     sectionCache.kpi = kpiData;
     sectionCache.agenda = agendaData;
     sectionCache.trend = trendData;
-    currentInsightText = kpiData.insightText || "";
     KPI_GOAL = { goal: kpiData.goal, h2Goal: kpiData.h2Goal };
 
     // 세 섹션(KPI/AGENDA/트렌드) 중 어느 하나라도 그 주차 시트가 있으면 토글에 포함 —
@@ -1405,6 +1427,7 @@
         kpiSlot.appendChild(errCard);
       }
     })());
+    tasks.push(loadInsight());
     tasks.push(loadCalSection(document.getElementById("calSlot")));
     tasks.push(loadMonthlyTracking());
     tasks.push(loadTeamCalSection(document.getElementById("teamCalSlot")));

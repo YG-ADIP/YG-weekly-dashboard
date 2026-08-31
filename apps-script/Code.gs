@@ -8,8 +8,8 @@
  * 1. script.google.com → 새 프로젝트(또는 기존 프로젝트) → 이 파일 내용을 통째로 붙여넣기
  * 2. 프로젝트 설정(⚙) → 스크립트 속성 → 속성 추가:
  *    - DASHBOARD_PASSWORD: 공통 비밀번호
- *    - INSIGHT_TEXT: 최상단 인사이트 바에 띄울 문구 — 실적 숫자가 들어가는 문구라 공개 코드에는
- *      못 두고 여기 스크립트 속성으로만 관리. 문구 바뀌면 이 값만 바꾸면 됨(재배포 불필요).
+ *    (인사이트 바 문구는 9월부터 더 이상 수동 입력이 아니라, "실적현황" 시트의 "3. 월별 KPI
+ *    실적 구성 상세"/"실적 인정 사업 리스트" 표를 읽어 자동으로 생성됨 — getInsightData_ 참고.)
  * 3. 캘린더 기능(팀 일정 캘린더)을 처음 쓰기 전, 반드시 아래 순서로 권한을 미리 승인해둘 것:
  *    - 위쪽 함수 선택 드롭다운에서 "manualAuthTest" 선택 → ▶ 실행 버튼 클릭
  *    - "권한 검토" 팝업이 뜨면 본인 계정 선택 → "고급" → "(프로젝트명)(으)로 이동" → 허용
@@ -51,6 +51,7 @@ function doGet(e) {
     switch (params.section) {
       case 'kpi': return jsonOutput_(getKpiData_());
       case 'monthlyTracking': return jsonOutput_(getMonthlyTrackingData_());
+      case 'insight': return jsonOutput_(getInsightData_());
       case 'agenda': return jsonOutput_(getByWeekSectionData_(AGENDA_FOLDER_ID, extractAgendaFromSheet_));
       case 'trend': return jsonOutput_(getByWeekSectionData_(TREND_FOLDER_ID, extractTrendFromSheet_));
       case 'calendar': return jsonOutput_(getCalendarData_());
@@ -159,8 +160,79 @@ function getKpiData_() {
   var base = getByWeekSectionData_(PERF_FOLDER_ID, extractKpiStatusFromSheet_);
   base.goal = KPI_GOAL_ANNUAL;
   base.h2Goal = KPI_GOAL_H2;
-  base.insightText = PropertiesService.getScriptProperties().getProperty('INSIGHT_TEXT') || '';
   return base;
+}
+
+// ---- 최상단 AI 인사이트 바 ----
+//
+// 9월부터 수동 문구 대신 자동 생성으로 전환(엘라 지시: "해당 주 신규 실적"과 "연간 실적에 가장
+// 큰 영향을 미치는 프로젝트"를 매번 데이터에서 뽑아서 보여줄 것). KPI_MASTER_ID 파일의 가장 최근
+// (월+주차) 시트 하나에서 두 가지를 읽는다:
+// 1) "3. 월별 KPI 실적 구성 상세" 표 중, weekLabel이 정확히 "이번 주"(예: "9월/1주차")와 일치하는
+//    행만 = 이번 주에 새로 반영된 실적. 시트 전체를 이전 주차와 비교(diff)하는 방식은 과거에
+//    시도했다가 폐기된 적 있음(오타 정정이 "새 변화"로 잘못 잡히는 문제) — 이번엔 각 행에 週가
+//    이미 라벨로 박혀 있어서 diff 없이 라벨 매칭만으로 안전하게 뽑을 수 있음.
+// 2) "실적 인정 사업 리스트"(하반기 누적 확정 실적) 표를 신규 계약금 내림차순 정렬한 상위 항목
+//    = 연간 실적에 가장 큰 영향을 미치는 프로젝트.
+// 문장 조합(사람이 읽는 텍스트로 만드는 것)은 프런트에서 함 — 여기선 원본 수치만 정리해서 내려줌.
+function getInsightData_() {
+  var ss = SpreadsheetApp.openById(KPI_MASTER_ID);
+  var latestSheet = null, latestOrder = -1, latestMw = null;
+  ss.getSheets().forEach(function (sh) {
+    var mw = monthWeekFromSheetName_(sh.getName());
+    if (!mw) return;
+    var order = weekOrder_(mw.monthAbbr, mw.weekNum);
+    if (order > latestOrder) { latestOrder = order; latestSheet = sh; latestMw = mw; }
+  });
+  if (!latestSheet) return { ok: true, weekLabel: null, thisWeek: [], topAnnual: [] };
+  var rows = latestSheet.getDataRange().getValues();
+  var monthNum = MONTH_ABBR.indexOf(latestMw.monthAbbr) + 1;
+  var weekLabel = monthNum + '월/' + latestMw.weekNum + '주차';
+
+  // "3. 월별 KPI 실적 구성 상세" 표에서 이번 주 라벨과 일치하는 행만 추림.
+  var detailHeaderIdx = -1;
+  for (var k = 0; k < rows.length; k++) {
+    if (String(rows[k][0] || '').trim() === '구분' && String(rows[k][1] || '').indexOf('월/주차') >= 0) { detailHeaderIdx = k; break; }
+  }
+  var thisWeek = [];
+  if (detailHeaderIdx >= 0) {
+    for (var m = detailHeaderIdx + 1; m < rows.length; m++) {
+      var r = rows[m];
+      var col0 = String(r[0] || '').trim();
+      var restEmpty = !r[1] && !r[2] && !r[3] && !r[4];
+      if (col0 && restEmpty) break; // 다음 섹션 제목 행 도달
+      var proj = String(r[2] || '').trim();
+      if (!proj) continue;
+      if (String(r[1] || '').trim() !== weekLabel) continue; // 이번 주 항목만
+      thisWeek.push({
+        category: col0, project: proj,
+        actual: stripUnit_(r[3]), contribPct: stripUnit_(r[4]),
+      });
+    }
+  }
+
+  // "실적 인정 사업 리스트" 표에서 신규 계약금 큰 순 상위 항목.
+  var perfHeaderIdx = -1;
+  for (var p = 0; p < rows.length; p++) {
+    if (String(rows[p][0] || '').trim() === '아티스트' && String(rows[p][2] || '').indexOf('브랜드') >= 0) { perfHeaderIdx = p; break; }
+  }
+  var topAnnual = [];
+  if (perfHeaderIdx >= 0) {
+    for (var q = perfHeaderIdx + 1; q < rows.length; q++) {
+      var rr = rows[q];
+      var name = String(rr[3] || '').trim();
+      var amount = stripUnit_(rr[4]);
+      if (!name || isNaN(amount)) continue;
+      topAnnual.push({
+        artist: String(rr[0] || '').trim(), category: String(rr[1] || '').trim(),
+        brand: String(rr[2] || '').trim(), name: name, amount: amount,
+      });
+    }
+    topAnnual.sort(function (a, b) { return b.amount - a.amount; });
+    topAnnual = topAnnual.slice(0, 5);
+  }
+
+  return { ok: true, weekLabel: weekLabel, thisWeek: thisWeek, topAnnual: topAnnual };
 }
 
 // ---- ①-2 월별 트래킹 섹션 ----
