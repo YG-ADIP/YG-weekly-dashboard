@@ -1278,7 +1278,7 @@
     const parts = [];
     if (data.thisWeek.length) {
       const items = data.thisWeek
-        .map(w => `${w.project}(${numOr0(w.actual)}억, 목표 기여 ${numOr0(w.contribPct)}%)`)
+        .map(w => `${w.project}(${numOr0(w.actual)}억)`)
         .join(", ");
       parts.push(`${data.weekLabel} 신규 실적은 ${items}입니다.`);
     } else if (data.weekLabel) {
