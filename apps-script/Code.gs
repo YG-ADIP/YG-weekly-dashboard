@@ -19,11 +19,10 @@
  * 5. 배포 후 나오는 웹 앱 URL(.../exec로 끝남)을 대시보드 담당자(클로드)에게 전달
  */
 
-var PERF_FOLDER_ID = '1rYBmUGSk2K0tyv4CcXd7XpiziVzLxgPh';   // 2026 KPI 현황
 var AGENDA_FOLDER_ID = '1Au_nUt3pQ7nVStq-oITUGTAgwZkprWiP'; // 팀 AGENDA
 var CAL_FOLDER_ID = '1WSM_HwsjxzTC2EmU4i2r7aEuA1u7zqhq';    // 사업 캘린더
 var TREND_FOLDER_ID = '1Yqn8wrnsTePtN9OMIaEgBgBIqr1QEmc6';  // 트렌드 리포트
-var KPI_MASTER_ID = '1Ej7edr36XJFFC_JQPwidWY_ikaet867hT6gD--BomlU'; // 월별 트래킹(= perf 폴더 파일과 동일 파일)
+var KPI_MASTER_ID = '1Ej7edr36XJFFC_JQPwidWY_ikaet867hT6gD--BomlU'; // 2026 KPI 현황 + 월별 트래킹(같은 파일)
 var TEAM_CAL_ID = 'c_ba39a76170dcab8c99022cc72144d5706bda1be2cfd589a88eabe857259799a3@group.calendar.google.com';
 
 // KPI 목표(연간/하반기)는 대표님/팀장님이 확정한 고정값 — 시트에서 다시 계산하지 않고 여기서만
@@ -156,10 +155,42 @@ function extractKpiStatusFromSheet_(sheet) {
   return (out.annual || out.h2) ? out : null;
 }
 
+// getByWeekSectionData_와 같은 동작이지만, 폴더를 뒤져 "최근 수정 파일"을 찾는 대신 지정한
+// 파일 ID를 직접 연다. KPI 섹션은 원래 PERF_FOLDER_ID 폴더를 뒤졌는데, 월별 트래킹·인사이트
+// 바는 이미 KPI_MASTER_ID로 같은 파일을 고정 ID로 열고 있었음 — 같은 파일을 찾는 방법이
+// 두 가지로 갈라져 있었던 것. 그 폴더에 스프레드시트가 하나라도 더 생기면(백업본, 복사본 등)
+// KPI 카드와 월별 트래킹이 서로 다른 파일을 읽어 화면에 두 파일의 숫자가 섞여 나올 수 있었음 —
+// 오류 없이 조용히. 고정 ID 쪽이 안전하므로 KPI도 이 방식으로 통일한다.
+function getByWeekFromFile_(fileId, extractorFn) {
+  var ss = SpreadsheetApp.openById(fileId);
+  var byWeek = {};
+  ss.getSheets().forEach(function (sh) {
+    var mw = monthWeekFromSheetName_(sh.getName());
+    if (!mw) return;
+    byWeek[mw.monthAbbr + '_' + mw.weekNum] = {
+      monthAbbr: mw.monthAbbr, weekNum: mw.weekNum, data: extractorFn(sh),
+    };
+  });
+  return { ok: true, byWeek: byWeek };
+}
+
+// 목표값은 가장 최근 주차 시트에서 읽고, 시트에 없거나 파싱 안 되면 그때만 상수로 폴백한다.
+// (예전엔 시트값과 무관하게 항상 상수로 덮어썼음 — 시트에서 목표를 바꿔도 대시보드가 조용히
+// 예전 숫자를 계속 쓰는 문제가 있었음. 상수는 "공개 저장소에 숫자가 안 보이게" 하려던 목적이라,
+// 시트에서 읽어 응답에 실어 보내도 숫자는 여전히 저장소가 아니라 시트/Apps Script에만 있으므로
+// 그 목적은 그대로 유지된다 — 화면 코드는 여전히 서버가 준 값만 그린다.)
 function getKpiData_() {
-  var base = getByWeekSectionData_(PERF_FOLDER_ID, extractKpiStatusFromSheet_);
-  base.goal = KPI_GOAL_ANNUAL;
-  base.h2Goal = KPI_GOAL_H2;
+  var base = getByWeekFromFile_(KPI_MASTER_ID, extractKpiStatusFromSheet_);
+
+  var latest = null, latestOrder = -1;
+  Object.keys(base.byWeek).forEach(function (k) {
+    var e = base.byWeek[k], o = weekOrder_(e.monthAbbr, e.weekNum);
+    if (o > latestOrder && e.data) { latestOrder = o; latest = e.data; }
+  });
+  var sheetGoal = latest && latest.annual ? latest.annual.goal : NaN;
+  var sheetH2Goal = latest && latest.h2 ? latest.h2.goal : NaN;
+  base.goal = isNaN(sheetGoal) ? KPI_GOAL_ANNUAL : sheetGoal;
+  base.h2Goal = isNaN(sheetH2Goal) ? KPI_GOAL_H2 : sheetH2Goal;
   return base;
 }
 
@@ -507,8 +538,10 @@ function getTeamCalendarData_(year, month) {
   var cal = CalendarApp.getCalendarById(TEAM_CAL_ID);
   if (!cal) {
     // CalendarApp 권한이 아직 승인 안 됐거나 ID가 잘못된 경우 — 조용히 빈 배열을 주면 "연동이 안
-    // 되는데 원인을 모르겠다" 상태가 되므로, 원인을 알 수 있게 명시적 에러로 내려준다.
-    return { ok: false, error: 'calendar_not_found', message: '캘린더를 열 수 없습니다. Apps Script에서 manualAuthTest_ 함수를 한 번 실행해 캘린더 권한을 승인했는지 확인해 주세요.' };
+    // 되는데 원인을 모르겠다" 상태가 되므로, 원인을 알 수 있게 명시적 에러로 내려준다. 이 메시지는
+    // 팀원 화면에 그대로 뜨는데 팀원은 Apps Script 편집기 접근 권한이 없어 함수를 실행할 수
+    // 없으므로, 함수 이름을 지시하는 대신 담당자에게 알리라고 안내한다(원인 진단은 실행 로그로).
+    return { ok: false, error: 'calendar_not_found', message: '팀 일정 캘린더를 열 수 없습니다. 대시보드 담당자에게 알려주세요.' };
   }
   var rangeStart = new Date(year, month - 1, 1);
   var rangeEnd = new Date(year, month, 1);
