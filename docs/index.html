@@ -84,8 +84,6 @@
   .stat-box.accent .sval { color: var(--accent); }
 
   .month-kpi-headline { font-size: 20px; font-weight: 800; color: var(--ink); margin: 6px 0 14px; }
-  .mt-total-rate { font-size: 13px; font-weight: 700; color: var(--ink-soft); margin: -12px 0 16px; }
-  .mt-total-rate b { font-weight: 800; }
 
   .btn-toggle { font-size: 10px; font-weight: 800; padding: 3px 11px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); border: none; cursor: pointer; font-family: inherit; white-space: nowrap; }
   .btn-toggle:hover { filter: brightness(1.08); }
@@ -101,15 +99,12 @@
   .mt-week-bar-track-big { position: relative; height: 18px; max-width: 340px; border-radius: 8px; overflow: hidden; margin-bottom: 14px; }
   .mt-week-bar-fill-big { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 8px; transition: width 0.3s; }
 
-  .week-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
-  .week-card { background: var(--surface-2); border-radius: 14px; padding: 16px 18px 17px; display: flex; flex-direction: column; gap: 10px; }
-  .week-card.placeholder { opacity: 0.7; }
-  .week-card .wc-range { font-size: 12.5px; font-weight: 800; color: var(--ink-faint); }
-  .week-card .wc-track { position: relative; height: 12px; border-radius: 5px; overflow: hidden; }
-  .week-card .wc-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; transition: width 0.3s; }
-  .week-card .wc-stat { font-size: 14px; font-weight: 700; color: var(--ink-soft); }
-  .week-card .wc-stat b { font-weight: 800; color: var(--accent-ink); font-size: 15px; }
-  .week-card .wc-adip { font-size: 11.5px; color: var(--ink-faint); }
+  .mt-breakdown-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .mt-breakdown-card { background: var(--surface-2); border-radius: 14px; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .mt-breakdown-toprow { display: flex; align-items: center; gap: 8px; }
+  .mt-breakdown-cat { flex-shrink: 0; font-size: 9.5px; font-weight: 800; padding: 3px 8px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); color: var(--ink-soft); white-space: nowrap; }
+  .mt-breakdown-week { font-size: 10.5px; font-weight: 700; color: var(--ink-faint); }
+  .mt-breakdown-title { font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.4; }
 
   .chart-legend { display: flex; gap: 14px; font-size: 10.5px; color: var(--ink-soft); margin-bottom: 4px; }
   .chart-legend .lg-item { display: flex; align-items: center; gap: 5px; }
@@ -197,6 +192,7 @@
   .cal-summary-table .cal-summary-name { width: 22%; font-weight: 700; color: var(--ink); }
   .cal-summary-empty-cell { color: var(--ink-faint); font-style: italic; }
 
+  .card-teamcal { overflow: visible; }
   .card-teamcal .card-body { padding-top: 4px; }
   .teamcal-nav { display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 14px; }
   .teamcal-navbtn { border: 1px solid var(--border); background: var(--surface-2); color: var(--ink); width: 30px; height: 30px; border-radius: 50%; font-size: 13px; cursor: pointer; }
@@ -582,8 +578,6 @@
       body.appendChild(el("div", "state-msg", "이 주차 자료가 아직 없어요."));
       card.appendChild(body);
       slotEl.appendChild(card);
-      currentKpiComputed = null;
-      renderInsightBar();
       return;
     }
     const computed = computeKpiFromStatus(status);
@@ -594,11 +588,8 @@
       body.appendChild(el("div", "state-msg", "이 주차엔 아직 실적이 입력되지 않았어요."));
       card.appendChild(body);
       slotEl.appendChild(card);
-      currentKpiComputed = null;
-      renderInsightBar();
       return;
     }
-    currentKpiComputed = computed;
     const trendPoints = buildKpiTrendPoints(key);
     const card = kpiHeader(label);
     card.appendChild(kpiHeroBody([
@@ -618,7 +609,6 @@
     ], trendPoints, false));
     slotEl.innerHTML = "";
     slotEl.appendChild(card);
-    renderInsightBar();
   }
 
   // ============================================================
@@ -649,60 +639,30 @@
     return rateNum >= 100 ? "var(--accent)" : "var(--warn)";
   }
 
-  function monthlyWeekCard(w) {
-    const cumNum = stripUnit(w.cum);
-    const rateNum = stripUnit(w.rate);
-    const adNum = stripUnit(w.adActual);
-    const ipNum = stripUnit(w.ipActual);
-    const goalNum = stripUnit(w.goal);
-    const hasData = !isNaN(cumNum) && cumNum > 0;
+  // 이번 달 KPI 전체(목표/실적/달성률)를 보여주는 기본 뷰.
+  // 값이 비어있으면 0으로 표기 — null/대시(-) 대신 0을 보여달라는 요청.
+  // Apps Script에서 NaN을 JSON으로 보내면 JSON.stringify가 NaN을 null로 바꿔버리기 때문에
+  // null도 반드시 같이 걸러줘야 함(isNaN(null)은 false라서 NaN 체크만으로는 안 잡힘).
+  function numOr0(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : n; }
+
+  function monthlyOverallBody(data, isPlaceholder) {
+    const goalNum = isPlaceholder ? 0 : numOr0(data.goal);
+    const actualNum = isPlaceholder ? 0 : numOr0(data.actual);
+    const adNum = isPlaceholder ? 0 : numOr0(data.adActual);
+    const ipNum = isPlaceholder ? 0 : numOr0(data.ipActual);
+    const rateNum = goalNum > 0 ? (actualNum / goalNum) * 100 : 0;
     const colorVar = mtFillColor(rateNum);
-    const goalTxt = !isNaN(goalNum) ? `${goalNum}억` : "-";
-    const fillPct = hasData ? Math.max(0, Math.min(100, rateNum)) : 0;
-
-    const card = el("div", "week-card" + (hasData ? "" : " placeholder"));
-    card.appendChild(el("div", "wc-range", w.range || "-"));
-
-    const track = el("div", "wc-track mt-bar-track");
-    const fill = el("div", "wc-fill mt-bar-fill");
-    fill.style.cssText = `width:${fillPct}%; background:${colorVar};`;
-    track.appendChild(fill);
-    card.appendChild(track);
-
-    const statHtml = hasData
-      ? `<b style="color:${colorVar}">${cumNum}억</b> / 목표 ${goalTxt} <span style="color:${colorVar}">(${Math.round(rateNum)}%)</span>`
-      : `목표 ${goalTxt}`;
-    card.appendChild(el("div", "wc-stat", statHtml));
-
-    card.appendChild(el("div", "wc-adip",
-      `광고 ${!isNaN(adNum) ? adNum + "억" : "-"} · IP ${!isNaN(ipNum) ? ipNum + "억" : "-"}`));
-    return card;
-  }
-
-  function monthlyWeekBig(w) {
-    const cumNum = stripUnit(w.cum);
-    const rateNum = stripUnit(w.rate);
-    const adNum = stripUnit(w.adActual);
-    const ipNum = stripUnit(w.ipActual);
-    const goalNum = stripUnit(w.goal);
-    const hasData = !isNaN(cumNum) && cumNum > 0;
-    const colorVar = mtFillColor(rateNum);
-    const goalTxt = !isNaN(goalNum) ? `${goalNum}억` : "-";
-    const fillPct = hasData ? Math.max(0, Math.min(100, rateNum)) : 0;
+    const fillPct = Math.max(0, Math.min(100, rateNum));
 
     const wrap = el("div", "mt-week-big");
-    wrap.appendChild(el("div", "mt-week-range", w.range || "-"));
-
     const top = el("div", "mt-week-toprow");
-    const numEl = el("span", "mt-week-num", hasData ? `${cumNum}억` : "-");
-    if (hasData) numEl.style.color = colorVar;
+    const numEl = el("span", "mt-week-num", isPlaceholder ? "00억" : `${actualNum}억`);
+    numEl.style.color = colorVar;
     top.appendChild(numEl);
-    top.appendChild(el("span", "mt-week-goal", `/ 목표 ${goalTxt}`));
-    if (hasData) {
-      const rateEl = el("span", "mt-week-rate", `${Math.round(rateNum)}%`);
-      rateEl.style.color = colorVar;
-      top.appendChild(rateEl);
-    }
+    top.appendChild(el("span", "mt-week-goal", `/ 목표 ${isPlaceholder ? "00" : goalNum}억`));
+    const rateEl = el("span", "mt-week-rate", `${Math.round(rateNum)}%`);
+    rateEl.style.color = colorVar;
+    top.appendChild(rateEl);
     wrap.appendChild(top);
 
     const track = el("div", "mt-week-bar-track-big mt-bar-track");
@@ -712,63 +672,57 @@
     wrap.appendChild(track);
 
     const row = el("div", "stat-row");
-    row.appendChild(statBox("광고", !isNaN(adNum) ? adNum + "억" : "-"));
-    row.appendChild(statBox("IP", !isNaN(ipNum) ? ipNum + "억" : "-"));
+    row.appendChild(statBox("광고", isPlaceholder ? "00억" : `${adNum}억`, isPlaceholder ? "placeholder" : undefined));
+    row.appendChild(statBox("IP", isPlaceholder ? "00억" : `${ipNum}억`, isPlaceholder ? "placeholder" : undefined));
     wrap.appendChild(row);
 
     return wrap;
   }
 
-  const TEMP_MONTHLY_WEEK_INDEX = 0;
-  function defaultMonthlyIndex(weeks) {
-    return Math.min(TEMP_MONTHLY_WEEK_INDEX, weeks.length - 1);
+  // "더보기" 클릭 시 전환되는, 이번 달 실적을 구성하는 프로젝트별 카드 리스트 — 매출/목표
+  // 기여율이 잘 보이도록 카드마다 스탯 박스로 크게 표시.
+  function monthlyBreakdownBody(data) {
+    const wrap = el("div", "mt-breakdown-grid");
+    if (!data.breakdown || !data.breakdown.length) {
+      wrap.appendChild(el("div", "state-msg", "이번 달 실적 구성 내역이 아직 없어요."));
+      return wrap;
+    }
+    data.breakdown.forEach(item => {
+      const card = el("div", "mt-breakdown-card");
+      const top = el("div", "mt-breakdown-toprow");
+      top.appendChild(el("span", "mt-breakdown-cat", item.category || "-"));
+      if (item.weekLabel) top.appendChild(el("span", "mt-breakdown-week", item.weekLabel));
+      card.appendChild(top);
+      card.appendChild(el("div", "mt-breakdown-title", item.project || "-"));
+      const row = el("div", "stat-row");
+      row.appendChild(statBox("실적", `${numOr0(item.actual)}억`));
+      row.appendChild(statBox("목표 기여율", `${numOr0(item.contribPct)}%`));
+      card.appendChild(row);
+      wrap.appendChild(card);
+    });
+    return wrap;
   }
 
-  function buildMonthlyTrackCard(weeks, badgeText, isPlaceholder) {
-    const toggleLabel = monthlyTrackExpanded ? "접기" : "전체보기";
+  function buildMonthlyTrackCard(data, badgeText, isPlaceholder) {
+    const toggleLabel = monthlyTrackExpanded ? "전체" : "더보기";
     const card = monthlyTrackHeader(badgeText, () => {
       monthlyTrackExpanded = !monthlyTrackExpanded;
       const slotEl = document.getElementById("monthlyTrackSlot");
       slotEl.innerHTML = "";
-      slotEl.appendChild(buildMonthlyTrackCard(weeks, badgeText, isPlaceholder));
+      slotEl.appendChild(buildMonthlyTrackCard(data, badgeText, isPlaceholder));
     }, toggleLabel);
     const body = el("div", "card-body");
-    if (!weeks || !weeks.length) {
-      body.appendChild(el("div", "state-msg", "9월 주간 트래킹 데이터를 찾지 못했어요."));
-    } else {
-      const totalGoal = weeks.reduce((sum, w) => {
-        const n = stripUnit(w.goal);
-        return sum + (isNaN(n) ? 0 : n);
-      }, 0);
-      const exampleTag = isPlaceholder ? ` <span class="kpi-example-tag">예시</span>` : "";
-      const headlineVal = isPlaceholder ? "-" : Number(totalGoal.toFixed(2));
-      body.appendChild(el("div", "month-kpi-headline", `9월 KPI : ${headlineVal}억${exampleTag}`));
-      if (monthlyTrackExpanded) {
-        const totalActual = weeks.reduce((sum, w) => {
-          const n = stripUnit(w.cum);
-          return sum + (!isNaN(n) && n > 0 ? n : 0);
-        }, 0);
-        if (!isPlaceholder && totalGoal > 0) {
-          const overallRate = (totalActual / totalGoal) * 100;
-          const overallColor = mtFillColor(overallRate);
-          body.appendChild(el("div", "mt-total-rate",
-            `누적 실적 ${Number(totalActual.toFixed(2))}억 · 전체 달성률 <b style="color:${overallColor}">${Math.round(overallRate)}%</b>`));
-        }
-        const grid = el("div", "week-card-grid");
-        weeks.forEach(w => grid.appendChild(monthlyWeekCard(w)));
-        body.appendChild(grid);
-      } else {
-        body.appendChild(monthlyWeekBig(weeks[defaultMonthlyIndex(weeks)]));
-      }
-    }
+    const exampleTag = isPlaceholder ? ` <span class="kpi-example-tag">예시</span>` : "";
+    const monthLabel = isPlaceholder ? "9" : (data.monthNum || "-");
+    const goalTxt = isPlaceholder ? "00" : (data.goal || 0);
+    body.appendChild(el("div", "month-kpi-headline", `${monthLabel}월 KPI : ${goalTxt}억${exampleTag}`));
+    body.appendChild(monthlyTrackExpanded ? monthlyBreakdownBody(data) : monthlyOverallBody(data, isPlaceholder));
     card.appendChild(body);
     return card;
   }
 
   function renderMonthlyTrackPlaceholder() {
-    const dummyWeeks = ["8/30~9/5", "9/6~9/12", "9/13~9/19", "9/20~9/26", "9/27~10/3"]
-      .map(r => ({ range: r, goal: "2.5", adActual: "", ipActual: "", cum: "", rate: "" }));
-    return buildMonthlyTrackCard(dummyWeeks, "예시", true);
+    return buildMonthlyTrackCard({ monthNum: 9, goal: 0, adActual: NaN, ipActual: NaN, actual: 0, breakdown: [] }, "예시", true);
   }
 
   async function loadMonthlyTracking() {
@@ -777,7 +731,7 @@
       const data = await callBackend("monthlyTracking");
       if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
       slotEl.innerHTML = "";
-      slotEl.appendChild(buildMonthlyTrackCard(data.weeks, "9월", false));
+      slotEl.appendChild(buildMonthlyTrackCard(data, `${data.monthNum || "-"}월`, false));
     } catch (err) {
       slotEl.innerHTML = "";
       const errCard = monthlyTrackHeader("오류");
@@ -1308,20 +1262,49 @@
   }
 
   // ============================================================
-  // 최상단 AI 인사이트 바 — Apps Script(kpi 응답)의 insightText를 그대로 표시(엘라가 스크립트 속성에서 수동 갱신)
+  // 최상단 AI 인사이트 바 — 9월부터 하드코딩 대신, 이번 주 신규 실적 + 연간 기여 상위 프로젝트를
+  // 시트 데이터에서 자동으로 뽑아 문장으로 조합해서 보여줌(Apps Script "insight" 섹션 응답 사용).
   // ============================================================
-  let currentKpiComputed = null;
-  let currentInsightText = "";
+  let insightData = null;
+
+  function buildInsightText(data) {
+    if (!data || (!data.thisWeek.length && !data.topAnnual.length)) {
+      return "데이터가 쌓이면 이번 주 신규 실적과 하반기 기여 상위 프로젝트를 자동으로 분석해서 보여드려요.";
+    }
+    const parts = [];
+    if (data.thisWeek.length) {
+      const items = data.thisWeek
+        .map(w => `${w.project}(${numOr0(w.actual)}억)`)
+        .join(", ");
+      parts.push(`${data.weekLabel} 신규 실적은 ${items}입니다.`);
+    } else if (data.weekLabel) {
+      parts.push(`${data.weekLabel}엔 새로 반영된 실적이 아직 없어요.`);
+    }
+    if (data.topAnnual.length) {
+      const top = data.topAnnual.slice(0, 3).map(p => `${p.name}(${p.amount}억)`).join(", ");
+      parts.push(`하반기 실적에 가장 큰 영향을 미치고 있는 프로젝트는 ${top} 순이에요.`);
+    }
+    return parts.join(" ");
+  }
+
   function renderInsightBar() {
     const slot = document.getElementById("insightSlot");
     slot.innerHTML = "";
     const bar = el("div", "insight-bar");
     bar.appendChild(el("span", "insight-icon", "✨"));
-    const text = currentKpiComputed && currentInsightText
-      ? currentInsightText
-      : "데이터가 쌓이면 이번 달 달성 기여 상위 프로젝트를 AI가 자동으로 분석해서 보여드려요.";
-    bar.appendChild(el("div", "insight-text", text));
+    bar.appendChild(el("div", "insight-text", buildInsightText(insightData)));
     slot.appendChild(bar);
+  }
+
+  async function loadInsight() {
+    try {
+      const data = await callBackend("insight");
+      if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
+      insightData = data;
+    } catch (err) {
+      insightData = null;
+    }
+    renderInsightBar();
   }
 
   // ============================================================
@@ -1347,7 +1330,6 @@
     sectionCache.kpi = kpiData;
     sectionCache.agenda = agendaData;
     sectionCache.trend = trendData;
-    currentInsightText = kpiData.insightText || "";
     KPI_GOAL = { goal: kpiData.goal, h2Goal: kpiData.h2Goal };
 
     // 세 섹션(KPI/AGENDA/트렌드) 중 어느 하나라도 그 주차 시트가 있으면 토글에 포함 —
@@ -1442,6 +1424,7 @@
         kpiSlot.appendChild(errCard);
       }
     })());
+    tasks.push(loadInsight());
     tasks.push(loadCalSection(document.getElementById("calSlot")));
     tasks.push(loadMonthlyTracking());
     tasks.push(loadTeamCalSection(document.getElementById("teamCalSlot")));
