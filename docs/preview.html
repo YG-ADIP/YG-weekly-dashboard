@@ -340,11 +340,15 @@
     return e;
   }
 
-  // ---- 포맷 헬퍼 — 금액은 소수 1자리, 퍼센트는 정수로 통일(리디자인 버그 2번 수정).
+  // ---- 포맷 헬퍼 — 금액은 소수점 둘째 자리까지만, 그 아래로 떨어지는 0은 표시 안 함
+  // (200 → "200", 200.1 → "200.1", 200.12 → "200.12", 200.126 → "200.13"로 반올림).
+  // Math.round로 소수 2자리에서 반올림한 뒤 숫자 그대로 반환하면, 템플릿 문자열에 꽂힐 때
+  // JS가 숫자→문자열 변환을 하면서 트레일링 0을 자동으로 없애준다 — 별도 트리밍 코드 불필요.
+  // 퍼센트는 기존대로 정수(리디자인 버그 2번 수정 유지).
   // null/undefined/NaN은 전부 0 취급(Apps Script가 빈 값을 NaN→JSON 직렬화 시 null로 보내는
   // 문제 대응, 기존 numOr0 로직은 그대로 유지).
   function numOr0(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : n; }
-  function fmtAmt(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : Math.round(n * 10) / 10; }
+  function fmtAmt(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : Math.round(n * 100) / 100; }
   function fmtPct(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : Math.round(n); }
 
   // ---- 비밀번호 게이트 + 데이터 레이어 ----
@@ -539,8 +543,8 @@
 
   function formatRemainKpi(goal, actual) {
     const diff = goal - actual;
-    if (diff > 0) return diff.toFixed(1) + "억원";
-    if (diff < 0) return "+" + Math.abs(diff).toFixed(1) + "억원";
+    if (diff > 0) return fmtAmt(diff) + "억원";
+    if (diff < 0) return "+" + fmtAmt(Math.abs(diff)) + "억원";
     return "0억원";
   }
 
@@ -599,8 +603,8 @@
     const trendPoints = buildKpiTrendPoints(key);
     const achColor = computed.ach >= 100 ? "#6fbf9a" : computed.ach < 60 ? "#d9ab5a" : "#94bce3";
     const annualTiles = [
-      { label: "2026 KPI 목표", num: computed.goal.toFixed(0), unit: "억원", color: "#ffffff" },
-      { label: "실적", num: computed.actual.toFixed(1), unit: "억원", color: "#ffffff" },
+      { label: "2026 KPI 목표", num: fmtAmt(computed.goal), unit: "억원", color: "#ffffff" },
+      { label: "실적", num: fmtAmt(computed.actual), unit: "억원", color: "#ffffff" },
       { label: "달성률", num: computed.ach.toFixed(0) + "%", unit: "", color: achColor },
       { label: "잔여 KPI", num: computed.remainLabel, unit: "", color: "#94bce3" },
     ];
@@ -608,8 +612,8 @@
     if (computed.h2Actual != null) {
       const h2Color = computed.h2Ach >= 100 ? "#6fbf9a" : computed.h2Ach < 60 ? "#d9ab5a" : "#94bce3";
       h2Tiles = [
-        { label: "하반기 KPI 목표", num: computed.h2Goal.toFixed(0), unit: "억원", color: "#ffffff" },
-        { label: "하반기 실적", num: computed.h2Actual.toFixed(1), unit: "억원", color: "#ffffff" },
+        { label: "하반기 KPI 목표", num: fmtAmt(computed.h2Goal), unit: "억원", color: "#ffffff" },
+        { label: "하반기 실적", num: fmtAmt(computed.h2Actual), unit: "억원", color: "#ffffff" },
         { label: "달성률", num: computed.h2Ach.toFixed(0) + "%", unit: "", color: h2Color },
       ];
     } else {
