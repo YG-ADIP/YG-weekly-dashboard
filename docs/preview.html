@@ -84,8 +84,6 @@
   .stat-box.accent .sval { color: var(--accent); }
 
   .month-kpi-headline { font-size: 20px; font-weight: 800; color: var(--ink); margin: 6px 0 14px; }
-  .mt-total-rate { font-size: 13px; font-weight: 700; color: var(--ink-soft); margin: -12px 0 16px; }
-  .mt-total-rate b { font-weight: 800; }
 
   .btn-toggle { font-size: 10px; font-weight: 800; padding: 3px 11px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); border: none; cursor: pointer; font-family: inherit; white-space: nowrap; }
   .btn-toggle:hover { filter: brightness(1.08); }
@@ -101,15 +99,12 @@
   .mt-week-bar-track-big { position: relative; height: 18px; max-width: 340px; border-radius: 8px; overflow: hidden; margin-bottom: 14px; }
   .mt-week-bar-fill-big { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 8px; transition: width 0.3s; }
 
-  .week-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
-  .week-card { background: var(--surface-2); border-radius: 14px; padding: 16px 18px 17px; display: flex; flex-direction: column; gap: 10px; }
-  .week-card.placeholder { opacity: 0.7; }
-  .week-card .wc-range { font-size: 12.5px; font-weight: 800; color: var(--ink-faint); }
-  .week-card .wc-track { position: relative; height: 12px; border-radius: 5px; overflow: hidden; }
-  .week-card .wc-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; transition: width 0.3s; }
-  .week-card .wc-stat { font-size: 14px; font-weight: 700; color: var(--ink-soft); }
-  .week-card .wc-stat b { font-weight: 800; color: var(--accent-ink); font-size: 15px; }
-  .week-card .wc-adip { font-size: 11.5px; color: var(--ink-faint); }
+  .mt-breakdown { display: flex; flex-direction: column; gap: 10px; }
+  .mt-breakdown-row { display: flex; gap: 10px; background: var(--surface-2); border-radius: 12px; padding: 12px 14px; }
+  .mt-breakdown-cat { flex-shrink: 0; height: fit-content; font-size: 9.5px; font-weight: 800; padding: 3px 8px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); color: var(--ink-soft); white-space: nowrap; margin-top: 1px; }
+  .mt-breakdown-body { min-width: 0; }
+  .mt-breakdown-title { font-size: 12.5px; font-weight: 700; color: var(--ink); margin-bottom: 3px; }
+  .mt-breakdown-sub { font-size: 11px; color: var(--ink-faint); }
 
   .chart-legend { display: flex; gap: 14px; font-size: 10.5px; color: var(--ink-soft); margin-bottom: 4px; }
   .chart-legend .lg-item { display: flex; align-items: center; gap: 5px; }
@@ -653,52 +648,19 @@
     return rateNum >= 100 ? "var(--accent)" : "var(--warn)";
   }
 
-  function monthlyWeekCard(w) {
-    const cumNum = stripUnit(w.cum);
-    const rateNum = stripUnit(w.rate);
-    const adNum = stripUnit(w.adActual);
-    const ipNum = stripUnit(w.ipActual);
-    const goalNum = stripUnit(w.goal);
-    const hasData = !isNaN(cumNum) && cumNum > 0;
+  // 이번 달 KPI 전체(목표/실적/달성률)를 보여주는 기본 뷰.
+  function monthlyOverallBody(data, isPlaceholder) {
+    const goalNum = data.goal;
+    const actualNum = data.actual;
+    const hasData = !isPlaceholder && !isNaN(actualNum) && actualNum > 0;
+    const rateNum = (!isPlaceholder && goalNum > 0) ? (actualNum / goalNum) * 100 : 0;
     const colorVar = mtFillColor(rateNum);
-    const goalTxt = !isNaN(goalNum) ? `${goalNum}억` : "-";
-    const fillPct = hasData ? Math.max(0, Math.min(100, rateNum)) : 0;
-
-    const card = el("div", "week-card" + (hasData ? "" : " placeholder"));
-    card.appendChild(el("div", "wc-range", w.range || "-"));
-
-    const track = el("div", "wc-track mt-bar-track");
-    const fill = el("div", "wc-fill mt-bar-fill");
-    fill.style.cssText = `width:${fillPct}%; background:${colorVar};`;
-    track.appendChild(fill);
-    card.appendChild(track);
-
-    const statHtml = hasData
-      ? `<b style="color:${colorVar}">${cumNum}억</b> / 목표 ${goalTxt} <span style="color:${colorVar}">(${Math.round(rateNum)}%)</span>`
-      : `목표 ${goalTxt}`;
-    card.appendChild(el("div", "wc-stat", statHtml));
-
-    card.appendChild(el("div", "wc-adip",
-      `광고 ${!isNaN(adNum) ? adNum + "억" : "-"} · IP ${!isNaN(ipNum) ? ipNum + "억" : "-"}`));
-    return card;
-  }
-
-  function monthlyWeekBig(w) {
-    const cumNum = stripUnit(w.cum);
-    const rateNum = stripUnit(w.rate);
-    const adNum = stripUnit(w.adActual);
-    const ipNum = stripUnit(w.ipActual);
-    const goalNum = stripUnit(w.goal);
-    const hasData = !isNaN(cumNum) && cumNum > 0;
-    const colorVar = mtFillColor(rateNum);
-    const goalTxt = !isNaN(goalNum) ? `${goalNum}억` : "-";
+    const goalTxt = isPlaceholder ? "00억" : (!isNaN(goalNum) ? `${goalNum}억` : "-");
     const fillPct = hasData ? Math.max(0, Math.min(100, rateNum)) : 0;
 
     const wrap = el("div", "mt-week-big");
-    wrap.appendChild(el("div", "mt-week-range", w.range || "-"));
-
     const top = el("div", "mt-week-toprow");
-    const numEl = el("span", "mt-week-num", hasData ? `${cumNum}억` : "-");
+    const numEl = el("span", "mt-week-num", isPlaceholder ? "00억" : (hasData ? `${actualNum}억` : "-"));
     if (hasData) numEl.style.color = colorVar;
     top.appendChild(numEl);
     top.appendChild(el("span", "mt-week-goal", `/ 목표 ${goalTxt}`));
@@ -716,63 +678,56 @@
     wrap.appendChild(track);
 
     const row = el("div", "stat-row");
-    row.appendChild(statBox("광고", !isNaN(adNum) ? adNum + "억" : "-"));
-    row.appendChild(statBox("IP", !isNaN(ipNum) ? ipNum + "억" : "-"));
+    row.appendChild(statBox("광고", isPlaceholder ? "00억" : (!isNaN(data.adActual) ? data.adActual + "억" : "-"), isPlaceholder ? "placeholder" : undefined));
+    row.appendChild(statBox("IP", isPlaceholder ? "00억" : (!isNaN(data.ipActual) ? data.ipActual + "억" : "-"), isPlaceholder ? "placeholder" : undefined));
     wrap.appendChild(row);
 
     return wrap;
   }
 
-  const TEMP_MONTHLY_WEEK_INDEX = 0;
-  function defaultMonthlyIndex(weeks) {
-    return Math.min(TEMP_MONTHLY_WEEK_INDEX, weeks.length - 1);
+  // "더보기" 클릭 시 전환되는, 이번 달 실적을 구성하는 프로젝트별 상세 리스트.
+  function monthlyBreakdownBody(data) {
+    const wrap = el("div", "mt-breakdown");
+    if (!data.breakdown || !data.breakdown.length) {
+      wrap.appendChild(el("div", "state-msg", "이번 달 실적 구성 내역이 아직 없어요."));
+      return wrap;
+    }
+    data.breakdown.forEach(item => {
+      const row = el("div", "mt-breakdown-row");
+      row.appendChild(el("div", "mt-breakdown-cat", item.category || "-"));
+      const body = el("div", "mt-breakdown-body");
+      body.appendChild(el("div", "mt-breakdown-title", item.project || "-"));
+      const subParts = [];
+      if (item.weekLabel) subParts.push(item.weekLabel);
+      if (!isNaN(item.actual)) subParts.push(`${item.actual}억`);
+      if (!isNaN(item.contribPct)) subParts.push(`목표 기여 ${item.contribPct}%`);
+      body.appendChild(el("div", "mt-breakdown-sub", subParts.join(" · ")));
+      row.appendChild(body);
+      wrap.appendChild(row);
+    });
+    return wrap;
   }
 
-  function buildMonthlyTrackCard(weeks, badgeText, isPlaceholder) {
-    const toggleLabel = monthlyTrackExpanded ? "접기" : "전체보기";
+  function buildMonthlyTrackCard(data, badgeText, isPlaceholder) {
+    const toggleLabel = monthlyTrackExpanded ? "전체" : "더보기";
     const card = monthlyTrackHeader(badgeText, () => {
       monthlyTrackExpanded = !monthlyTrackExpanded;
       const slotEl = document.getElementById("monthlyTrackSlot");
       slotEl.innerHTML = "";
-      slotEl.appendChild(buildMonthlyTrackCard(weeks, badgeText, isPlaceholder));
+      slotEl.appendChild(buildMonthlyTrackCard(data, badgeText, isPlaceholder));
     }, toggleLabel);
     const body = el("div", "card-body");
-    if (!weeks || !weeks.length) {
-      body.appendChild(el("div", "state-msg", "9월 주간 트래킹 데이터를 찾지 못했어요."));
-    } else {
-      const totalGoal = weeks.reduce((sum, w) => {
-        const n = stripUnit(w.goal);
-        return sum + (isNaN(n) ? 0 : n);
-      }, 0);
-      const exampleTag = isPlaceholder ? ` <span class="kpi-example-tag">예시</span>` : "";
-      const headlineVal = isPlaceholder ? "-" : Number(totalGoal.toFixed(2));
-      body.appendChild(el("div", "month-kpi-headline", `9월 KPI : ${headlineVal}억${exampleTag}`));
-      if (monthlyTrackExpanded) {
-        const totalActual = weeks.reduce((sum, w) => {
-          const n = stripUnit(w.cum);
-          return sum + (!isNaN(n) && n > 0 ? n : 0);
-        }, 0);
-        if (!isPlaceholder && totalGoal > 0) {
-          const overallRate = (totalActual / totalGoal) * 100;
-          const overallColor = mtFillColor(overallRate);
-          body.appendChild(el("div", "mt-total-rate",
-            `누적 실적 ${Number(totalActual.toFixed(2))}억 · 전체 달성률 <b style="color:${overallColor}">${Math.round(overallRate)}%</b>`));
-        }
-        const grid = el("div", "week-card-grid");
-        weeks.forEach(w => grid.appendChild(monthlyWeekCard(w)));
-        body.appendChild(grid);
-      } else {
-        body.appendChild(monthlyWeekBig(weeks[defaultMonthlyIndex(weeks)]));
-      }
-    }
+    const exampleTag = isPlaceholder ? ` <span class="kpi-example-tag">예시</span>` : "";
+    const monthLabel = isPlaceholder ? "9" : (data.monthNum || "-");
+    const goalTxt = isPlaceholder ? "00" : (data.goal || 0);
+    body.appendChild(el("div", "month-kpi-headline", `${monthLabel}월 KPI : ${goalTxt}억${exampleTag}`));
+    body.appendChild(monthlyTrackExpanded ? monthlyBreakdownBody(data) : monthlyOverallBody(data, isPlaceholder));
     card.appendChild(body);
     return card;
   }
 
   function renderMonthlyTrackPlaceholder() {
-    const dummyWeeks = ["8/30~9/5", "9/6~9/12", "9/13~9/19", "9/20~9/26", "9/27~10/3"]
-      .map(r => ({ range: r, goal: "2.5", adActual: "", ipActual: "", cum: "", rate: "" }));
-    return buildMonthlyTrackCard(dummyWeeks, "예시", true);
+    return buildMonthlyTrackCard({ monthNum: 9, goal: 0, adActual: NaN, ipActual: NaN, actual: 0, breakdown: [] }, "예시", true);
   }
 
   async function loadMonthlyTracking() {
@@ -781,7 +736,7 @@
       const data = await callBackend("monthlyTracking");
       if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
       slotEl.innerHTML = "";
-      slotEl.appendChild(buildMonthlyTrackCard(data.weeks, "9월", false));
+      slotEl.appendChild(buildMonthlyTrackCard(data, `${data.monthNum || "-"}월`, false));
     } catch (err) {
       slotEl.innerHTML = "";
       const errCard = monthlyTrackHeader("오류");
