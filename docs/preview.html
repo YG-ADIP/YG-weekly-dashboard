@@ -649,8 +649,10 @@
   }
 
   // 이번 달 KPI 전체(목표/실적/달성률)를 보여주는 기본 뷰.
-  // 값이 비어있으면(NaN) 0으로 표기 — null/대시(-) 대신 0을 보여달라는 요청.
-  function numOr0(n) { return isNaN(n) ? 0 : n; }
+  // 값이 비어있으면 0으로 표기 — null/대시(-) 대신 0을 보여달라는 요청.
+  // Apps Script에서 NaN을 JSON으로 보내면 JSON.stringify가 NaN을 null로 바꿔버리기 때문에
+  // null도 반드시 같이 걸러줘야 함(isNaN(null)은 false라서 NaN 체크만으로는 안 잡힘).
+  function numOr0(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : n; }
 
   function monthlyOverallBody(data, isPlaceholder) {
     const goalNum = isPlaceholder ? 0 : numOr0(data.goal);
