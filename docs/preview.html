@@ -192,6 +192,7 @@
   .cal-summary-table .cal-summary-name { width: 22%; font-weight: 700; color: var(--ink); }
   .cal-summary-empty-cell { color: var(--ink-faint); font-style: italic; }
 
+  .card-teamcal { overflow: visible; }
   .card-teamcal .card-body { padding-top: 4px; }
   .teamcal-nav { display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 14px; }
   .teamcal-navbtn { border: 1px solid var(--border); background: var(--surface-2); color: var(--ink); width: 30px; height: 30px; border-radius: 50%; font-size: 13px; cursor: pointer; }
@@ -1272,7 +1273,7 @@
 
   function buildInsightText(data) {
     if (!data || (!data.thisWeek.length && !data.topAnnual.length)) {
-      return "데이터가 쌓이면 이번 주 신규 실적과 연간 기여 상위 프로젝트를 자동으로 분석해서 보여드려요.";
+      return "데이터가 쌓이면 이번 주 신규 실적과 하반기 기여 상위 프로젝트를 자동으로 분석해서 보여드려요.";
     }
     const parts = [];
     if (data.thisWeek.length) {
@@ -1285,7 +1286,7 @@
     }
     if (data.topAnnual.length) {
       const top = data.topAnnual.slice(0, 3).map(p => `${p.name}(${p.amount}억)`).join(", ");
-      parts.push(`연간 실적에 가장 큰 영향을 미치고 있는 프로젝트는 ${top} 순이에요.`);
+      parts.push(`하반기 실적에 가장 큰 영향을 미치고 있는 프로젝트는 ${top} 순이에요.`);
     }
     return parts.join(" ");
   }
