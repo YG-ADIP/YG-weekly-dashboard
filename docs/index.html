@@ -4,307 +4,266 @@
 <meta charset="utf8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>주간회의 대시보드</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700&family=Barlow+Condensed:wght@400;600&family=Noto+Sans+KR:wght@400;500;700&display=swap">
 <style>
+  /* ================= 디자인 토큰 (Industry 디자인 시스템, 카카오톡 핸드오프 반영) ================= */
   :root {
-    --bg: #f3f2f7;
-    --surface: #ffffff;
-    --surface-2: #f1eff7;
-    --ink: #1c1a24;
-    --ink-soft: #5c5868;
-    --ink-faint: #918da0;
-    --border: #e6e3ef;
-    --accent: #7c5cd6;
-    --accent-soft: #ece7fa;
-    --accent-ink: #4a3a8c;
-    --good: #2e7d5b; --good-bg: #dcece3;
-    --bad: #b0463c; --bad-bg: #f4dcd9;
-    --warn: #e0973f; --warn-bg: #f7e6d1;
-    --shadow: 0 1px 2px rgba(28,26,40,0.05), 0 12px 30px -16px rgba(28,26,40,0.18);
-    --dark-card: #17151e;
-    --dark-item: #211f2b;
-    --dark-border: rgba(255,255,255,0.08);
-    --dark-ink: #f1efFA;
-    --dark-ink-soft: #a8a3bd;
+    --ground: #ffffff;
+    --ink: #1d1f20;
+    --soft: #5d5d60;
+    --faint: #7a7a7d;
+    --accent: #5980a6;
+    --accent-700: #416180;
+    --accent-300: #94bce3;
+    --accent-900: #2c455d;
+    --accent-tint: rgba(238,246,255,0.55);
+    --good: #2f6b52;
+    --good-dark: #6fbf9a;
+    --warn: #8a6420;
+    --warn-dark: #d9ab5a;
+    --bad: #a2453c;
+    --hairline: rgba(29,31,32,0.16);
+    --header-strip: #e7e7ea;
+    --out-of-month: rgba(29,31,32,0.03);
+    --shadow-pop: 0 12px 32px rgba(43,43,45,0.22);
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
-    color: var(--ink);
-    font-family: "Apple SD Gothic Neo", "Malgun Gothic", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-variant-numeric: tabular-nums; line-height: 1.5; -webkit-font-smoothing: antialiased;
-    background-color: var(--bg);
-    background-image:
-      radial-gradient(ellipse 75% 55% at 12% 18%, rgba(191,222,251,0.65) 0%, rgba(191,222,251,0) 62%),
-      radial-gradient(ellipse 65% 55% at 88% 12%, rgba(255,214,232,0.65) 0%, rgba(255,214,232,0) 58%),
-      radial-gradient(ellipse 75% 65% at 82% 88%, rgba(220,201,251,0.6) 0%, rgba(220,201,251,0) 62%),
-      radial-gradient(ellipse 70% 60% at 15% 90%, rgba(200,225,251,0.55) 0%, rgba(200,225,251,0) 58%);
-    background-attachment: fixed;
-    background-repeat: no-repeat;
+    font-family: 'Barlow', 'Noto Sans KR', system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink); background: var(--ground);
+    font-size: 13px; line-height: 1.55; -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 1360px; margin: 0 auto; padding: 30px 26px 80px; }
+  h1, h2 { font-family: 'Barlow Condensed', 'Noto Sans KR', sans-serif; font-weight: 600; margin: 0; letter-spacing: 0; }
+  a { color: var(--accent-700); }
+  a:hover { color: var(--accent-900); }
+  ::selection { background: #d6ebff; }
+  :focus { outline: none; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 32px 32px 64px; }
 
-  header.top { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
-  header.top h1 { font-size: 22px; font-weight: 800; margin: 0; letter-spacing: -0.01em; }
-  header.top .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 4px; }
-  .top-actions { display: flex; align-items: center; gap: 10px; }
-  .week-select-label { font-size: 11px; font-weight: 700; color: var(--ink-faint); }
-  select.global-week-select { font-size: 12px; font-weight: 700; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
-  .btn-refresh { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 8px 14px; border-radius: 9px; background: var(--surface); border: 1px solid var(--border); color: var(--ink); cursor: pointer; box-shadow: var(--shadow); }
-  .btn-refresh:hover { background: var(--surface-2); }
-  .conn-state { font-size: 11px; color: var(--ink-faint); }
+  /* ---- blueprint 카드 + 코너 마크 (전 카드 필수) ---- */
+  .blueprint { position: relative; border: 1px solid var(--hairline); border-radius: 0; background: var(--ground); }
+  .blueprint > .corner { position: absolute; width: 11px; height: 11px; color: rgba(29,31,32,0.55); }
+  .blueprint > .corner::before, .blueprint > .corner::after { content: ""; position: absolute; background: currentColor; }
+  .blueprint > .corner::before { left: 5px; top: 0; width: 1px; height: 100%; }
+  .blueprint > .corner::after { top: 5px; left: 0; width: 100%; height: 1px; }
+  .blueprint > .corner.tl { top: -6px; left: -6px; }
+  .blueprint > .corner.tr { top: -6px; right: -6px; }
+  .blueprint > .corner.bl { bottom: -6px; left: -6px; }
+  .blueprint > .corner.br { bottom: -6px; right: -6px; }
+  .dashsec.dark-section > .corner { color: rgba(255,255,255,0.6); }
 
-  .row { display: flex; gap: 20px; margin-bottom: 20px; align-items: stretch; }
-  .row .col-half { flex: 1; display: flex; }
-  @media (max-width: 980px) { .row { flex-direction: column; } }
-  .row-single { margin-bottom: 20px; }
+  /* ---- 헤더 ---- */
+  .dash-header2 { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 16px; border-bottom: 1px solid var(--hairline); margin-bottom: 24px; }
+  .dash-header2 .eyebrow2 { font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent-700); margin: 0 0 2px; }
+  .dash-header2 h1 { font-size: 34px; line-height: 1.1; letter-spacing: -0.01em; }
+  .header-actions2 { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .header-actions2 label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--soft); }
+  .week-select2 { font-family: inherit; font-size: 13px; font-weight: 500; padding: 7px 10px; border-radius: 0; border: 1px solid rgba(29,31,32,0.28); background: #fff; color: var(--ink); }
+  .conn-state2 { font-size: 11px; color: var(--soft); }
+  .btn-primary2 { font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; padding: 7px 14px; border-radius: 0; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+  .btn-primary2:hover { background: var(--accent-700); border-color: var(--accent-700); }
 
-  .card { background: var(--surface); border-radius: 20px; box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; width: 100%; }
-  .card .card-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 6px; }
-  .card .card-head .htitle { display: flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 800; }
-  .card .card-head .htitle .icon-badge { width: 26px; height: 26px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 13px; }
-  .card .card-head .badge { font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink-faint); }
-  .card-head-right { display: flex; align-items: center; gap: 8px; }
-  .btn-detail { font-size: 10px; font-weight: 800; padding: 3px 11px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); text-decoration: none; white-space: nowrap; }
-  .btn-detail:hover { filter: brightness(1.08); }
-  .card .card-body { padding: 8px 20px 20px; flex: 1; }
+  /* ---- 인사이트 바 ---- */
+  .insight-bar2 { display: flex; align-items: flex-start; gap: 14px; border: 1px solid var(--hairline); border-left: 3px solid var(--accent); padding: 14px 18px; margin-bottom: 28px; background: var(--accent-tint); }
+  .insight-bar2 .insight-kicker2 { font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-700); padding-top: 2px; white-space: nowrap; }
+  .insight-bar2 .insight-body2 { margin: 0; font-size: 13px; line-height: 1.6; color: #424244; }
 
-  .kpi-hero { display: flex; gap: 28px; align-items: center; }
-  .kpi-hero .kpi-stats { flex: 1.15; min-width: 0; }
-  .kpi-hero .kpi-chart { flex: 1; min-width: 0; }
-  @media (max-width: 900px) { .kpi-hero { flex-direction: column; align-items: stretch; } }
-  .sublabel { font-size: 11px; font-weight: 700; color: var(--ink-faint); margin: 12px 0 8px; }
-  .sublabel:first-child { margin-top: 4px; }
-  .stat-row { display: flex; gap: 8px; flex-wrap: wrap; }
-  .stat-box { flex: 1; min-width: 100px; background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
-  .stat-box .slabel { font-size: 10.5px; color: var(--ink-faint); margin-bottom: 4px; }
-  .stat-box .sval { font-size: 16px; font-weight: 800; color: var(--ink); }
-  .stat-box.placeholder .sval { color: var(--ink-faint); }
-  .stat-box.bad .sval { color: var(--bad); }
-  .stat-box.good .sval { color: var(--good); }
-  .stat-box.accent .sval { color: var(--accent); }
+  /* ---- 섹션 셸 ---- */
+  .dashsec { padding: 20px 22px 22px; margin-bottom: 28px; }
+  .dashsec.dark-section { background: #1d1f20; color: #ffffff; border-color: #1d1f20; }
+  .dashsec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-bottom: 12px; border-bottom: 1px solid var(--hairline); margin-bottom: 18px; }
+  .dark-section .dashsec-head { border-bottom-color: rgba(255,255,255,0.22); }
+  .dashsec-head .kicker-left { display: flex; align-items: baseline; gap: 10px; }
+  .dashsec-num { font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; color: var(--faint); }
+  .dark-section .dashsec-num { color: #9a9a9e; }
+  .dashsec-head h2 { font-size: 20px; }
+  .dashsec-head-right { display: flex; align-items: center; gap: 10px; }
+  .badge-outline2 { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--soft); border: 1px solid rgba(29,31,32,0.2); padding: 2px 9px; white-space: nowrap; }
+  .dark-section .badge-outline2 { color: #b9b9bc; border-color: rgba(255,255,255,0.3); }
+  .link-detail2 { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-decoration: none; }
+  .link-detail2, .dark-section .link-detail2 { color: var(--accent-700); border-bottom: 1px solid var(--accent-700); }
+  .dark-section .link-detail2 { color: #94bce3; border-bottom-color: #94bce3; }
+  .btn-outline-toggle2 { font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; padding: 4px 11px; border-radius: 0; border: 1px solid #94bce3; background: transparent; color: #94bce3; cursor: pointer; }
+  .btn-outline-toggle2:hover { background: rgba(148,188,227,0.2); }
+  .state-msg2 { margin: 0; padding: 28px 0; font-size: 13px; color: var(--faint); }
+  .dark-section .state-msg2 { color: #b9b9bc; }
+  .state-msg2.err2 { color: var(--bad); font-weight: 700; padding: 10px 0; }
 
-  .month-kpi-headline { font-size: 20px; font-weight: 800; color: var(--ink); margin: 6px 0 14px; }
+  /* ---- 타일 그리드(다크 섹션 전용) ---- */
+  .tile-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: rgba(255,255,255,0.22); border: 1px solid rgba(255,255,255,0.22); margin-bottom: 18px; }
+  .tile-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: rgba(255,255,255,0.22); border: 1px solid rgba(255,255,255,0.22); }
+  .tile-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: rgba(255,255,255,0.22); border: 1px solid rgba(255,255,255,0.22); }
+  .tile { background: #1d1f20; padding: 12px 12px 13px; }
+  .tile .tile-label { font-size: 11px; color: #b9b9bc; margin-bottom: 5px; white-space: nowrap; }
+  .tile .tile-value { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 24px; line-height: 1.15; white-space: nowrap; color: #fff; }
+  .tile .tile-value .unit2 { font-family: 'Noto Sans KR', sans-serif; font-size: 12px; font-weight: 500; margin-left: 2px; }
+  .tile.tile-sm .tile-value { font-size: 18px; line-height: 1; }
+  .tile.tile-sm { padding: 9px 10px; }
+  .tile.tile-sm .tile-label { margin-bottom: 3px; }
+  .kpi-block-kicker2 { font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #9a9a9e; margin: 0 0 8px; }
 
-  .btn-toggle { font-size: 10px; font-weight: 800; padding: 3px 11px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); border: none; cursor: pointer; font-family: inherit; white-space: nowrap; }
-  .btn-toggle:hover { filter: brightness(1.08); }
+  /* ---- KPI 히어로 + 스파크라인 ---- */
+  .kpi-hero2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 32px; align-items: start; }
+  .spark-head2 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .spark-legend2 { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #b9b9bc; }
+  .spark-legend2 .dot3 { width: 8px; height: 8px; background: #94bce3; display: inline-block; }
+  .spark-box2 { position: relative; border: 1px solid rgba(255,255,255,0.22); padding: 8px 6px 4px; }
+  .spark-overlay2 { position: absolute; inset: 8px 6px 4px; pointer-events: none; }
+  .spark-badge2 { position: absolute; background: #94bce3; color: #1d1f20; font-size: 11px; font-weight: 700; line-height: 1; padding: 3px 6px; white-space: nowrap; }
+  .spark-label2 { position: absolute; bottom: 0; color: #9a9a9e; font-size: 11px; letter-spacing: 0.06em; white-space: nowrap; }
 
-  .mt-bar-track { background: rgba(255,255,255,0.14); }
-  .mt-bar-fill { background: var(--accent); }
+  /* ---- 월별 트래킹 ---- */
+  .mt-headline2 { font-family: 'Barlow Condensed', 'Noto Sans KR', sans-serif; font-weight: 600; font-size: 20px; margin: 0 0 16px; }
+  .mt-overview2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 32px; align-items: end; }
+  .mt-big-row2 { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .mt-big-num2 { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 44px; line-height: 1; }
+  .mt-big-goal2 { font-size: 13px; color: #b9b9bc; }
+  .mt-big-rate2 { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 20px; }
+  .mt-bar-track3 { position: relative; height: 10px; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.22); }
+  .mt-bar-fill3 { position: absolute; left: 0; top: 0; bottom: 0; transition: width .3s; }
+  .mt-bar-caption2 { display: flex; justify-content: space-between; font-size: 11px; color: #9a9a9e; margin-top: 5px; }
+  .mt-detail-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
+  .mt-detail-card2 { border: 1px solid rgba(255,255,255,0.22); padding: 13px 14px 14px; }
+  .mt-detail-top2 { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+  .mt-detail-cat2 { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: #94bce3; border: 1px solid #94bce3; padding: 1px 7px; }
+  .mt-detail-week2 { font-size: 11px; color: #9a9a9e; }
+  .mt-detail-proj2 { font-size: 13px; font-weight: 500; line-height: 1.45; margin-bottom: 11px; min-height: 38px; }
 
-  .mt-week-range { font-size: 11px; font-weight: 700; color: var(--ink-faint); margin-bottom: 6px; }
-  .mt-week-toprow { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-  .mt-week-num { font-size: 22px; font-weight: 800; color: var(--ink); }
-  .mt-week-goal { font-size: 12px; font-weight: 700; color: var(--ink-faint); }
-  .mt-week-rate { font-size: 13px; font-weight: 800; color: var(--accent-ink); }
-  .mt-week-bar-track-big { position: relative; height: 18px; max-width: 340px; border-radius: 8px; overflow: hidden; margin-bottom: 14px; }
-  .mt-week-bar-fill-big { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 8px; transition: width 0.3s; }
+  /* ---- 팀 AGENDA ---- */
+  .agenda-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: var(--hairline); margin: 0 -18px; }
+  .agenda-col2 { background: var(--ground); min-width: 0; padding: 0 18px 4px; }
+  .agenda-col-head2 { display: flex; align-items: center; gap: 7px; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 2px solid; }
+  .agenda-col-head2 .label2 { font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 600; letter-spacing: 0.14em; }
+  .agenda-col-head2 .count2 { font-size: 11px; color: var(--faint); }
+  .agenda-item2 { display: flex; gap: 10px; padding: 0 0 14px; margin-bottom: 14px; border-bottom: 1px solid rgba(29,31,32,0.1); }
+  .agenda-item2 .badge2 { flex-shrink: 0; height: fit-content; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; padding: 1px 7px; border: 1px solid; white-space: nowrap; }
+  .agenda-item2 .body2 { min-width: 0; }
+  .agenda-item2 .proj2 { font-size: 13px; font-weight: 700; margin-bottom: 3px; }
+  .agenda-item2 .content2 { font-size: 12px; color: var(--soft); line-height: 1.55; }
+  .agenda-empty2 { margin: 0; font-size: 12px; color: var(--faint); padding: 14px 0; }
 
-  .mt-breakdown-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
-  .mt-breakdown-card { background: var(--surface-2); border-radius: 14px; padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
-  .mt-breakdown-toprow { display: flex; align-items: center; gap: 8px; }
-  .mt-breakdown-cat { flex-shrink: 0; font-size: 9.5px; font-weight: 800; padding: 3px 8px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); color: var(--ink-soft); white-space: nowrap; }
-  .mt-breakdown-week { font-size: 10.5px; font-weight: 700; color: var(--ink-faint); }
-  .mt-breakdown-title { font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.4; }
+  /* ---- 사업 캘린더 / 팀 일정 캘린더 공통 ---- */
+  .split-row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(620px, 1fr)); gap: 28px; margin-bottom: 28px; align-items: start; }
+  .cal-nav-row2 { display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 14px; }
+  .nav-btn2 { width: 28px; height: 28px; border: 1px solid rgba(29,31,32,0.28); background: transparent; color: var(--ink); cursor: pointer; border-radius: 0; font-size: 12px; font-family: inherit; }
+  .nav-btn2:hover { background: #eef6ff; border-color: var(--accent); }
+  .nav-month-label2 { font-family: 'Barlow Condensed', 'Noto Sans KR', sans-serif; font-weight: 600; font-size: 18px; min-width: 128px; text-align: center; }
 
-  .chart-legend { display: flex; gap: 14px; font-size: 10.5px; color: var(--ink-soft); margin-bottom: 4px; }
-  .chart-legend .lg-item { display: flex; align-items: center; gap: 5px; }
-  .lg-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-  .kpi-example-tag { display: inline-block; font-size: 9px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); color: var(--ink-faint); vertical-align: middle; }
+  .cal-legend2 { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .legend-btn2 { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 0; border: 1px solid rgba(29,31,32,0.2); background: transparent; color: var(--soft); cursor: pointer; font-family: inherit; opacity: 1; }
+  .legend-btn2 .dot2 { width: 8px; height: 8px; display: inline-block; }
+  .legend-btn2.active-review2 { border-color: var(--warn); background: rgba(138,100,32,0.1); color: #6b4d18; }
+  .legend-btn2.active-duedate2 { border-color: var(--bad); background: rgba(162,69,60,0.1); color: #8a3a32; }
+  .legend-btn2.dimmed2 { opacity: 0.45; }
 
-  .dark-card {
-    background: var(--dark-card); color: var(--dark-ink);
-    --surface: var(--dark-card); --surface-2: var(--dark-item); --border: var(--dark-border);
-    --ink: var(--dark-ink); --ink-soft: var(--dark-ink-soft); --ink-faint: var(--dark-ink-soft);
-    --accent: #b6a3f5; --accent-soft: rgba(124,92,214,0.25); --accent-ink: #b6a3f5;
-  }
+  .cal-grid2, .teamcal-grid2 { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: 24px; gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); }
+  .cal-grid2 { grid-auto-rows: 110px; }
+  .teamcal-grid2 { grid-auto-rows: 114px; }
+  .cal-dow2 { background: var(--header-strip); height: 24px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; }
+  .cal-cell2, .teamcal-cell2 { position: relative; background: #ffffff; min-width: 0; }
+  .cal-cell2.empty2, .teamcal-cell2.empty2 { background: var(--out-of-month); }
+  .cal-cell-inner2 { position: absolute; inset: 0; overflow: hidden; padding: 5px 5px 6px; display: flex; flex-direction: column; gap: 3px; }
+  .teamcal-cell-inner2 { position: absolute; inset: 0; overflow: hidden; padding: 6px 6px 7px; display: flex; flex-direction: column; gap: 3px; }
+  .cal-daynum2 { font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 600; }
 
-  .agenda-cols { display: flex; gap: 22px; }
-  @media (max-width: 760px) { .agenda-cols { flex-direction: column; } }
-  .agenda-col { flex: 1; min-width: 0; }
-  .agenda-col .colhead { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; color: var(--ink-faint); margin-bottom: 10px; }
-  .agenda-item { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; display: flex; gap: 10px; }
-  .agenda-item .cat-badge { flex-shrink: 0; height: fit-content; font-size: 9.5px; font-weight: 800; padding: 3px 8px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); color: var(--ink-soft); white-space: nowrap; margin-top: 1px; }
-  .agenda-item .body-txt { min-width: 0; }
-  .agenda-item .title { font-size: 12.5px; font-weight: 700; margin-bottom: 3px; }
-  .agenda-item .title.placeholder { color: var(--ink-faint); font-weight: 600; }
-  .agenda-item .desc { font-size: 11px; color: var(--ink-soft); line-height: 1.5; }
-  .agenda-col .colhead { display: flex; align-items: center; gap: 5px; }
-  .agenda-col.col-wins .colhead { color: var(--good); }
-  .agenda-col.col-wins .agenda-item { border-left: 3px solid var(--good); }
-  .agenda-col.col-wins .agenda-item .cat-badge { color: var(--good); border-color: var(--good); }
-  .agenda-col.col-share .colhead { color: var(--accent-ink); }
-  .agenda-col.col-share .agenda-item { border-left: 3px solid var(--accent); }
-  .agenda-col.col-share .agenda-item .cat-badge { color: var(--accent-ink); border-color: var(--accent); }
-  .agenda-col.col-challenges .colhead { color: #a15a2a; }
-  .agenda-col.col-challenges .agenda-item { border-left: 3px solid #a15a2a; }
-  .agenda-col.col-challenges .agenda-item .cat-badge { color: #a15a2a; border-color: #a15a2a; }
+  .cal-entry2 { flex-shrink: 0; cursor: pointer; padding: 2px 4px; transition: opacity .12s; border-left: 3px solid; }
+  .cal-entry2 .proj2line { font-size: 11px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal-entry2 .detail2line { font-size: 11px; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal-entry2.dimmed2 { opacity: 0.25; }
+  .cal-entry2.kind-review2 { border-left-color: var(--warn); background: rgba(138,100,32,0.07); color: #6b4d18; }
+  .cal-entry2.kind-duedate2 { border-left-color: var(--bad); background: rgba(162,69,60,0.07); color: #8a3a32; }
+  .cal-more2 { flex-shrink: 0; align-self: flex-start; font-size: 11px; line-height: 1.3; font-weight: 700; white-space: nowrap; color: var(--accent-700); background: transparent; border: none; border-bottom: 1px solid #94bce3; padding: 0; cursor: pointer; font-family: inherit; }
+  .cal-expand-panel2 { position: absolute; top: 0; left: 0; right: 0; min-height: 100%; background: #ffffff; border: 1px solid #1d1f20; box-shadow: var(--shadow-pop); padding: 5px 5px 6px; display: flex; flex-direction: column; gap: 3px; z-index: 50; }
 
-  .cal-placeholder, .img-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 8px; background: var(--surface-2); border-radius: 14px; padding: 50px 20px; min-height: 260px; }
-  .cal-placeholder .picon { width: 44px; height: 44px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 20px; }
-  .cal-placeholder .ptitle { font-size: 13px; font-weight: 700; color: var(--ink-soft); }
-  .cal-placeholder .psub { font-size: 11px; color: var(--ink-faint); }
+  .cal-summary2 { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--hairline); }
+  .summary-title2 { font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); margin: 0 0 10px; }
+  .summary-empty2 { margin: 0; font-size: 12px; color: var(--faint); }
+  .summary-table2 { width: 100%; border-collapse: collapse; border: 1px solid var(--hairline); font-size: 12px; }
+  .summary-table2 thead tr { background: var(--header-strip); }
+  .summary-table2 th { text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--soft); padding: 7px 8px; border-right: 1px solid var(--hairline); white-space: nowrap; }
+  .summary-table2 tbody tr { border-top: 1px solid var(--hairline); }
+  .summary-table2 td { padding: 7px 8px; vertical-align: top; border-right: 1px solid var(--hairline); color: #424244; }
+  .summary-table2 td:last-child, .summary-table2 th:last-child { border-right: none; }
+  .summary-table2 td.proj-cell2 { font-weight: 700; width: 22%; color: var(--ink); }
+  .stage-badge2 { display: inline-block; font-size: 11px; font-weight: 700; color: var(--accent-700); border: 1px solid #94bce3; padding: 1px 7px; white-space: nowrap; }
 
-  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-  .cal-dow { font-size: 10px; font-weight: 800; color: var(--ink-faint); text-align: center; padding: 4px 0; }
-  .cal-cell { background: var(--surface-2); border-radius: 8px; padding: 5px 5px 6px; height: 68px; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
-  .cal-cell.empty { background: transparent; }
-  .cal-cell.is-expanded { height: auto; overflow: visible; }
-  .cal-daynum { font-size: 10.5px; font-weight: 800; color: var(--ink-soft); margin-bottom: 2px; flex-shrink: 0; }
-  .cal-entries { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
-  .cal-cell.is-expanded .cal-entries { overflow: visible; }
-  .cal-entries-extra { display: none; flex-direction: column; gap: 2px; }
-  .cal-more { display: inline-block; align-self: flex-start; font-size: 8px; font-weight: 800; color: var(--ink-soft); background: var(--border); border-radius: 999px; padding: 2px 7px; flex-shrink: 0; cursor: pointer; transition: filter .12s; }
-  .cal-more:hover { filter: brightness(0.96); }
-  .cal-entry { font-size: 8.5px; line-height: 1.35; border-radius: 5px; padding: 2px 4px; font-weight: 700; flex-shrink: 0; transition: opacity .12s, filter .12s; }
-  .cal-entry.c-red { background: var(--bad-bg); color: var(--bad); }
-  .cal-entry.c-yellow { background: #f5e6d6; color: #a15a2a; }
-  .cal-entry.c-green { background: var(--good-bg); color: var(--good); }
-  .cal-entry.c-none { background: var(--border); color: var(--ink-soft); }
-  .cal-entry.is-dimmed { opacity: .28; filter: grayscale(.5); }
-  .cal-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 10px; color: var(--ink-soft); margin-bottom: 10px; }
-  .cal-legend .legend-btn { cursor: pointer; border-radius: 999px; transition: box-shadow .12s; }
-  .cal-legend .legend-btn.is-active { box-shadow: 0 0 0 2px var(--accent); }
-  pre.raw-fallback { white-space: pre-wrap; font-size: 11px; color: var(--ink-soft); font-family: inherit; max-height: 380px; overflow: auto; }
-
-  .cal-entry { cursor: pointer; transition: filter .1s; }
-  .cal-entry:hover { filter: brightness(1.08); }
-  .cal-entry .cal-entry-project { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; }
-  .cal-entry .cal-entry-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .82; font-weight: 600; margin-top: 1px; }
-
-  .stage-badge { display: inline-block; font-size: 10px; font-weight: 800; padding: 3px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); white-space: nowrap; }
-
-  .cal-action-popover { position: fixed; z-index: 60; width: 230px; background: var(--surface); border-radius: 12px; box-shadow: var(--shadow); border: 1px solid var(--border); padding: 12px 14px 11px; }
-  .cal-action-popover .cap-close { position: absolute; top: 5px; right: 7px; border: none; background: transparent; color: var(--ink-faint); font-size: 15px; line-height: 1; cursor: pointer; padding: 3px 6px; border-radius: 6px; }
-  .cal-action-popover .cap-close:hover { background: var(--surface-2); color: var(--ink); }
-  .cal-action-popover .cap-title { font-size: 13px; font-weight: 800; color: var(--ink); margin: 0 20px 6px 0; line-height: 1.4; }
-  .cal-action-popover .cap-row { font-size: 11.5px; color: var(--ink-soft); line-height: 1.6; }
-  .cal-action-popover .cap-row + .cap-row { margin-top: 3px; }
-  .cal-action-popover .cap-row b { display: block; font-size: 9px; font-weight: 800; color: var(--accent-ink); background: var(--accent-soft); border-radius: 5px; padding: 1px 6px; width: fit-content; letter-spacing: .03em; margin-bottom: 3px; }
-
-  .cal-summary { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
-  .cal-summary-empty { font-size: 11px; color: var(--ink-faint); font-style: italic; }
-  .cal-summary-table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-  .cal-summary-table tr.head { background: var(--surface-2); }
-  .cal-summary-table tr.head td { font-size: 9.5px; font-weight: 800; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .03em; padding: 7px 8px; white-space: nowrap; }
-  .cal-summary-table tr:not(.head) { border-top: 1px solid var(--border); }
-  .cal-summary-table td { padding: 7px 8px; font-size: 11.5px; vertical-align: top; border-right: 1px solid var(--border); }
-  .cal-summary-table td:last-child { border-right: none; }
-  .cal-summary-table .cal-summary-name { width: 22%; font-weight: 700; color: var(--ink); }
-  .cal-summary-empty-cell { color: var(--ink-faint); font-style: italic; }
-
-  .card-teamcal { overflow: visible; }
-  .card-teamcal .card-body { padding-top: 4px; }
-  .teamcal-nav { display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 14px; }
-  .teamcal-navbtn { border: 1px solid var(--border); background: var(--surface-2); color: var(--ink); width: 30px; height: 30px; border-radius: 50%; font-size: 13px; cursor: pointer; }
-  .teamcal-navbtn:hover { background: var(--accent-soft); color: var(--accent-ink); }
-  .teamcal-monthlabel { font-size: 16px; font-weight: 800; min-width: 110px; text-align: center; }
-  .teamcal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
-  .teamcal-cell { position: relative; min-width: 0; background: var(--surface-2); border-radius: 10px; padding: 8px 8px 9px; height: 112px; display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
-  .teamcal-cell.empty { background: transparent; }
-  .teamcal-event { display: block; font-size: 10.5px; line-height: 1.4; border-radius: 6px; padding: 3px 6px; font-weight: 700; background: var(--surface); color: var(--accent-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
-  .teamcal-event .t { font-weight: 800; opacity: 0.85; margin-right: 2px; }
-  .teamcal-more { display: block; font-size: 10px; font-weight: 800; color: var(--ink-faint); padding: 1px 6px; flex-shrink: 0; }
-  @media (max-width: 760px) { .teamcal-cell { height: 90px; } }
-
-  /* 팀 일정 캘린더: 클릭 대신 마우스를 올리면 그 칸이 카드처럼 커지면서 전체 일정이 보임.
-     칸 자체 높이는 그대로 두고(그리드 행이 늘어나 다른 칸이 밀리는 걸 방지), 확장 패널만
-     absolute로 그 위에 겹쳐 보여준다. */
-  .teamcal-hover-panel {
+  /* ---- 팀 일정 캘린더 이벤트 + 호버 패널 ---- */
+  .teamcal-event2 { flex-shrink: 0; font-size: 11px; line-height: 1.4; padding: 2px 5px; border-left: 2px solid var(--accent); background: rgba(238,246,255,0.9); color: var(--accent-900); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+  .teamcal-event2 b { color: var(--accent-700); }
+  .teamcal-more2 { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--faint); }
+  .teamcal-caption2 { margin: 10px 0 0; font-size: 11px; color: var(--faint); }
+  .teamcal-hover-panel2 {
     position: absolute; top: 0; left: 0; right: 0; min-height: 100%;
-    background: var(--accent); border-radius: 10px; box-shadow: var(--shadow);
-    padding: 8px 8px 9px; display: flex; flex-direction: column; gap: 3px;
-    z-index: 40; opacity: 0; visibility: hidden; pointer-events: none;
-    transition: opacity .12s ease;
+    background: var(--accent-900); box-shadow: var(--shadow-pop);
+    padding: 6px 6px 8px; display: flex; flex-direction: column; gap: 3px;
+    z-index: 50; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .12s;
   }
-  .teamcal-hover-panel .cal-daynum { color: #fff; }
-  .teamcal-hover-panel .teamcal-event { white-space: normal; text-overflow: clip; background: rgba(255,255,255,0.18); color: #fff; }
-  .teamcal-hover-panel .teamcal-event .t { color: #fff; }
-  .teamcal-cell.has-events:hover { z-index: 30; overflow: visible; }
-  .teamcal-cell.has-events:hover .teamcal-hover-panel { opacity: 1; visibility: visible; pointer-events: auto; max-height: none; overflow: visible; }
+  .teamcal-hover-panel2 .cal-daynum2 { color: #fff; }
+  .teamcal-hover-panel2 .teamcal-hp-event2 { font-size: 11px; line-height: 1.4; padding: 3px 6px; background: rgba(255,255,255,0.14); color: #fff; font-weight: 500; }
+  .teamcal-hover-panel2 .teamcal-hp-event2 b { color: #b5d9fd; }
+  .teamcal-cell2.has-events2:hover { z-index: 40; overflow: visible; }
+  .teamcal-cell2.has-events2:hover .teamcal-hover-panel2 { opacity: 1; visibility: visible; pointer-events: auto; }
 
-  .card-news .card-head { border-bottom: 2px solid var(--border); padding: 16px 20px 10px; align-items: flex-end; }
-  .card-news .news-eyebrow { font-size: 10px; letter-spacing: .18em; font-weight: 700; color: var(--ink-faint); margin-bottom: 3px; }
-  .card-news .htitle { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
-  .card-news .badge { background: transparent; color: var(--ink-faint); }
-  .news-section { margin-bottom: 10px; border-radius: 14px; padding: 12px 15px 3px; }
-  .news-section:last-child { margin-bottom: 0; }
-  .news-section .ns-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; display: inline-block; margin-bottom: 7px; padding: 2px 9px; border-radius: 999px; }
-  .news-headline { padding: 7px 0; border-top: 1px solid var(--border); }
-  .news-headline:first-of-type { border-top: none; padding-top: 0; }
-  .news-headline.placeholder { font-style: italic; font-weight: 600; }
-  .news-headline .nh-artist { display: block; font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 3px; }
-  .news-headline .nh-content { display: block; font-size: 12.5px; line-height: 1.42; font-weight: 700; }
-  .news-headline .voc { display: block; font-size: 10.5px; font-style: italic; line-height: 1.4; margin-top: 6px; padding: 7px 9px; border-radius: 9px; }
+  /* ---- 트렌드 리포트 ---- */
+  .trend-block2 { padding: 12px 14px 4px; margin-bottom: 14px; border-left: 3px solid; }
+  .trend-block2:last-child { margin-bottom: 0; }
+  .trend-title2 { font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; margin: 0 0 10px; }
+  .trend-item2 { padding: 0 0 11px; margin-bottom: 11px; border-bottom: 1px solid rgba(29,31,32,0.1); }
+  .trend-item2:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+  .trend-label2 { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .trend-line2 { display: block; font-size: 13px; line-height: 1.5; font-weight: 500; color: var(--ink); }
+  .trend-voc2 { margin-top: 8px; padding: 8px 10px; border-left: 2px solid rgba(29,31,32,0.2); background: rgba(29,31,32,0.035); }
+  .voc-line2 { display: block; font-size: 12px; font-style: italic; line-height: 1.5; color: var(--soft); }
 
-  .news-section.chance { background: var(--dark-card); color: var(--dark-ink); }
-  .news-section.chance .ns-label { color: #b6a3f5; background: rgba(124,92,214,.28); }
-  .news-section.chance .news-headline { border-top-color: var(--dark-border); }
-  .news-section.chance .nh-artist { color: #b6a3f5; }
-  .news-section.chance .nh-content { color: var(--dark-ink); }
-  .news-section.chance .news-headline.placeholder { color: var(--dark-ink-soft); }
-  .news-section.chance .voc { background: rgba(255,255,255,.07); color: var(--dark-ink-soft); }
+  .trend-block2.tclr-chance { border-left-color: #416180; background: rgba(238,246,255,0.6); }
+  .trend-block2.tclr-chance .trend-title2, .trend-block2.tclr-chance .trend-label2 { color: #416180; }
+  .trend-block2.tclr-risk { border-left-color: var(--bad); background: rgba(162,69,60,0.05); }
+  .trend-block2.tclr-risk .trend-title2, .trend-block2.tclr-risk .trend-label2 { color: var(--bad); }
+  .trend-block2.tclr-extra1 { border-left-color: var(--warn); background: rgba(138,100,32,0.05); }
+  .trend-block2.tclr-extra1 .trend-title2, .trend-block2.tclr-extra1 .trend-label2 { color: var(--warn); }
+  .trend-block2.tclr-extra2 { border-left-color: var(--good); background: rgba(47,107,82,0.05); }
+  .trend-block2.tclr-extra2 .trend-title2, .trend-block2.tclr-extra2 .trend-label2 { color: var(--good); }
+  .trend-block2.tclr-extra3 { border-left-color: var(--accent-900); background: rgba(44,69,93,0.05); }
+  .trend-block2.tclr-extra3 .trend-title2, .trend-block2.tclr-extra3 .trend-label2 { color: var(--accent-900); }
+  .trend-block2.tclr-extra4 { border-left-color: #627d98; background: rgba(98,125,152,0.06); }
+  .trend-block2.tclr-extra4 .trend-title2, .trend-block2.tclr-extra4 .trend-label2 { color: #627d98; }
 
-  .news-section.risk { background: var(--bad-bg); }
-  .news-section.risk .ns-label { color: var(--bad); background: rgba(176,70,60,.14); }
-  .news-section.risk .news-headline { border-top-color: rgba(176,70,60,.18); }
-  .news-section.risk .nh-artist { color: var(--bad); }
-  .news-section.risk .nh-content { color: var(--ink); }
-  .news-section.risk .news-headline.placeholder { color: var(--ink-faint); }
-  .news-section.risk .voc { background: rgba(176,70,60,.09); color: var(--ink-soft); }
+  /* ---- 오류 카드 ---- */
+  .error-card2 { border-color: var(--bad) !important; }
+  .error-card2 .dashsec-head { border-bottom-color: rgba(162,69,60,0.3); }
+  .error-card2 h2 { color: var(--bad); }
+  .error-card2 .badge-outline2 { color: var(--bad); border-color: var(--bad); }
+  .error-card2 .err-title2 { margin: 0 0 4px; font-size: 13px; font-weight: 700; color: var(--bad); }
+  .error-card2 .err-sub2 { margin: 0; font-size: 12px; color: var(--soft); }
 
-  .news-section.extra1 { background: #fdf1dc; }
-  .news-section.extra1 .ns-label { color: #a15a2a; background: rgba(161,90,42,.16); }
-  .news-section.extra1 .news-headline { border-top-color: rgba(161,90,42,.18); }
-  .news-section.extra1 .nh-artist { color: #a15a2a; }
-  .news-section.extra1 .nh-content { color: var(--ink); }
-  .news-section.extra1 .news-headline.placeholder { color: var(--ink-faint); }
-  .news-section.extra1 .voc { background: rgba(161,90,42,.09); color: var(--ink-soft); }
+  /* ---- 팝오버 ---- */
+  .popover2 { position: fixed; z-index: 90; width: 268px; background: #ffffff; border: 1px solid #1d1f20; box-shadow: var(--shadow-pop); padding: 14px 16px 13px; }
+  .popover2 .pop-close2 { position: absolute; top: 4px; right: 6px; border: none; background: transparent; color: var(--faint); font-size: 16px; line-height: 1; cursor: pointer; padding: 4px 6px; font-family: inherit; }
+  .popover2 .pop-close2:hover { color: var(--ink); }
+  .popover2 .pop-title2 { font-family: 'Barlow Condensed', 'Noto Sans KR', sans-serif; font-weight: 600; font-size: 16px; margin: 0 18px 10px 0; line-height: 1.3; }
+  .popover2 .pop-row2 { margin-bottom: 9px; }
+  .popover2 .pop-row2:last-child { margin-bottom: 0; }
+  .popover2 .pop-k2 { display: block; font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-700); margin-bottom: 2px; }
+  .popover2 .pop-v2 { display: block; font-size: 12px; line-height: 1.55; color: #424244; }
 
-  .news-section.extra2 { background: #dcf1ee; }
-  .news-section.extra2 .ns-label { color: #1e7b74; background: rgba(30,123,116,.16); }
-  .news-section.extra2 .news-headline { border-top-color: rgba(30,123,116,.18); }
-  .news-section.extra2 .nh-artist { color: #1e7b74; }
-  .news-section.extra2 .nh-content { color: var(--ink); }
-  .news-section.extra2 .news-headline.placeholder { color: var(--ink-faint); }
-  .news-section.extra2 .voc { background: rgba(30,123,116,.09); color: var(--ink-soft); }
-
-  .news-section.extra3 { background: #dce8f7; }
-  .news-section.extra3 .ns-label { color: #2a5ba1; background: rgba(42,91,161,.16); }
-  .news-section.extra3 .news-headline { border-top-color: rgba(42,91,161,.18); }
-  .news-section.extra3 .nh-artist { color: #2a5ba1; }
-  .news-section.extra3 .nh-content { color: var(--ink); }
-  .news-section.extra3 .news-headline.placeholder { color: var(--ink-faint); }
-  .news-section.extra3 .voc { background: rgba(42,91,161,.09); color: var(--ink-soft); }
-
-  .news-section.extra4 { background: #f7dcef; }
-  .news-section.extra4 .ns-label { color: #a12a7a; background: rgba(161,42,122,.16); }
-  .news-section.extra4 .news-headline { border-top-color: rgba(161,42,122,.18); }
-  .news-section.extra4 .nh-artist { color: #a12a7a; }
-  .news-section.extra4 .nh-content { color: var(--ink); }
-  .news-section.extra4 .news-headline.placeholder { color: var(--ink-faint); }
-  .news-section.extra4 .voc { background: rgba(161,42,122,.09); color: var(--ink-soft); }
-
-  .state-msg { font-size: 12.5px; color: var(--ink-soft); padding: 10px 2px; }
-  .state-msg.err { color: var(--bad); }
-  .state-msg .fix { display: block; margin-top: 5px; font-size: 11px; color: var(--ink-faint); }
-
-  footer.note { margin-top: 22px; font-size: 11px; color: var(--ink-faint); border-top: 1px solid var(--border); padding-top: 14px; }
-
-  .insight-bar { display: flex; align-items: center; gap: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 14px 22px; box-shadow: var(--shadow); margin-bottom: 20px; }
-  .insight-bar .insight-icon { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 14px; }
-  .insight-bar .insight-text { flex: 1; min-width: 0; font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
-  .insight-bar .insight-text b { color: var(--ink); font-weight: 800; }
-  @media (max-width: 700px) { .insight-bar { border-radius: 20px; align-items: flex-start; } }
+  /* ---- 푸터 ---- */
+  footer.note2 { margin-top: 32px; padding-top: 14px; border-top: 1px solid var(--hairline); font-size: 11px; line-height: 1.6; color: var(--faint); }
 
   /* ---- 비밀번호 게이트 ---- */
-  #pwGate { position: fixed; inset: 0; background: rgba(23,21,30,.55); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
-  #pwGate .pw-box { background: var(--surface); border-radius: 18px; box-shadow: var(--shadow); width: 100%; max-width: 320px; padding: 26px 24px; text-align: center; }
-  #pwGate .pw-box h2 { font-size: 15px; margin: 0 0 6px; }
-  #pwGate .pw-box p { font-size: 12px; color: var(--ink-faint); margin: 0 0 16px; }
-  #pwGate input { width: 100%; font-size: 14px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 10px; text-align: center; }
-  #pwGate button { width: 100%; font-size: 13px; font-weight: 800; padding: 10px 12px; border-radius: 10px; border: none; background: var(--accent); color: #fff; cursor: pointer; }
-  #pwGate button:hover { filter: brightness(1.06); }
-  #pwGate .pw-err { color: var(--bad); font-size: 11.5px; margin-top: 8px; min-height: 14px; }
+  #pwGate { position: fixed; inset: 0; z-index: 100; background: rgba(29,31,32,0.72); display: flex; align-items: center; justify-content: center; padding: 24px; }
+  #pwGate .pw-box2 { width: 100%; max-width: 348px; background: #ffffff; padding: 30px 28px 26px; }
+  #pwGate .pw-kicker2 { font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent-700); margin: 0 0 4px; }
+  #pwGate h2 { font-size: 26px; margin: 0 0 6px; }
+  #pwGate .pw-sub2 { margin: 0 0 20px; font-size: 12px; color: var(--soft); }
+  #pwGate input { width: 100%; font-family: inherit; font-size: 14px; padding: 10px 12px; border-radius: 0; border: 1px solid rgba(29,31,32,0.28); background: #fff; color: var(--ink); margin-bottom: 10px; }
+  #pwGate input.err-input2 { border-color: var(--bad); }
+  #pwGate button { width: 100%; font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; padding: 11px 12px; border-radius: 0; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+  #pwGate button:hover { background: var(--accent-700); border-color: var(--accent-700); }
+  #pwGate .pw-err2 { margin: 10px 0 0; min-height: 17px; font-size: 12px; color: var(--bad); }
   body.locked .wrap { display: none; }
 
 
@@ -313,58 +272,80 @@
 <body class="locked">
 
 <div id="pwGate">
-  <div class="pw-box">
+  <div class="blueprint pw-box2">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <p class="pw-kicker2">광고IP사업팀</p>
     <h2>주간회의 대시보드</h2>
-    <p>팀 공용 비밀번호를 입력하세요</p>
+    <p class="pw-sub2">팀 공용 비밀번호를 입력하세요</p>
     <input type="password" id="pwInput" placeholder="비밀번호">
     <button id="pwSubmit">입장</button>
-    <div class="pw-err" id="pwErr"></div>
+    <p class="pw-err2" id="pwErr"></p>
   </div>
 </div>
 
 <div class="wrap">
-  <header class="top">
+  <header class="dash-header2">
     <div>
-      <p class="eyebrow">광고IP사업팀</p>
+      <p class="eyebrow2">광고IP사업팀 · AD/IP BUSINESS</p>
       <h1>주간회의 대시보드</h1>
     </div>
-    <div class="top-actions">
-      <label class="week-select-label" for="globalWeekSelect">주차</label>
-      <select class="global-week-select" id="globalWeekSelect"></select>
-      <span class="conn-state" id="connState"></span>
-      <button class="btn-refresh" id="refreshBtn">↻ 새로고침</button>
+    <div class="header-actions2">
+      <label for="globalWeekSelect">주차</label>
+      <select class="week-select2" id="globalWeekSelect"></select>
+      <span class="conn-state2" id="connState"></span>
+      <button class="btn-primary2" id="refreshBtn">↻ 새로고침</button>
     </div>
   </header>
 
   <div id="insightSlot"></div>
-  <div class="row-single" id="kpiSlot"></div>
-  <div class="row-single" id="monthlyTrackSlot"></div>
-  <div class="row-single" id="agendaSlot"></div>
-  <div class="row">
-    <div class="col-half" id="calSlot"></div>
-    <div class="col-half" id="trendSlot"></div>
+  <div id="kpiSlot"></div>
+  <div id="monthlyTrackSlot"></div>
+  <div id="agendaSlot"></div>
+  <div class="split-row2">
+    <div id="calSlot"></div>
+    <div id="trendSlot"></div>
   </div>
-  <div class="row-single" id="teamCalSlot"></div>
+  <div id="teamCalSlot"></div>
 
-  <footer class="note">
+  <footer class="note2">
     데이터 출처: Google Drive · DB대시보드/주간회의 폴더, Google Calendar · 광고 IP 사업팀 캘린더 (Apps Script를 통해 조회, 팀 공용 비밀번호로만 접근 가능) · 원본 파일이 바뀌면 새로고침 시 자동으로 최신 자료가 반영됩니다.
   </footer>
 </div>
 
 <script>
-  // ⚠️ Apps Script 배포 후 여기에 웹 앱 URL(.../exec)을 붙여넣을 것
+  // ⚠️ Apps Script 배포 후 여기에 웹 앱 URL(.../exec)을 붙여넣을 것 — 절대 값 변경 금지.
   const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyF12lwBJbJHFF5af15lNBIhCxMxBDzGbG8m8c1PWXJLLvT23dOL92GKcNivl9QHaOn/exec";
 
   const KPI_RAW_URL = "https://docs.google.com/spreadsheets/d/1HlGmNBPK69IWX3OqfVV6Q-MezsXQAG6rC6tdi7cgJmA/edit?usp=sharing";
   // 목표(연간/하반기) 숫자는 코드에 안 두고 Apps Script 응답에서 받아옴(비공개 저장소에만 두려고).
   let KPI_GOAL = { goal: null, h2Goal: null };
 
+  // el(): 신뢰할 수 있는 마크업(직접 쓴 아이콘 SVG 등)에만 사용 — innerHTML 사용.
   function el(tag, cls, html) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (html != null) e.innerHTML = html;
     return e;
   }
+  // elText(): 구글시트에서 온 자유입력 텍스트는 전부 이걸로 렌더 — textContent라 <, & 등이
+  // 그대로 안전하게 보이고 레이아웃이 안 깨짐(리디자인 버그 3번 수정).
+  function elText(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  // ---- 포맷 헬퍼 — 금액은 소수점 둘째 자리까지만, 그 아래로 떨어지는 0은 표시 안 함
+  // (200 → "200", 200.1 → "200.1", 200.12 → "200.12", 200.126 → "200.13"로 반올림).
+  // Math.round로 소수 2자리에서 반올림한 뒤 숫자 그대로 반환하면, 템플릿 문자열에 꽂힐 때
+  // JS가 숫자→문자열 변환을 하면서 트레일링 0을 자동으로 없애준다 — 별도 트리밍 코드 불필요.
+  // 퍼센트는 기존대로 정수(리디자인 버그 2번 수정 유지).
+  // null/undefined/NaN은 전부 0 취급(Apps Script가 빈 값을 NaN→JSON 직렬화 시 null로 보내는
+  // 문제 대응, 기존 numOr0 로직은 그대로 유지).
+  function numOr0(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : n; }
+  function fmtAmt(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : Math.round(n * 100) / 100; }
+  function fmtPct(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : Math.round(n); }
 
   // ---- 비밀번호 게이트 + 데이터 레이어 ----
   function storedPw() { try { return sessionStorage.getItem("dashPw") || ""; } catch { return ""; } }
@@ -376,16 +357,34 @@
     return res.json();
   }
 
+  // 로그인 검증 때 받은 kpi 응답을 1회용으로 캐시해뒀다가 initGlobalWeeks에서 재사용 —
+  // 로그인 직후 kpi를 두 번 호출하던 문제 수정(리디자인 버그 4번).
+  let cachedKpiData = null;
+
   document.getElementById("pwSubmit").addEventListener("click", submitPw);
   document.getElementById("pwInput").addEventListener("keydown", (ev) => { if (ev.key === "Enter") submitPw(); });
   async function submitPw() {
     const pw = document.getElementById("pwInput").value;
     const errEl = document.getElementById("pwErr");
+    const inputEl = document.getElementById("pwInput");
     errEl.textContent = "확인 중…";
+    inputEl.classList.remove("err-input2");
     setStoredPw(pw);
     try {
       const data = await callBackend("kpi");
-      if (!data.ok) { setStoredPw(""); errEl.textContent = "비밀번호가 틀렸어요."; return; }
+      if (!data.ok) {
+        setStoredPw("");
+        // 서버 오류(server_error 등)까지 "비밀번호 틀림"으로 오인하지 않도록 구분
+        // (리디자인 버그 1번 수정).
+        if (data.error === "unauthorized") {
+          inputEl.classList.add("err-input2");
+          errEl.textContent = "비밀번호가 틀렸어요.";
+        } else {
+          errEl.textContent = "서버 오류: " + (data.message || data.error || "알 수 없는 오류");
+        }
+        return;
+      }
+      cachedKpiData = data;
       document.body.classList.remove("locked");
       document.getElementById("pwGate").remove();
       boot();
@@ -396,142 +395,153 @@
   }
 
   // ============================================================
-  // ① KPI 현황
+  // ① 2026 KPI 현황
   // ============================================================
+  function sectionHead(num, title, dark, badgeText, rightExtra) {
+    const head = el("div", "dashsec-head");
+    const left = el("div", "kicker-left");
+    left.appendChild(elText("span", "dashsec-num", num));
+    left.appendChild(elText("h2", null, title));
+    head.appendChild(left);
+    const right = el("div", "dashsec-head-right");
+    if (badgeText != null) right.appendChild(elText("span", "badge-outline2", badgeText));
+    if (rightExtra) right.appendChild(rightExtra);
+    head.appendChild(right);
+    return head;
+  }
+  function sectionShell(dark, extraCls) {
+    const section = el("section", "blueprint dashsec" + (dark ? " dark-section" : "") + (extraCls ? " " + extraCls : ""));
+    ["tl", "tr", "bl", "br"].forEach(pos => section.appendChild(el("i", "corner " + pos)));
+    return section;
+  }
+
   function kpiHeader(badgeText) {
-    const card = el("div", "card dark-card");
-    const head = el("div", "card-head");
-    head.appendChild(el("span", "htitle", `<span class="icon-badge">📊</span> 2026 KPI 현황`));
-    const right = el("div", "card-head-right");
-    right.appendChild(el("span", "badge", badgeText));
+    const card = sectionShell(true);
     const rawLink = document.createElement("a");
-    rawLink.className = "btn-detail";
+    rawLink.className = "link-detail2";
     rawLink.href = KPI_RAW_URL;
     rawLink.target = "_blank";
     rawLink.rel = "noopener noreferrer";
     rawLink.textContent = "상세보기 ↗";
-    right.appendChild(rawLink);
-    head.appendChild(right);
-    card.appendChild(head);
+    card.appendChild(sectionHead("01", "2026 KPI 현황", true, badgeText, rawLink));
     return card;
   }
 
-  function statBox(label, value, cls) {
-    const box = el("div", "stat-box" + (cls ? " " + cls : ""));
-    box.appendChild(el("div", "slabel", label));
-    box.appendChild(el("div", "sval", value));
-    return box;
+  function tileGrid(gridCls, tiles, small) {
+    const grid = el("div", gridCls);
+    tiles.forEach(t => {
+      const tile = el("div", "tile" + (small ? " tile-sm" : ""));
+      tile.appendChild(elText("div", "tile-label", t.label));
+      const val = el("div", "tile-value");
+      val.style.color = t.color || "#ffffff";
+      val.appendChild(document.createTextNode(t.num));
+      if (t.unit) val.appendChild(elText("span", "unit2", t.unit));
+      tile.appendChild(val);
+      grid.appendChild(tile);
+    });
+    return grid;
   }
 
   let sparkChartUid = 0;
-  function sparkChart(points, width) {
-    const W = width || 260, H = 100, padX = 14, padTop = 24, padBottom = 22;
-    const plotH = H - padTop - padBottom;
+  // 스파크라인: SVG엔 그리드/면/선/점만 그리고, %뱃지·주차라벨은 HTML 오버레이로 얹는다
+  // (SVG <text>는 리사이즈 시 폰트가 왜곡되므로 이 구조를 유지).
+  function sparkChart(points) {
+    const W = 520, H = 172, padX = 30, padTop = 34, baseY = 138, plotH = baseY - padTop;
     const n = points.length;
-    const baseY = padTop + plotH;
     const vals = points.map(p => p.actual);
     let vMin = Math.min(...vals), vMax = Math.max(...vals);
-    if (vMax - vMin < 0.03) { const mid = (vMax + vMin) / 2; vMin = mid - 0.015; vMax = mid + 0.015; }
-    const domPad = (vMax - vMin) * 0.3;
-    const domMin = Math.max(0, vMin - domPad), domMax = Math.min(1, vMax + domPad);
+    if (vMax - vMin < 0.03) { const m = (vMax + vMin) / 2; vMin = m - 0.015; vMax = m + 0.015; }
+    const pad = (vMax - vMin) * 0.35;
+    const dMin = Math.max(0, vMin - pad), dMax = Math.min(1, vMax + pad);
     const xAt = i => padX + (n === 1 ? (W - 2 * padX) / 2 : (i / (n - 1)) * (W - 2 * padX));
-    const yAt = v => padTop + (1 - (Math.max(domMin, Math.min(domMax, v)) - domMin) / (domMax - domMin)) * plotH;
-    const actualPts = points.map((p, i) => [xAt(i), yAt(p.actual)]);
-    const line = pts => pts.map((p, i) => (i === 0 ? "M" : "L") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" ");
-    const areaPath = line(actualPts)
-      + ` L${actualPts[n - 1][0].toFixed(1)},${baseY.toFixed(1)} L${actualPts[0][0].toFixed(1)},${baseY.toFixed(1)} Z`;
-    const dots = actualPts.map((p, i) => {
-      const last = i === n - 1;
-      return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${last ? 3.4 : 2.2}" style="fill:var(--accent)"/>`;
-    }).join("");
-    const labels = points.map((p, i) => {
-      const anchor = i === 0 ? "start" : i === n - 1 ? "end" : "middle";
-      return `<text x="${xAt(i).toFixed(1)}" y="${H - 6}" text-anchor="${anchor}" style="font-size:8px;fill:var(--ink-faint)">${p.label}</text>`;
-    }).join("");
-    const badges = points.map((p, i) => {
-      const pct = Math.round(p.actual * 100) + "%";
-      const bw = 7 + pct.length * 4, bh = 11;
-      const bx = Math.max(1, Math.min(W - bw - 1, xAt(i) - bw / 2));
-      const by = Math.max(1, yAt(p.actual) - bh - 6);
-      return `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh}" rx="3.5" style="fill:var(--accent)"/>`
-        + `<text x="${(bx + bw / 2).toFixed(1)}" y="${(by + bh / 2 + 2.3).toFixed(1)}" text-anchor="middle" style="font-size:6.5px;font-weight:800;fill:#fff">${pct}</text>`;
-    }).join("");
+    const yAt = v => padTop + (1 - (Math.max(dMin, Math.min(dMax, v)) - dMin) / (dMax - dMin)) * plotH;
+    const coords = points.map((p, i) => [xAt(i), yAt(p.actual)]);
+    const line = coords.map((c, i) => (i === 0 ? "M" : "L") + c[0].toFixed(1) + "," + c[1].toFixed(1)).join(" ");
+    const area = n ? line + " L" + coords[n - 1][0].toFixed(1) + "," + baseY + " L" + coords[0][0].toFixed(1) + "," + baseY + " Z" : "";
+    const gridYs = [padTop, (padTop + baseY) / 2, baseY];
     const gid = "sparkFade" + (sparkChartUid++);
-    return `<svg width="100%" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
-      <defs>
-        <linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" style="stop-color:var(--accent);stop-opacity:0.32"/>
-          <stop offset="100%" style="stop-color:var(--accent);stop-opacity:0"/>
-        </linearGradient>
-      </defs>
-      <line x1="${padX}" y1="${baseY}" x2="${W - padX}" y2="${baseY}" style="stroke:var(--border);stroke-width:1"/>
-      <path d="${areaPath}" style="fill:url(#${gid});stroke:none"/>
-      <path d="${line(actualPts)}" style="fill:none;stroke:var(--accent);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round"/>
-      ${dots}${badges}${labels}
-    </svg>`;
+    const gridLines = gridYs.map(y => `<line x1="24" y1="${y}" x2="496" y2="${y}" stroke="rgba(255,255,255,0.16)" stroke-width="1"/>`).join("");
+    const dots = coords.map(c => `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="3" fill="#94bce3"/>`).join("");
+    const svgHtml = `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none" style="display:block;aspect-ratio:${W}/${H};">` +
+      `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">` +
+      `<stop offset="0%" stop-color="#94bce3" stop-opacity="0.26"/>` +
+      `<stop offset="100%" stop-color="#94bce3" stop-opacity="0"/>` +
+      `</linearGradient></defs>` +
+      gridLines +
+      `<path d="${area}" fill="url(#${gid})"/>` +
+      `<path d="${line}" fill="none" stroke="#94bce3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>` +
+      dots + `</svg>`;
+    const wrap = el("div", "spark-box2", svgHtml);
+    const overlay = el("div", "spark-overlay2");
+    points.forEach((p, i) => {
+      const xp = (coords[i][0] / W) * 100;
+      const badgeShift = i === 0 ? "translate(0, -100%)" : i === n - 1 ? "translate(-100%, -100%)" : "translate(-50%, -100%)";
+      const labelShift = i === 0 ? "translateX(0)" : i === n - 1 ? "translateX(-100%)" : "translateX(-50%)";
+      const badge = elText("span", "spark-badge2", fmtPct(p.actual * 100) + "%");
+      badge.style.left = xp.toFixed(2) + "%";
+      badge.style.top = (((coords[i][1] - 8) / H) * 100).toFixed(2) + "%";
+      badge.style.transform = badgeShift;
+      overlay.appendChild(badge);
+      const lab = elText("span", "spark-label2", p.label);
+      lab.style.left = xp.toFixed(2) + "%";
+      lab.style.transform = labelShift;
+      overlay.appendChild(lab);
+    });
+    wrap.appendChild(overlay);
+    return wrap;
   }
 
-  function kpiStatsBlock(rows) {
-    const wrap = el("div", "kpi-stats");
-    rows.forEach(r => {
-      wrap.appendChild(el("div", "sublabel", r.sublabel));
-      const row = el("div", "stat-row");
-      r.tiles.forEach(t => row.appendChild(statBox(t.label, t.value, t.cls)));
-      wrap.appendChild(row);
-    });
-    return wrap;
-  }
-  function kpiChartBlock(points, dim) {
-    const wrap = el("div", "kpi-chart");
-    wrap.appendChild(el("div", "sublabel", "주별 달성률 추이" + (dim ? ` <span class="kpi-example-tag">예시</span>` : "")));
-    if (points && points.length >= 2) {
-      const legend = el("div", "chart-legend");
-      legend.innerHTML = `<span class="lg-item"><span class="lg-dot"></span>실제 달성률</span>`;
-      wrap.appendChild(legend);
-      const chartEl = el("div", null, sparkChart(points));
-      if (dim) chartEl.style.opacity = "0.35";
-      wrap.appendChild(chartEl);
+  function kpiHeroBody(annualTiles, h2Tiles, chartPoints) {
+    const body = el("div", "kpi-hero2");
+    const left = el("div", null);
+    left.appendChild(elText("p", "kpi-block-kicker2", "2026년 전체"));
+    left.appendChild(tileGrid("tile-grid-4", annualTiles));
+    left.appendChild(elText("p", "kpi-block-kicker2", "하반기"));
+    left.appendChild(tileGrid("tile-grid-3", h2Tiles));
+    body.appendChild(left);
+
+    const right = el("div", null);
+    const sh = el("div", "spark-head2");
+    sh.appendChild(elText("p", "kpi-block-kicker2", "주별 달성률 추이"));
+    const legend = el("span", "spark-legend2");
+    legend.appendChild(el("i", "dot3"));
+    legend.appendChild(document.createTextNode("실제 달성률"));
+    sh.appendChild(legend);
+    right.appendChild(sh);
+    if (chartPoints && chartPoints.length >= 2) {
+      right.appendChild(sparkChart(chartPoints));
     } else {
-      wrap.appendChild(el("div", "state-msg", "데이터가 쌓이는 중입니다 — 매주 새 파일을 올리면 추이가 표시됩니다 (현재 " + (points ? points.length : 0) + "건)."));
+      right.appendChild(elText("p", "state-msg2", "데이터가 쌓이는 중입니다 — 매주 새 파일을 올리면 추이가 표시됩니다 (현재 " + (chartPoints ? chartPoints.length : 0) + "건)."));
     }
-    return wrap;
-  }
-  function kpiHeroBody(statsRows, chartPoints, dimChart) {
-    const body = el("div", "card-body");
-    const hero = el("div", "kpi-hero");
-    hero.appendChild(kpiStatsBlock(statsRows));
-    hero.appendChild(kpiChartBlock(chartPoints, dimChart));
-    body.appendChild(hero);
+    body.appendChild(right);
     return body;
   }
 
   function renderKpiPlaceholder() {
     const card = kpiHeader("예시");
-    const demo = [0.1,0.14,0.2,0.25,0.28,0.3,0.32,0.34].map((v,i)=>({actual:v,label:(i+1)+"주"}));
-    card.appendChild(kpiHeroBody([
-      { sublabel: "2026년 전체", tiles: [
-        { label: "2026 KPI 목표", value: "00억원", cls: "placeholder" },
-        { label: "달성률", value: "00%", cls: "placeholder" },
-        { label: "잔여 KPI", value: "00억원", cls: "placeholder" },
-      ] },
-      { sublabel: "하반기", tiles: [
-        { label: "하반기 KPI 목표", value: "00억원", cls: "placeholder" },
-        { label: "달성률", value: "00%", cls: "placeholder" },
-      ] },
-    ], demo, true));
+    const demo = [0.1, 0.14, 0.2, 0.25, 0.28, 0.3, 0.32, 0.34].map((v, i) => ({ actual: v, label: (i + 1) + "주" }));
+    card.appendChild(kpiHeroBody(
+      [
+        { label: "2026 KPI 목표", num: "00", unit: "억원", color: "#b9b9bc" },
+        { label: "실적", num: "00", unit: "억원", color: "#b9b9bc" },
+        { label: "달성률", num: "00%", unit: "", color: "#b9b9bc" },
+        { label: "잔여 KPI", num: "00", unit: "억원", color: "#b9b9bc" },
+      ],
+      [
+        { label: "하반기 KPI 목표", num: "00", unit: "억원", color: "#b9b9bc" },
+        { label: "하반기 실적", num: "00", unit: "억원", color: "#b9b9bc" },
+        { label: "달성률", num: "00%", unit: "", color: "#b9b9bc" },
+      ],
+      demo,
+    ));
     return card;
   }
 
   function formatRemainKpi(goal, actual) {
     const diff = goal - actual;
-    if (diff > 0) return diff.toFixed(1) + "억원";
-    if (diff < 0) return "+" + Math.abs(diff).toFixed(1) + "억원";
+    if (diff > 0) return fmtAmt(diff) + "억원";
+    if (diff < 0) return "+" + fmtAmt(Math.abs(diff)) + "억원";
     return "0억원";
-  }
-  function stripUnit(s) {
-    if (s == null) return NaN;
-    const m = String(s).match(/-?[\d.]+/);
-    return m ? parseFloat(m[0]) : NaN;
   }
 
   // 목표(goal/h2Goal)는 KPI_GOAL(서버에서 받은 값) 사용, 실적(actual/h2Actual)만 status에서 사용.
@@ -549,6 +559,10 @@
     };
   }
 
+  // 주차가 쌓일수록(연말엔 20주 넘음) 스파크라인 한 줄에 점이 다 안 들어가고 %뱃지/라벨이
+  // 겹치므로, 선택 주차 기준 최근 TREND_WINDOW_WEEKS개만 보여주는 이동 구간 방식으로 제한한다.
+  const TREND_WINDOW_WEEKS = 6;
+
   function buildKpiTrendPoints(uptoKey) {
     const byWeek = (sectionCache.kpi && sectionCache.kpi.byWeek) || {};
     const target = byWeek[uptoKey];
@@ -563,7 +577,7 @@
       if (!status || !status.annual || isNaN(status.annual.actual)) continue;
       points.push({ actual: status.annual.actual / KPI_GOAL.goal, label: e.monthAbbr + "_" + e.weekNum });
     }
-    return points;
+    return points.slice(-TREND_WINDOW_WEEKS);
   }
 
   function loadKpiForWeek(key) {
@@ -574,9 +588,7 @@
     if (!status) {
       slotEl.innerHTML = "";
       const card = kpiHeader(label);
-      const body = el("div", "card-body");
-      body.appendChild(el("div", "state-msg", "이 주차 자료가 아직 없어요."));
-      card.appendChild(body);
+      card.appendChild(elText("p", "state-msg2", "이 주차 자료가 아직 없어요."));
       slotEl.appendChild(card);
       return;
     }
@@ -584,29 +596,31 @@
     if (!computed) {
       slotEl.innerHTML = "";
       const card = kpiHeader(label);
-      const body = el("div", "card-body");
-      body.appendChild(el("div", "state-msg", "이 주차엔 아직 실적이 입력되지 않았어요."));
-      card.appendChild(body);
+      card.appendChild(elText("p", "state-msg2", "이 주차엔 아직 실적이 입력되지 않았어요."));
       slotEl.appendChild(card);
       return;
     }
     const trendPoints = buildKpiTrendPoints(key);
+    const achColor = computed.ach >= 100 ? "#6fbf9a" : computed.ach < 60 ? "#d9ab5a" : "#94bce3";
+    const annualTiles = [
+      { label: "2026 KPI 목표", num: fmtAmt(computed.goal), unit: "억원", color: "#ffffff" },
+      { label: "실적", num: fmtAmt(computed.actual), unit: "억원", color: "#ffffff" },
+      { label: "달성률", num: computed.ach.toFixed(0) + "%", unit: "", color: achColor },
+      { label: "잔여 KPI", num: computed.remainLabel, unit: "", color: "#94bce3" },
+    ];
+    let h2Tiles;
+    if (computed.h2Actual != null) {
+      const h2Color = computed.h2Ach >= 100 ? "#6fbf9a" : computed.h2Ach < 60 ? "#d9ab5a" : "#94bce3";
+      h2Tiles = [
+        { label: "하반기 KPI 목표", num: fmtAmt(computed.h2Goal), unit: "억원", color: "#ffffff" },
+        { label: "하반기 실적", num: fmtAmt(computed.h2Actual), unit: "억원", color: "#ffffff" },
+        { label: "달성률", num: computed.h2Ach.toFixed(0) + "%", unit: "", color: h2Color },
+      ];
+    } else {
+      h2Tiles = [{ label: "하반기 실적", num: "-", unit: "", color: "#b9b9bc" }];
+    }
     const card = kpiHeader(label);
-    card.appendChild(kpiHeroBody([
-      { sublabel: "2026년 전체", tiles: [
-        { label: "2026 KPI 목표", value: computed.goal.toFixed(0) + "억원" },
-        { label: "실적", value: computed.actual.toFixed(1) + "억원" },
-        { label: "달성률", value: computed.ach.toFixed(0) + "%", cls: computed.ach >= 100 ? "good" : computed.ach < 60 ? "bad" : "accent" },
-        { label: "잔여 KPI", value: computed.remainLabel, cls: "accent" },
-      ] },
-      { sublabel: "하반기", tiles: computed.h2Actual != null ? [
-        { label: "하반기 KPI 목표", value: computed.h2Goal.toFixed(0) + "억원" },
-        { label: "하반기 실적", value: computed.h2Actual.toFixed(1) + "억원" },
-        { label: "달성률", value: computed.h2Ach.toFixed(0) + "%", cls: computed.h2Ach >= 100 ? "good" : computed.h2Ach < 60 ? "bad" : "accent" },
-      ] : [
-        { label: "하반기 실적", value: "-", cls: "placeholder" },
-      ] },
-    ], trendPoints, false));
+    card.appendChild(kpiHeroBody(annualTiles, h2Tiles, trendPoints));
     slotEl.innerHTML = "";
     slotEl.appendChild(card);
   }
@@ -617,87 +631,82 @@
   let monthlyTrackExpanded = false;
 
   function monthlyTrackHeader(badgeText, onToggleClick, toggleLabel) {
-    const card = el("div", "card dark-card");
-    const head = el("div", "card-head");
-    head.appendChild(el("span", "htitle", `<span class="icon-badge">📈</span> 월별 트래킹`));
-    const right = el("div", "card-head-right");
-    right.appendChild(el("span", "badge", badgeText));
+    const card = sectionShell(true);
+    let toggleBtn = null;
     if (onToggleClick) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "btn-toggle";
-      btn.textContent = toggleLabel;
-      btn.addEventListener("click", onToggleClick);
-      right.appendChild(btn);
+      toggleBtn = document.createElement("button");
+      toggleBtn.type = "button";
+      toggleBtn.className = "btn-outline-toggle2";
+      toggleBtn.textContent = toggleLabel;
+      toggleBtn.addEventListener("click", onToggleClick);
     }
-    head.appendChild(right);
-    card.appendChild(head);
+    card.appendChild(sectionHead("02", "월별 트래킹", true, badgeText, toggleBtn));
     return card;
   }
 
   function mtFillColor(rateNum) {
-    return rateNum >= 100 ? "var(--accent)" : "var(--warn)";
+    return rateNum >= 100 ? "#94bce3" : "#d9ab5a";
   }
 
   // 이번 달 KPI 전체(목표/실적/달성률)를 보여주는 기본 뷰.
   // 값이 비어있으면 0으로 표기 — null/대시(-) 대신 0을 보여달라는 요청.
-  // Apps Script에서 NaN을 JSON으로 보내면 JSON.stringify가 NaN을 null로 바꿔버리기 때문에
-  // null도 반드시 같이 걸러줘야 함(isNaN(null)은 false라서 NaN 체크만으로는 안 잡힘).
-  function numOr0(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : n; }
-
   function monthlyOverallBody(data, isPlaceholder) {
-    const goalNum = isPlaceholder ? 0 : numOr0(data.goal);
-    const actualNum = isPlaceholder ? 0 : numOr0(data.actual);
-    const adNum = isPlaceholder ? 0 : numOr0(data.adActual);
-    const ipNum = isPlaceholder ? 0 : numOr0(data.ipActual);
+    const goalNum = isPlaceholder ? 0 : fmtAmt(data.goal);
+    const actualNum = isPlaceholder ? 0 : fmtAmt(data.actual);
+    const adNum = isPlaceholder ? 0 : fmtAmt(data.adActual);
+    const ipNum = isPlaceholder ? 0 : fmtAmt(data.ipActual);
     const rateNum = goalNum > 0 ? (actualNum / goalNum) * 100 : 0;
     const colorVar = mtFillColor(rateNum);
     const fillPct = Math.max(0, Math.min(100, rateNum));
 
-    const wrap = el("div", "mt-week-big");
-    const top = el("div", "mt-week-toprow");
-    const numEl = el("span", "mt-week-num", isPlaceholder ? "00억" : `${actualNum}억`);
-    numEl.style.color = colorVar;
+    const wrap = el("div", "mt-overview2");
+    const left = el("div", null);
+    const top = el("div", "mt-big-row2");
+    const numEl = elText("span", "mt-big-num2", isPlaceholder ? "00억" : `${actualNum}억`);
+    numEl.style.color = isPlaceholder ? "#b9b9bc" : colorVar;
     top.appendChild(numEl);
-    top.appendChild(el("span", "mt-week-goal", `/ 목표 ${isPlaceholder ? "00" : goalNum}억`));
-    const rateEl = el("span", "mt-week-rate", `${Math.round(rateNum)}%`);
-    rateEl.style.color = colorVar;
+    top.appendChild(elText("span", "mt-big-goal2", `/ 목표 ${isPlaceholder ? "00" : goalNum}억`));
+    const rateEl = elText("span", "mt-big-rate2", `${fmtPct(rateNum)}%`);
+    rateEl.style.color = isPlaceholder ? "#b9b9bc" : colorVar;
     top.appendChild(rateEl);
-    wrap.appendChild(top);
+    left.appendChild(top);
 
-    const track = el("div", "mt-week-bar-track-big mt-bar-track");
-    const fill = el("div", "mt-week-bar-fill-big mt-bar-fill");
-    fill.style.cssText = `width:${fillPct}%; background:${colorVar};`;
+    const track = el("div", "mt-bar-track3");
+    const fill = el("div", "mt-bar-fill3");
+    fill.style.cssText = `width:${fillPct}%; background:${isPlaceholder ? "#5d5d60" : colorVar};`;
     track.appendChild(fill);
-    wrap.appendChild(track);
+    left.appendChild(track);
+    const caption = el("div", "mt-bar-caption2");
+    caption.appendChild(document.createTextNode("0"));
+    caption.appendChild(document.createTextNode(`목표 ${isPlaceholder ? "00" : goalNum}억`));
+    left.appendChild(caption);
+    wrap.appendChild(left);
 
-    const row = el("div", "stat-row");
-    row.appendChild(statBox("광고", isPlaceholder ? "00억" : `${adNum}억`, isPlaceholder ? "placeholder" : undefined));
-    row.appendChild(statBox("IP", isPlaceholder ? "00억" : `${ipNum}억`, isPlaceholder ? "placeholder" : undefined));
-    wrap.appendChild(row);
-
+    wrap.appendChild(tileGrid("tile-grid-2", [
+      { label: "광고", num: isPlaceholder ? "00억" : `${adNum}억`, unit: "", color: isPlaceholder ? "#b9b9bc" : "#ffffff" },
+      { label: "IP", num: isPlaceholder ? "00억" : `${ipNum}억`, unit: "", color: isPlaceholder ? "#b9b9bc" : "#ffffff" },
+    ]));
     return wrap;
   }
 
-  // "더보기" 클릭 시 전환되는, 이번 달 실적을 구성하는 프로젝트별 카드 리스트 — 매출/목표
-  // 기여율이 잘 보이도록 카드마다 스탯 박스로 크게 표시.
+  // "더보기" 클릭 시 전환되는, 이번 달 실적을 구성하는 프로젝트별 카드 리스트.
   function monthlyBreakdownBody(data) {
-    const wrap = el("div", "mt-breakdown-grid");
+    const wrap = el("div", "mt-detail-grid2");
     if (!data.breakdown || !data.breakdown.length) {
-      wrap.appendChild(el("div", "state-msg", "이번 달 실적 구성 내역이 아직 없어요."));
+      wrap.appendChild(elText("p", "state-msg2", "이번 달 실적 구성 내역이 아직 없어요."));
       return wrap;
     }
     data.breakdown.forEach(item => {
-      const card = el("div", "mt-breakdown-card");
-      const top = el("div", "mt-breakdown-toprow");
-      top.appendChild(el("span", "mt-breakdown-cat", item.category || "-"));
-      if (item.weekLabel) top.appendChild(el("span", "mt-breakdown-week", item.weekLabel));
+      const card = el("div", "mt-detail-card2");
+      const top = el("div", "mt-detail-top2");
+      top.appendChild(elText("span", "mt-detail-cat2", item.category || "-"));
+      if (item.weekLabel) top.appendChild(elText("span", "mt-detail-week2", item.weekLabel));
       card.appendChild(top);
-      card.appendChild(el("div", "mt-breakdown-title", item.project || "-"));
-      const row = el("div", "stat-row");
-      row.appendChild(statBox("실적", `${numOr0(item.actual)}억`));
-      row.appendChild(statBox("목표 기여율", `${numOr0(item.contribPct)}%`));
-      card.appendChild(row);
+      card.appendChild(elText("div", "mt-detail-proj2", item.project || "-"));
+      card.appendChild(tileGrid("tile-grid-2", [
+        { label: "실적", num: `${fmtAmt(item.actual)}억`, unit: "", color: "#ffffff" },
+        { label: "목표 기여율", num: `${fmtPct(item.contribPct)}%`, unit: "", color: "#ffffff" },
+      ], true));
       wrap.appendChild(card);
     });
     return wrap;
@@ -711,13 +720,10 @@
       slotEl.innerHTML = "";
       slotEl.appendChild(buildMonthlyTrackCard(data, badgeText, isPlaceholder));
     }, toggleLabel);
-    const body = el("div", "card-body");
-    const exampleTag = isPlaceholder ? ` <span class="kpi-example-tag">예시</span>` : "";
     const monthLabel = isPlaceholder ? "9" : (data.monthNum || "-");
-    const goalTxt = isPlaceholder ? "00" : (data.goal || 0);
-    body.appendChild(el("div", "month-kpi-headline", `${monthLabel}월 KPI : ${goalTxt}억${exampleTag}`));
-    body.appendChild(monthlyTrackExpanded ? monthlyBreakdownBody(data) : monthlyOverallBody(data, isPlaceholder));
-    card.appendChild(body);
+    const goalTxt = isPlaceholder ? "00" : fmtAmt(data.goal);
+    card.appendChild(elText("p", "mt-headline2", `${monthLabel}월 KPI : ${goalTxt}억`));
+    card.appendChild(monthlyTrackExpanded ? monthlyBreakdownBody(data) : monthlyOverallBody(data, isPlaceholder));
     return card;
   }
 
@@ -735,69 +741,63 @@
     } catch (err) {
       slotEl.innerHTML = "";
       const errCard = monthlyTrackHeader("오류");
-      const body = el("div", "card-body");
-      body.appendChild(el("div", "state-msg err", "불러오지 못했어요: " + err.message));
-      errCard.appendChild(body);
+      errCard.appendChild(elText("p", "state-msg2 err2", "불러오지 못했어요: " + err.message));
       slotEl.appendChild(errCard);
     }
   }
 
   // ============================================================
-  // ② 팀 AGENDA (Wins / Challenges & Asks)
+  // ② 팀 AGENDA (WINS / SHARE / CHALLENGE)
   // ============================================================
   function agendaCard(badgeText) {
-    const card = el("div", "card");
-    const head = el("div", "card-head");
-    head.appendChild(el("span", "htitle", `<span class="icon-badge">🗨️</span> 팀 AGENDA`));
-    if (badgeText) head.appendChild(el("span", "badge", badgeText));
-    card.appendChild(head);
+    const card = sectionShell(false);
+    card.appendChild(sectionHead("03", "팀 AGENDA", false, badgeText));
     return card;
   }
 
-  function agendaItem(catLabel, title, desc, isPlaceholder) {
-    const item = el("div", "agenda-item");
-    item.appendChild(el("div", "cat-badge", catLabel || "-"));
-    const bodyTxt = el("div", "body-txt");
-    bodyTxt.appendChild(el("div", "title" + (isPlaceholder ? " placeholder" : ""), title));
-    bodyTxt.appendChild(el("div", "desc", desc));
-    item.appendChild(bodyTxt);
-    return item;
-  }
-
-  const AGENDA_ICON = {
-    wins: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M8 12.3l2.5 2.5L16 9" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-    share: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><circle cx="6" cy="12" r="2.6" stroke="currentColor" stroke-width="1.8"/><circle cx="17" cy="6" r="2.6" stroke="currentColor" stroke-width="1.8"/><circle cx="17" cy="18" r="2.6" stroke="currentColor" stroke-width="1.8"/><path d="M8.3 10.7L14.7 7.3M8.3 13.3L14.7 16.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`,
-    challenges: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M10.3 3.9L2.9 17.1c-.5.9.1 2 1.2 2h15.8c1.1 0 1.7-1.1 1.2-2L13.7 3.9c-.6-1-2-1-2.6 0Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 9.5v4M12 16.8h.01" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>`,
-  };
-  function agendaColHead(kind, label) {
-    return el("div", "colhead", `<span>${AGENDA_ICON[kind]}</span>${label}`);
-  }
-
   const AGENDA_SECTIONS = [
-    { key: "wins", cls: "col-wins", icon: "wins", label: "WINS", empty: "이번 주 작성된 Wins가 없습니다." },
-    { key: "share", cls: "col-share", icon: "share", label: "SHARE", empty: "이번 주 공유 사항이 없습니다." },
-    { key: "challenge", cls: "col-challenges", icon: "challenges", label: "CHALLENGE", empty: "이번 주 논의할 이슈가 없습니다." },
+    { key: "wins", label: "WINS", color: "#2f6b52", empty: "이번 주 작성된 Wins가 없습니다." },
+    { key: "share", label: "SHARE", color: "#416180", empty: "이번 주 공유 사항이 없습니다." },
+    { key: "challenge", label: "CHALLENGE", color: "#8a6420", empty: "이번 주 논의할 이슈가 없습니다." },
   ];
 
-  function agendaPlaceholderCol(def, promptTitle, promptDesc) {
-    const col = el("div", "agenda-col " + def.cls);
-    col.appendChild(agendaColHead(def.icon, def.label));
-    for (let i = 1; i <= 3; i++) col.appendChild(agendaItem("광고", promptTitle, promptDesc, true));
+  function agendaColumn(def, items) {
+    const col = el("div", "agenda-col2");
+    const head = el("div", "agenda-col-head2");
+    head.style.borderBottomColor = def.color;
+    const lab = elText("span", "label2", def.label);
+    lab.style.color = def.color;
+    head.appendChild(lab);
+    if (items.length) head.appendChild(elText("span", "count2", items.length + "건"));
+    col.appendChild(head);
+    if (items.length) {
+      items.forEach(it => {
+        const item = el("div", "agenda-item2");
+        const isCommon = it.label === "공통";
+        const badge = elText("span", "badge2", it.label || "-");
+        badge.style.color = isCommon ? "#1d1f20" : def.color;
+        badge.style.borderColor = isCommon ? "rgba(29,31,32,0.35)" : def.color;
+        item.appendChild(badge);
+        const body = el("div", "body2");
+        body.appendChild(elText("div", "proj2", it.proj || "-"));
+        body.appendChild(elText("div", "content2", it.content || ""));
+        item.appendChild(body);
+        col.appendChild(item);
+      });
+    } else {
+      col.appendChild(elText("p", "agenda-empty2", def.empty));
+    }
     return col;
   }
 
   function renderAgendaPlaceholder() {
     const card = agendaCard("예시");
-    const body = el("div", "card-body");
-    const cols = el("div", "agenda-cols");
-    cols.appendChild(agendaPlaceholderCol(AGENDA_SECTIONS[0], "프로젝트명을 입력하세요",
-      "예시: 이번 주 있었던 긍정적인 실적/기회를 2~3문장으로 서술해 주세요."));
-    cols.appendChild(agendaPlaceholderCol(AGENDA_SECTIONS[1], "프로젝트명을 입력하세요",
-      "예시: 팀 전체에 공유해야 하는 공지/확정 사항을 적어 주세요."));
-    cols.appendChild(agendaPlaceholderCol(AGENDA_SECTIONS[2], "프로젝트명을 입력하세요",
-      "예시: 팀 차원에서 논의가 필요한 부정 이슈를 적어 주세요."));
-    body.appendChild(cols);
-    card.appendChild(body);
+    const grid = el("div", "agenda-grid2");
+    const placeholderItems = (n) => Array.from({ length: n }, () => ({ label: "광고", proj: "프로젝트명을 입력하세요", content: "예시 내용입니다." }));
+    grid.appendChild(agendaColumn(AGENDA_SECTIONS[0], placeholderItems(2)));
+    grid.appendChild(agendaColumn(AGENDA_SECTIONS[1], placeholderItems(1)));
+    grid.appendChild(agendaColumn(AGENDA_SECTIONS[2], placeholderItems(2)));
+    card.appendChild(grid);
     return card;
   }
 
@@ -806,27 +806,20 @@
     const label = weekLabel(entry, key);
     const slotEl = document.getElementById("agendaSlot");
     const card = agendaCard(label);
-    const body = el("div", "card-body");
     if (!entry) {
-      body.appendChild(el("div", "state-msg", "이 주차 자료가 아직 없어요."));
-      card.appendChild(body);
+      card.appendChild(elText("p", "state-msg2", "이 주차 자료가 아직 없어요."));
       slotEl.innerHTML = "";
       slotEl.appendChild(card);
       return;
     }
     const data = entry.data || {};
-    const cols = el("div", "agenda-cols");
+    const grid = el("div", "agenda-grid2");
     AGENDA_SECTIONS.forEach(def => {
-      const col = el("div", "agenda-col " + def.cls);
-      col.appendChild(agendaColHead(def.icon, def.label));
       // "공통" 항목은 구분 상관없이 항상 맨 위로 — 나머지는 원래 순서 유지(안정 정렬).
       const items = (data[def.key] || []).slice().sort((a, b) => (a.label === "공통" ? 0 : 1) - (b.label === "공통" ? 0 : 1));
-      if (items.length) items.forEach(it => col.appendChild(agendaItem(it.label, it.proj || "-", it.content || "")));
-      else col.appendChild(el("div", "state-msg", def.empty));
-      cols.appendChild(col);
+      grid.appendChild(agendaColumn(def, items));
     });
-    body.appendChild(cols);
-    card.appendChild(body);
+    card.appendChild(grid);
     slotEl.innerHTML = "";
     slotEl.appendChild(card);
   }
@@ -835,22 +828,13 @@
   // ③ 사업 캘린더 (검토 Tracker)
   // ============================================================
   function calCard(badgeText) {
-    const card = el("div", "card");
-    const head = el("div", "card-head");
-    head.appendChild(el("span", "htitle", `<span class="icon-badge">📅</span> 사업 캘린더`));
-    head.appendChild(el("span", "badge", badgeText));
-    card.appendChild(head);
+    const card = sectionShell(false);
+    card.appendChild(sectionHead("04", "사업 캘린더", false, badgeText));
     return card;
   }
   function renderCalPlaceholder() {
     const card = calCard("예시");
-    const body = el("div", "card-body");
-    const ph = el("div", "cal-placeholder");
-    ph.appendChild(el("div", "picon", "📅"));
-    ph.appendChild(el("div", "ptitle", "사업 캘린더 불러오는 중"));
-    ph.appendChild(el("div", "psub", "잠시만 기다려주세요"));
-    body.appendChild(ph);
-    card.appendChild(body);
+    card.appendChild(elText("p", "state-msg2", "사업 캘린더 불러오는 중…"));
     return card;
   }
 
@@ -861,24 +845,30 @@
   }
 
   function closeActionPopover() {
-    const existing = document.querySelector(".cal-action-popover");
+    const existing = document.querySelector(".popover2");
     if (existing) existing.remove();
   }
   document.addEventListener("click", (ev) => {
-    if (!ev.target.closest(".cal-action-popover")) closeActionPopover();
+    if (!ev.target.closest(".popover2")) closeActionPopover();
   });
+  function popRow(k, v) {
+    const row = el("div", "pop-row2");
+    row.appendChild(elText("span", "pop-k2", k));
+    row.appendChild(elText("span", "pop-v2", v || "-"));
+    return row;
+  }
   function showActionPopover(anchorEl, item) {
     closeActionPopover();
-    const pop = el("div", "cal-action-popover");
+    const pop = el("div", "popover2");
     const closeBtn = document.createElement("button");
-    closeBtn.className = "cap-close";
+    closeBtn.className = "pop-close2";
     closeBtn.textContent = "×";
     closeBtn.addEventListener("click", (ev) => { ev.stopPropagation(); closeActionPopover(); });
     pop.appendChild(closeBtn);
-    pop.appendChild(el("div", "cap-title", item.project));
-    if (item.stage) pop.appendChild(el("div", "cap-row", `<b>현재 단계</b>${item.stage}`));
-    if (item.action) pop.appendChild(el("div", "cap-row", `<b>금월 Action</b>${item.action}`));
-    if (item.nextPlan) pop.appendChild(el("div", "cap-row", `<b>Next Plan</b>${item.nextPlan}`));
+    pop.appendChild(elText("p", "pop-title2", item.project));
+    pop.appendChild(popRow("현재 단계", item.stage));
+    pop.appendChild(popRow("금월 Action", item.action));
+    pop.appendChild(popRow("Next Plan", item.nextPlan));
     document.body.appendChild(pop);
     const rect = anchorEl.getBoundingClientRect();
     const popRect = pop.getBoundingClientRect();
@@ -897,76 +887,82 @@
     const push = (day, entry) => { (byDay[day] = byDay[day] || []).push(entry); };
     items.forEach(it => {
       if (isDateInMonth(it.reviewDate, year, month)) {
-        push(it.reviewDate.day, { kind: "review", colorCls: "c-yellow", project: it.project, detail: null, item: it });
+        push(it.reviewDate.day, { kind: "review", project: it.project, detail: null, item: it });
       }
       if (isDateInMonth(it.nextDue, year, month)) {
-        push(it.nextDue.day, { kind: "duedate", colorCls: "c-red", project: it.project, detail: it.action || "Next Due", item: it });
+        push(it.nextDue.day, { kind: "duedate", project: it.project, detail: it.action || "Next Due", item: it });
       }
     });
     const cells = [];
     for (let i = 0; i < firstDow; i++) cells.push(null);
-    for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, dateObj: new Date(year, month - 1, d), entries: byDay[d] || [] });
+    for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, dow: (firstDow + d - 1) % 7, entries: byDay[d] || [] });
     while (cells.length % 7 !== 0) cells.push(null);
     const weeks = [];
     for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
     return weeks;
   }
 
-  const CAL_MAX_VISIBLE = 1;
+  const CAL_MAX_VISIBLE = 2;
 
-  function renderTrackerCalendarGrid(weeks) {
+  function renderTrackerCalendarGrid(weeks, activeFilter, onFilterChange) {
     const wrap = document.createElement("div");
-    const legend = el("div", "cal-legend");
-    let activeKind = null;
-    const applyFilter = () => {
-      wrap.querySelectorAll(".cal-entry[data-kind]").forEach(t => {
-        t.classList.toggle("is-dimmed", !!activeKind && t.dataset.kind !== activeKind);
-      });
-      wrap.querySelectorAll(".legend-btn[data-kind]").forEach(b => {
-        b.classList.toggle("is-active", activeKind === b.dataset.kind);
-      });
-    };
-    [["review", "c-yellow", "Review 예정"], ["duedate", "c-red", "Next Due (금월 Action 마감)"]].forEach(([kind, cls, label]) => {
-      const btn = el("span", `cal-entry ${cls} legend-btn`, label);
-      btn.dataset.kind = kind;
-      btn.style.padding = "2px 8px";
-      btn.addEventListener("click", () => { activeKind = activeKind === kind ? null : kind; applyFilter(); });
+    const legend = el("div", "cal-legend2");
+    [["review", "#8a6420", "Review 예정", "active-review2"], ["duedate", "#a2453c", "Next Due (금월 Action 마감)", "active-duedate2"]].forEach(([kind, dot, label, activeCls]) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "legend-btn2" + (activeFilter === kind ? " " + activeCls : "") + (activeFilter && activeFilter !== kind ? " dimmed2" : "");
+      const dotEl = el("i", "dot2"); dotEl.style.background = dot;
+      btn.appendChild(dotEl);
+      btn.appendChild(document.createTextNode(label));
+      btn.addEventListener("click", () => onFilterChange(kind));
       legend.appendChild(btn);
     });
     wrap.appendChild(legend);
-    const grid = el("div", "cal-grid");
-    CAL_DOW.forEach(d => grid.appendChild(el("div", "cal-dow", d)));
-    const makeTag = e => {
-      const tag = el("div", "cal-entry " + e.colorCls);
-      tag.dataset.kind = e.kind;
-      tag.appendChild(el("div", "cal-entry-project", e.project));
-      if (e.detail) tag.appendChild(el("div", "cal-entry-detail", e.detail));
+
+    const grid = el("div", "cal-grid2");
+    CAL_DOW.forEach(d => grid.appendChild(elText("div", "cal-dow2", d)));
+    const makeEntry = (e) => {
+      const tag = el("div", "cal-entry2 kind-" + e.kind + "2" + (activeFilter && activeFilter !== e.kind ? " dimmed2" : ""));
+      tag.appendChild(elText("div", "proj2line", e.project));
+      if (e.detail) tag.appendChild(elText("div", "detail2line", e.detail));
       tag.title = e.detail ? `${e.project} / ${e.detail}` : e.project;
       tag.addEventListener("click", (ev) => { ev.stopPropagation(); showActionPopover(tag, e.item); });
       return tag;
     };
     weeks.forEach(week => {
       week.forEach(cellData => {
-        if (!cellData) { grid.appendChild(el("div", "cal-cell empty")); return; }
-        const cell = el("div", "cal-cell");
-        cell.appendChild(el("div", "cal-daynum", String(cellData.day)));
-        const entriesWrap = el("div", "cal-entries");
-        cellData.entries.slice(0, CAL_MAX_VISIBLE).forEach(e => entriesWrap.appendChild(makeTag(e)));
-        const hiddenEntries = cellData.entries.slice(CAL_MAX_VISIBLE);
-        if (hiddenEntries.length > 0) {
-          const extraWrap = el("div", "cal-entries-extra");
-          hiddenEntries.forEach(e => extraWrap.appendChild(makeTag(e)));
-          const moreBtn = el("span", "cal-more", "더보기");
-          moreBtn.addEventListener("click", (ev) => {
-            ev.stopPropagation();
-            const expanded = cell.classList.toggle("is-expanded");
-            extraWrap.style.display = expanded ? "flex" : "none";
-            moreBtn.textContent = expanded ? "접기" : "더보기";
-          });
-          entriesWrap.appendChild(extraWrap);
-          entriesWrap.appendChild(moreBtn);
+        if (!cellData) { grid.appendChild(el("div", "cal-cell2 empty2")); return; }
+        const cell = el("div", "cal-cell2");
+        const inner = el("div", "cal-cell-inner2");
+        const dayEl = elText("div", "cal-daynum2", String(cellData.day));
+        dayEl.style.color = cellData.dow === 0 ? "#a2453c" : cellData.dow === 6 ? "#416180" : "#5d5d60";
+        inner.appendChild(dayEl);
+        const shown = cellData.entries.slice(0, CAL_MAX_VISIBLE);
+        const hidden = cellData.entries.length - CAL_MAX_VISIBLE;
+        shown.forEach(e => inner.appendChild(makeEntry(e)));
+        const expanded = cellData.expandedRef.value;
+        if (hidden > 0 && !expanded) {
+          const moreBtn = document.createElement("button");
+          moreBtn.type = "button"; moreBtn.className = "cal-more2";
+          moreBtn.textContent = "+" + hidden + "건";
+          moreBtn.addEventListener("click", (ev) => { ev.stopPropagation(); cellData.expandedRef.value = true; cellData.onExpandChange(); });
+          inner.appendChild(moreBtn);
         }
-        cell.appendChild(entriesWrap);
+        cell.appendChild(inner);
+        if (expanded) {
+          const panel = el("div", "cal-expand-panel2");
+          const dayEl2 = elText("div", "cal-daynum2", String(cellData.day));
+          dayEl2.style.color = dayEl.style.color;
+          panel.appendChild(dayEl2);
+          cellData.entries.forEach(e => panel.appendChild(makeEntry(e)));
+          const foldBtn = document.createElement("button");
+          foldBtn.type = "button"; foldBtn.className = "cal-more2";
+          foldBtn.textContent = "접기";
+          foldBtn.addEventListener("click", (ev) => { ev.stopPropagation(); cellData.expandedRef.value = false; cellData.onExpandChange(); });
+          panel.appendChild(foldBtn);
+          cell.appendChild(panel);
+          cell.style.zIndex = "50";
+        }
         grid.appendChild(cell);
       });
     });
@@ -981,40 +977,34 @@
           isDateInMonth(it.nextDue, year, month) ? it.nextDue.day : null].filter(d => d != null));
     list.sort((a, b) => earliestDay(a) - earliestDay(b));
 
-    const wrap = el("div", "cal-summary");
+    const wrap = el("div", "cal-summary2");
+    wrap.appendChild(elText("p", "summary-title2", month + "월 요약"));
     if (!list.length) {
-      wrap.appendChild(el("div", "cal-summary-empty", "이번 달 Review 예정 또는 Next Due 도래 프로젝트가 없어요."));
+      wrap.appendChild(elText("p", "summary-empty2", "이번 달 Review 예정 또는 Next Due 도래 프로젝트가 없어요."));
       return wrap;
     }
     const table = document.createElement("table");
-    table.className = "cal-summary-table";
-    const thead = document.createElement("tr");
-    thead.className = "head";
-    ["프로젝트", "현재 단계", "금월 Action", "Next Due", "Next Plan"].forEach(h => {
-      const th = document.createElement("td");
-      th.textContent = h;
-      thead.appendChild(th);
-    });
+    table.className = "summary-table2";
+    const thead = document.createElement("thead");
+    const theadRow = document.createElement("tr");
+    ["프로젝트", "현재 단계", "금월 Action", "Next Due", "Next Plan"].forEach(h => theadRow.appendChild(elText("th", null, h)));
+    thead.appendChild(theadRow);
     table.appendChild(thead);
+    const tbody = document.createElement("tbody");
     list.forEach(it => {
       const tr = document.createElement("tr");
-      const vals = [
-        it.project,
-        it.stage,
-        it.action,
-        it.nextDue ? `${it.nextDue.month}/${it.nextDue.day}` : "",
-        it.nextPlan,
-      ];
-      vals.forEach((v, i) => {
-        const td = document.createElement("td");
-        if (i === 0) td.className = "cal-summary-name";
-        if (!v) td.innerHTML = `<span class="cal-summary-empty-cell">-</span>`;
-        else if (i === 1) td.innerHTML = `<span class="stage-badge">${v}</span>`;
-        else td.textContent = v;
-        tr.appendChild(td);
-      });
-      table.appendChild(tr);
+      const projTd = elText("td", "proj-cell2", it.project);
+      tr.appendChild(projTd);
+      const stageTd = document.createElement("td");
+      if (it.stage) stageTd.appendChild(elText("span", "stage-badge2", it.stage));
+      else stageTd.textContent = "-";
+      tr.appendChild(stageTd);
+      tr.appendChild(elText("td", null, it.action || "-"));
+      tr.appendChild(elText("td", null, it.nextDue ? `${it.nextDue.month}/${it.nextDue.day}` : "-"));
+      tr.appendChild(elText("td", null, it.nextPlan || "-"));
+      tbody.appendChild(tr);
     });
+    table.appendChild(tbody);
     wrap.appendChild(table);
     return wrap;
   }
@@ -1026,40 +1016,49 @@
       const data = await callBackend("calendar");
       if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
       const currentItems = data.items || [];
-      const card = calCard("검토 Tracker");
-      const body = el("div", "card-body");
+      const card = calCard(null);
 
       const today = new Date();
       let navYear = today.getFullYear(), navMonth = today.getMonth() + 1;
-      const nav = el("div", "teamcal-nav");
+      let activeFilter = null;
+      const expandState = {}; // day -> {value:bool}
+
+      const nav = el("div", "cal-nav-row2");
       const prevBtn = document.createElement("button");
-      prevBtn.type = "button"; prevBtn.className = "teamcal-navbtn"; prevBtn.textContent = "◀";
+      prevBtn.type = "button"; prevBtn.className = "nav-btn2"; prevBtn.textContent = "◀";
       const nextBtn = document.createElement("button");
-      nextBtn.type = "button"; nextBtn.className = "teamcal-navbtn"; nextBtn.textContent = "▶";
-      const navLabel = el("div", "teamcal-monthlabel", "");
+      nextBtn.type = "button"; nextBtn.className = "nav-btn2"; nextBtn.textContent = "▶";
+      const navLabel = el("div", "nav-month-label2", "");
       nav.appendChild(prevBtn); nav.appendChild(navLabel); nav.appendChild(nextBtn);
       const gridSlot = el("div", null);
 
       function renderMonthView() {
         navLabel.textContent = `${navYear}년 ${navMonth}월`;
+        const weeks = buildTrackerCalendarWeeks(navYear, navMonth, currentItems);
+        weeks.forEach(week => week.forEach(cellData => {
+          if (!cellData) return;
+          if (!expandState[cellData.day]) expandState[cellData.day] = { value: false };
+          cellData.expandedRef = expandState[cellData.day];
+          cellData.onExpandChange = renderMonthView;
+        }));
         gridSlot.innerHTML = "";
-        gridSlot.appendChild(renderTrackerCalendarGrid(buildTrackerCalendarWeeks(navYear, navMonth, currentItems)));
+        gridSlot.appendChild(renderTrackerCalendarGrid(weeks, activeFilter, (kind) => {
+          activeFilter = activeFilter === kind ? null : kind;
+          renderMonthView();
+        }));
         gridSlot.appendChild(renderTrackerSummary(currentItems, navYear, navMonth));
       }
-      prevBtn.onclick = () => { navMonth--; if (navMonth < 1) { navMonth = 12; navYear--; } renderMonthView(); };
-      nextBtn.onclick = () => { navMonth++; if (navMonth > 12) { navMonth = 1; navYear++; } renderMonthView(); };
+      prevBtn.onclick = () => { navMonth--; if (navMonth < 1) { navMonth = 12; navYear--; } for (const k in expandState) delete expandState[k]; closeActionPopover(); renderMonthView(); };
+      nextBtn.onclick = () => { navMonth++; if (navMonth > 12) { navMonth = 1; navYear++; } for (const k in expandState) delete expandState[k]; closeActionPopover(); renderMonthView(); };
 
-      body.appendChild(nav);
-      body.appendChild(gridSlot);
+      card.appendChild(nav);
+      card.appendChild(gridSlot);
       renderMonthView();
-      card.appendChild(body);
       slotEl.innerHTML = "";
       slotEl.appendChild(card);
     } catch (err) {
       const errCard = calCard("오류");
-      const body = el("div", "card-body");
-      body.appendChild(el("div", "state-msg err", "불러오지 못했어요: " + err.message));
-      errCard.appendChild(body);
+      errCard.appendChild(elText("p", "state-msg2 err2", "불러오지 못했어요: " + err.message));
       slotEl.innerHTML = "";
       slotEl.appendChild(errCard);
     }
@@ -1069,36 +1068,44 @@
   // ④ 트렌드 리포트
   // ============================================================
   function newsCard(badgeText) {
-    const card = el("div", "card card-news");
-    const head = el("div", "card-head");
-    const titleWrap = el("div", null, `<div class="news-eyebrow">TREND REPORT</div><div class="htitle">트렌드 리포트</div>`);
-    head.appendChild(titleWrap);
-    if (badgeText) head.appendChild(el("span", "badge", badgeText));
+    const card = sectionShell(false);
+    const head = el("div", "dashsec-head");
+    const left = el("div", "kicker-left");
+    const kickerWrap = el("div", null);
+    kickerWrap.appendChild(elText("p", "dashsec-num", "05 · TREND REPORT"));
+    kickerWrap.appendChild(elText("h2", null, "트렌드 리포트"));
+    left.appendChild(kickerWrap);
+    head.appendChild(left);
+    if (badgeText) {
+      const right = el("div", "dashsec-head-right");
+      right.appendChild(elText("span", "badge-outline2", badgeText));
+      head.appendChild(right);
+    }
     card.appendChild(head);
     return card;
   }
   function trendHeadline(item, isPlaceholder) {
-    const div = el("div", "news-headline" + (isPlaceholder ? " placeholder" : ""));
+    const div = el("div", "trend-item2");
     if (isPlaceholder) {
-      div.textContent = item.content || "";
+      div.appendChild(elText("span", "trend-line2", item.content || ""));
       return div;
     }
-    const splitLines = s => s.split(/\s*\/\/\s*/).filter(Boolean).join("<br>");
-    const body = splitLines(item.content || "");
-    let html = "";
-    if (item.label) html += `<span class="nh-artist">${item.label}</span>`;
-    html += `<span class="nh-content">${body}</span>`;
+    if (item.label) div.appendChild(elText("span", "trend-label2", item.label));
+    (item.content || "").split(/\s*\/\/\s*/).filter(Boolean).forEach(line => {
+      div.appendChild(elText("span", "trend-line2", line));
+    });
     if (item.voc) {
       const vocParts = item.voc.split(/\s*\/\/\s*/).filter(Boolean);
-      const vocLines = (vocParts.length ? vocParts : [item.voc.trim()]).map(v => `“${v}”`).join("<br>");
-      html += `<div class="voc">${vocLines}</div>`;
+      const lines = vocParts.length ? vocParts : [item.voc.trim()];
+      const vocBox = el("div", "trend-voc2");
+      lines.forEach(v => vocBox.appendChild(elText("span", "voc-line2", "“" + v + "”")));
+      div.appendChild(vocBox);
     }
-    div.innerHTML = html;
     return div;
   }
   function trendSectionBox(cls, title, items, placeholderText) {
-    const box = el("div", "news-section " + cls);
-    box.appendChild(el("div", "ns-label", title));
+    const box = el("div", "trend-block2 tclr-" + cls);
+    box.appendChild(elText("p", "trend-title2", title));
     if (items.length) items.forEach(it => box.appendChild(trendHeadline(it)));
     else box.appendChild(trendHeadline({ content: placeholderText }, true));
     return box;
@@ -1106,10 +1113,8 @@
 
   function renderTrendPlaceholder() {
     const news = newsCard("예시");
-    const newsBody = el("div", "card-body");
-    newsBody.appendChild(trendSectionBox("chance", "CHANCE (기회 요인)", [], "예시: BM: 로라 비주얼 및 베몬 가대 라이브 무대 화제"));
-    newsBody.appendChild(trendSectionBox("risk", "RISK (위기 요인)", [], "예시: 역조공 논란: 베몬 팬 대상 역조공 품목 갑론을박"));
-    news.appendChild(newsBody);
+    news.appendChild(trendSectionBox("chance", "CHANCE (기회 요인)", [], "예시: BM: 로라 비주얼 및 베몬 가대 라이브 무대 화제"));
+    news.appendChild(trendSectionBox("risk", "RISK (위기 요인)", [], "예시: 역조공 논란: 베몬 팬 대상 역조공 품목 갑론을박"));
     return news;
   }
 
@@ -1119,15 +1124,13 @@
     const newsSlotEl = document.getElementById("trendSlot");
     const sections = entry && entry.data;
     const news = newsCard(label);
-    const newsBody = el("div", "card-body");
     if (!sections) {
-      newsBody.appendChild(el("div", "state-msg", "이 주차 자료가 아직 없어요."));
+      news.appendChild(elText("p", "state-msg2", "이 주차 자료가 아직 없어요."));
     } else if (!sections.length) {
-      newsBody.appendChild(el("div", "state-msg", "작성된 내용이 없습니다."));
+      news.appendChild(elText("p", "state-msg2", "작성된 내용이 없습니다."));
     } else {
-      sections.forEach(sec => newsBody.appendChild(trendSectionBox(sec.cls, sec.title, sec.items, "")));
+      sections.forEach(sec => news.appendChild(trendSectionBox(sec.cls, sec.title, sec.items, "")));
     }
-    news.appendChild(newsBody);
     newsSlotEl.innerHTML = "";
     newsSlotEl.appendChild(news);
   }
@@ -1138,11 +1141,8 @@
   const TEAM_CAL_LABEL = "광고 IP 사업팀 캘린더";
 
   function teamCalCard() {
-    const card = el("div", "card card-teamcal");
-    const head = el("div", "card-head");
-    head.appendChild(el("span", "htitle", `<span class="icon-badge">🗓️</span> 팀 일정 캘린더`));
-    head.appendChild(el("span", "badge", TEAM_CAL_LABEL));
-    card.appendChild(head);
+    const card = sectionShell(false);
+    card.appendChild(sectionHead("06", "팀 일정 캘린더", false, TEAM_CAL_LABEL));
     return card;
   }
 
@@ -1153,7 +1153,7 @@
     const start = new Date(s);
     const eRaw = ev.end && (ev.end.dateTime || ev.end.date);
     let end = eRaw ? new Date(eRaw) : new Date(s);
-    if (isAllDay) end = new Date(end.getTime() - 86400000);
+    if (isAllDay) end = new Date(end.getTime() - 86400000); // end.date는 exclusive라 하루 뺌
     return { start, end, isAllDay };
   }
 
@@ -1180,7 +1180,7 @@
     });
     const cells = [];
     for (let i = 0; i < firstDow; i++) cells.push(null);
-    for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, dateObj: new Date(year, month - 1, d), entries: byDay[d] || [] });
+    for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, dow: (firstDow + d - 1) % 7, entries: byDay[d] || [] });
     while (cells.length % 7 !== 0) cells.push(null);
     const weeks = [];
     for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
@@ -1189,29 +1189,35 @@
 
   const TEAMCAL_MAX_VISIBLE = 3;
 
+  function teamEventEl(cls, e) {
+    const item = el(cls === "hp" ? "div" : "div", cls === "hp" ? "teamcal-hp-event2" : "teamcal-event2");
+    if (e.time) item.appendChild(elText("b", null, e.time + " "));
+    item.appendChild(document.createTextNode(e.title));
+    item.title = e.title;
+    return item;
+  }
+
   function renderTeamCalGrid(weeks) {
-    const grid = el("div", "teamcal-grid");
-    CAL_DOW.forEach(d => grid.appendChild(el("div", "cal-dow", d)));
+    const grid = el("div", "teamcal-grid2");
+    CAL_DOW.forEach(d => grid.appendChild(elText("div", "cal-dow2", d)));
     weeks.forEach(week => {
       week.forEach(cellData => {
-        if (!cellData) { grid.appendChild(el("div", "teamcal-cell empty")); return; }
+        if (!cellData) { grid.appendChild(el("div", "teamcal-cell2 empty2")); return; }
         const hasEvents = cellData.entries.length > 0;
-        const cell = el("div", "teamcal-cell" + (hasEvents ? " has-events" : ""));
-        cell.appendChild(el("div", "cal-daynum", String(cellData.day)));
-        cellData.entries.slice(0, TEAMCAL_MAX_VISIBLE).forEach(e => {
-          const item = el("div", "teamcal-event", (e.time ? `<span class="t">${e.time}</span> ` : "") + e.title);
-          item.title = e.title;
-          cell.appendChild(item);
-        });
+        const cell = el("div", "teamcal-cell2" + (hasEvents ? " has-events2" : ""));
+        const inner = el("div", "teamcal-cell-inner2");
+        const dayEl = elText("div", "cal-daynum2", String(cellData.day));
+        dayEl.style.color = cellData.dow === 0 ? "#a2453c" : cellData.dow === 6 ? "#416180" : "#5d5d60";
+        inner.appendChild(dayEl);
+        cellData.entries.slice(0, TEAMCAL_MAX_VISIBLE).forEach(e => inner.appendChild(teamEventEl("visible", e)));
         const hidden = cellData.entries.length - TEAMCAL_MAX_VISIBLE;
-        if (hidden > 0) cell.appendChild(el("span", "teamcal-more", `+${hidden}개 더`));
+        if (hidden > 0) inner.appendChild(elText("span", "teamcal-more2", `+${hidden}개 더`));
+        cell.appendChild(inner);
         if (hasEvents) {
-          // 클릭 대신 마우스를 올리면(hover) 이 칸이 카드처럼 커지면서 전체 일정을 보여줌.
-          const panel = el("div", "teamcal-hover-panel");
-          panel.appendChild(el("div", "cal-daynum", String(cellData.day)));
-          cellData.entries.forEach(e => {
-            panel.appendChild(el("div", "teamcal-event", (e.time ? `<span class="t">${e.time}</span> ` : "") + e.title));
-          });
+          const panel = el("div", "teamcal-hover-panel2");
+          const dayEl2 = elText("div", "cal-daynum2", String(cellData.day));
+          panel.appendChild(dayEl2);
+          cellData.entries.forEach(e => panel.appendChild(teamEventEl("hp", e)));
           cell.appendChild(panel);
         }
         grid.appendChild(cell);
@@ -1222,18 +1228,16 @@
 
   async function loadTeamCalSection(slotEl) {
     const card = teamCalCard();
-    const body = el("div", "card-body");
-    const nav = el("div", "teamcal-nav");
+    const nav = el("div", "cal-nav-row2");
     const prevBtn = document.createElement("button");
-    prevBtn.type = "button"; prevBtn.className = "teamcal-navbtn"; prevBtn.textContent = "◀";
+    prevBtn.type = "button"; prevBtn.className = "nav-btn2"; prevBtn.textContent = "◀";
     const nextBtn = document.createElement("button");
-    nextBtn.type = "button"; nextBtn.className = "teamcal-navbtn"; nextBtn.textContent = "▶";
-    const label = el("div", "teamcal-monthlabel", "");
+    nextBtn.type = "button"; nextBtn.className = "nav-btn2"; nextBtn.textContent = "▶";
+    const label = el("div", "nav-month-label2", "");
     nav.appendChild(prevBtn); nav.appendChild(label); nav.appendChild(nextBtn);
     const gridSlot = el("div", null);
-    body.appendChild(nav);
-    body.appendChild(gridSlot);
-    card.appendChild(body);
+    card.appendChild(nav);
+    card.appendChild(gridSlot);
 
     const today = new Date();
     let year = today.getFullYear(), month = today.getMonth() + 1;
@@ -1241,16 +1245,17 @@
     async function render() {
       label.textContent = `${year}년 ${month}월`;
       gridSlot.innerHTML = "";
-      gridSlot.appendChild(el("div", "state-msg", "불러오는 중…"));
+      gridSlot.appendChild(elText("p", "state-msg2", "불러오는 중…"));
       try {
         const data = await callBackend("teamCalendar", { year, month });
         if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
         const events = data.events || [];
         gridSlot.innerHTML = "";
         gridSlot.appendChild(renderTeamCalGrid(buildTeamCalWeeks(year, month, events)));
+        gridSlot.appendChild(elText("p", "teamcal-caption2", "칸에 마우스를 올리면 그날 전체 일정이 펼쳐집니다."));
       } catch (err) {
         gridSlot.innerHTML = "";
-        gridSlot.appendChild(el("div", "state-msg err", "불러오지 못했어요: " + err.message));
+        gridSlot.appendChild(elText("p", "state-msg2 err2", "불러오지 못했어요: " + err.message));
       }
     }
     prevBtn.onclick = () => { month--; if (month < 1) { month = 12; year--; } render(); };
@@ -1262,7 +1267,7 @@
   }
 
   // ============================================================
-  // 최상단 AI 인사이트 바 — 9월부터 하드코딩 대신, 이번 주 신규 실적 + 연간 기여 상위 프로젝트를
+  // 최상단 AI 인사이트 바 — 9월부터 하드코딩 대신, 이번 주 신규 실적 + 하반기 기여 상위 프로젝트를
   // 시트 데이터에서 자동으로 뽑아 문장으로 조합해서 보여줌(Apps Script "insight" 섹션 응답 사용).
   // ============================================================
   let insightData = null;
@@ -1273,15 +1278,13 @@
     }
     const parts = [];
     if (data.thisWeek.length) {
-      const items = data.thisWeek
-        .map(w => `${w.project}(${numOr0(w.actual)}억)`)
-        .join(", ");
+      const items = data.thisWeek.map(w => `${w.project}(${fmtAmt(w.actual)}억)`).join(", ");
       parts.push(`${data.weekLabel} 신규 실적은 ${items}입니다.`);
     } else if (data.weekLabel) {
       parts.push(`${data.weekLabel}엔 새로 반영된 실적이 아직 없어요.`);
     }
     if (data.topAnnual.length) {
-      const top = data.topAnnual.slice(0, 3).map(p => `${p.name}(${p.amount}억)`).join(", ");
+      const top = data.topAnnual.slice(0, 3).map(p => `${p.name}(${fmtAmt(p.amount)}억)`).join(", ");
       parts.push(`하반기 실적에 가장 큰 영향을 미치고 있는 프로젝트는 ${top} 순이에요.`);
     }
     return parts.join(" ");
@@ -1290,9 +1293,9 @@
   function renderInsightBar() {
     const slot = document.getElementById("insightSlot");
     slot.innerHTML = "";
-    const bar = el("div", "insight-bar");
-    bar.appendChild(el("span", "insight-icon", "✨"));
-    bar.appendChild(el("div", "insight-text", buildInsightText(insightData)));
+    const bar = el("div", "insight-bar2");
+    bar.appendChild(elText("span", "insight-kicker2", "Insight"));
+    bar.appendChild(elText("p", "insight-body2", buildInsightText(insightData)));
     slot.appendChild(bar);
   }
 
@@ -1323,9 +1326,10 @@
   const globalWeekSelect = document.getElementById("globalWeekSelect");
 
   async function initGlobalWeeks() {
-    const [kpiData, agendaData, trendData] = await Promise.all([
-      callBackend("kpi"), callBackend("agenda"), callBackend("trend"),
-    ]);
+    // 로그인 검증 때 이미 kpi를 한 번 받았으면 그걸 재사용(중복 호출 방지, 리디자인 버그 4번).
+    const kpiPromise = cachedKpiData ? Promise.resolve(cachedKpiData) : callBackend("kpi");
+    cachedKpiData = null;
+    const [kpiData, agendaData, trendData] = await Promise.all([kpiPromise, callBackend("agenda"), callBackend("trend")]);
     if (!kpiData.ok) throw new Error(kpiData.message || kpiData.error || "알 수 없는 오류");
     sectionCache.kpi = kpiData;
     sectionCache.agenda = agendaData;
@@ -1418,9 +1422,9 @@
         const kpiSlot = document.getElementById("kpiSlot");
         kpiSlot.innerHTML = "";
         const errCard = kpiHeader("오류");
-        const body = el("div", "card-body");
-        body.appendChild(el("div", "state-msg err", "불러오지 못했어요: " + err.message));
-        errCard.appendChild(body);
+        errCard.classList.add("error-card2");
+        errCard.appendChild(elText("p", "err-title2", "불러오지 못했어요: " + err.message));
+        errCard.appendChild(elText("p", "err-sub2", "시트 구조가 바뀌었을 수 있어요. 새로고침해도 같으면 담당자에게 알려주세요."));
         kpiSlot.appendChild(errCard);
       }
     })());
@@ -1445,6 +1449,7 @@
       try {
         const data = await callBackend("kpi");
         if (data.ok) {
+          cachedKpiData = data;
           document.body.classList.remove("locked");
           document.getElementById("pwGate").remove();
           boot();
