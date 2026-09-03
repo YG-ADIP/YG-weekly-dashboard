@@ -1211,25 +1211,36 @@
     return { start, end };
   }
 
+  // 오늘 이전에 시작해서 이 기간까지 걸쳐 있는 일정(예: 이미 시작된 다일간 출장)도 겹치기만
+  // 하면 포함 — 시작일이 기간 안에 있어야만 잡는 게 아니라 r.end/r.start로 겹침 자체를 검사.
   function matchUpcomingKeywordEvents(events, range) {
     const matched = [];
     events.forEach(ev => {
       const r = eventDateRange(ev);
       if (!r) return;
-      if (r.end < range.start || r.start > range.end) return; // 기간 밖이면 제외
+      if (r.end < range.start || r.start > range.end) return; // 기간과 안 겹치면 제외
       const title = ev.summary || "";
       const hit = UPCOMING_INSIGHT_KEYWORDS.find(k => title.includes(k));
-      if (hit) matched.push({ keyword: hit, title, date: r.start });
+      if (hit) matched.push({ keyword: hit, title, startDate: r.start, endDate: r.end });
     });
-    matched.sort((a, b) => a.date - b.date);
+    matched.sort((a, b) => a.startDate - b.startDate);
     return matched;
   }
 
+  // 하루짜리는 "9/5", 여러 날에 걸치는 일정은 "9/5~9/9"처럼 범위로 표시해서 기간 전체가 눈에 보이게.
+  function fmtEventDateSpan(m) {
+    const pad2 = (mo, d) => `${mo + 1}/${d}`;
+    const s = pad2(m.startDate.getMonth(), m.startDate.getDate());
+    const sameDay = m.startDate.toDateString() === m.endDate.toDateString();
+    if (sameDay) return s;
+    return `${s}~${pad2(m.endDate.getMonth(), m.endDate.getDate())}`;
+  }
+
   function buildUpcomingInsightText(matched) {
-    if (!matched.length) return `앞으로 ${UPCOMING_INSIGHT_DAYS}일간 출장·촬영·업로드 일정이 없어요.`;
-    const names = matched.slice(0, 3).map(m => `${m.date.getMonth() + 1}/${m.date.getDate()} ${m.title}`).join(", ");
+    if (!matched.length) return "차주엔 출장·촬영·업로드 일정이 없어요.";
+    const names = matched.slice(0, 3).map(m => `${fmtEventDateSpan(m)} ${m.title}`).join(", ");
     const extra = matched.length > 3 ? ` 외 ${matched.length - 3}건` : "";
-    return `앞으로 ${UPCOMING_INSIGHT_DAYS}일간 ${names}${extra}가 있어요.`;
+    return `차주엔 ${names}${extra}가 있어요.`;
   }
 
   async function fetchUpcomingInsightText() {
@@ -1255,7 +1266,7 @@
       badgeEl.textContent = text;
       badgeEl.title = text;
     } catch (err) {
-      badgeEl.textContent = `앞으로 ${UPCOMING_INSIGHT_DAYS}일 일정을 불러오지 못했어요.`;
+      badgeEl.textContent = "차주 일정을 불러오지 못했어요.";
     }
   }
 
