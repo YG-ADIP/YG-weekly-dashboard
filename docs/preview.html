@@ -217,7 +217,7 @@
   .teamcal-event2 b { color: var(--accent-700); }
   .teamcal-more2 { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--faint); }
   .teamcal-caption2 { margin: 10px 0 0; font-size: 11px; color: var(--faint); }
-  .teamcal-insight-badge2 { display: inline-flex; align-items: center; max-width: 320px; border-radius: 14px; padding: 5px 12px; font-size: 11px; font-weight: 600; line-height: 1.4; background: var(--accent-tint); color: var(--accent-900); border: 1px solid var(--accent-300); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .teamcal-insight-badge2 { display: block; width: fit-content; max-width: 100%; border-radius: 14px; padding: 6px 14px; margin: 0 0 16px; font-size: 12px; font-weight: 600; line-height: 1.5; background: var(--accent-tint); color: var(--accent-900); border: 1px solid var(--accent-300); white-space: normal; }
   .teamcal-hover-panel2 {
     position: absolute; top: 0; left: 0; right: 0; min-height: 100%;
     background: var(--accent-900); box-shadow: var(--shadow-pop);
@@ -1260,9 +1260,11 @@
 
   function teamCalCard() {
     const card = sectionShell(false);
-    const insightBadge = elText("span", "teamcal-insight-badge2", "이번 주 일정 확인 중…");
+    card.appendChild(sectionHead("06", "팀 일정 캘린더", false, TEAM_CAL_LABEL));
+    // 헤더 옆 좁은 칸에 끼워 넣으면 텍스트가 길 때 잘려서, 헤더 아래 별도 줄로 뺌(자연스럽게 줄바꿈).
+    const insightBadge = elText("div", "teamcal-insight-badge2", "이번 주 일정 확인 중…");
     insightBadge.id = "teamcalInsightBadge";
-    card.appendChild(sectionHead("06", "팀 일정 캘린더", false, TEAM_CAL_LABEL, insightBadge));
+    card.appendChild(insightBadge);
     return card;
   }
 
