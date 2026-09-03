@@ -174,8 +174,9 @@
   .cal-legend2 { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
   .legend-btn2 { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 0; border: 1px solid rgba(29,31,32,0.2); background: transparent; color: var(--soft); cursor: pointer; font-family: inherit; opacity: 1; }
   .legend-btn2 .dot2 { width: 8px; height: 8px; display: inline-block; }
-  .legend-btn2.active-review2 { border-color: var(--warn); background: rgba(138,100,32,0.1); color: #6b4d18; }
-  .legend-btn2.active-duedate2 { border-color: var(--bad); background: rgba(162,69,60,0.1); color: #8a3a32; }
+  .legend-btn2.active-early2 { border-color: var(--accent); background: rgba(89,128,166,0.12); color: var(--accent-900); }
+  .legend-btn2.active-mid2 { border-color: var(--warn); background: rgba(138,100,32,0.1); color: #6b4d18; }
+  .legend-btn2.active-urgent2 { border-color: var(--bad); background: rgba(162,69,60,0.1); color: #8a3a32; }
   .legend-btn2.dimmed2 { opacity: 0.45; }
 
   .cal-grid2, .teamcal-grid2 { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: 24px; gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); }
@@ -191,9 +192,11 @@
   .cal-entry2 { flex-shrink: 0; cursor: pointer; padding: 2px 4px; transition: opacity .12s; border-left: 3px solid; }
   .cal-entry2 .proj2line { font-size: 11px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cal-entry2 .detail2line { font-size: 11px; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .action-badge2 { display: block; margin-top: 2px; width: fit-content; max-width: 100%; padding: 1px 5px; font-size: 10px; font-weight: 700; color: #fff; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cal-entry2.dimmed2 { opacity: 0.25; }
-  .cal-entry2.kind-review2 { border-left-color: var(--warn); background: rgba(138,100,32,0.07); color: #6b4d18; }
-  .cal-entry2.kind-duedate2 { border-left-color: var(--bad); background: rgba(162,69,60,0.07); color: #8a3a32; }
+  .cal-entry2.kind-early2 { border-left-color: var(--accent); background: rgba(89,128,166,0.08); color: var(--accent-900); }
+  .cal-entry2.kind-mid2 { border-left-color: var(--warn); background: rgba(138,100,32,0.07); color: #6b4d18; }
+  .cal-entry2.kind-urgent2 { border-left-color: var(--bad); background: rgba(162,69,60,0.07); color: #8a3a32; }
   .cal-more2 { flex-shrink: 0; align-self: flex-start; font-size: 11px; line-height: 1.3; font-weight: 700; white-space: nowrap; color: var(--accent-700); background: transparent; border: none; border-bottom: 1px solid #94bce3; padding: 0; cursor: pointer; font-family: inherit; }
   .cal-expand-panel2 { position: absolute; top: 0; left: 0; right: 0; min-height: 100%; background: #ffffff; border: 1px solid #1d1f20; box-shadow: var(--shadow-pop); padding: 5px 5px 6px; display: flex; flex-direction: column; gap: 3px; z-index: 50; }
 
@@ -875,6 +878,20 @@
     row.appendChild(elText("span", "pop-v2", v || "-"));
     return row;
   }
+  function fmtDateYMD(d) {
+    if (!d) return "-";
+    const pad = n => String(n).padStart(2, "0");
+    return `${d.year}-${pad(d.month)}-${pad(d.day)}`;
+  }
+  function fmtContractPeriod(item) {
+    const period = `${fmtDateYMD(item.startDate)} ~ ${fmtDateYMD(item.endDate)}`;
+    return item.months ? `${period} (${item.months}개월)` : period;
+  }
+  function fmtDDay(n) {
+    if (n === null || n === undefined || isNaN(n)) return "-";
+    return n >= 0 ? `D-${n}` : `D+${-n}`;
+  }
+
   function showActionPopover(anchorEl, item) {
     closeActionPopover();
     const pop = el("div", "popover2");
@@ -884,9 +901,9 @@
     closeBtn.addEventListener("click", (ev) => { ev.stopPropagation(); closeActionPopover(); });
     pop.appendChild(closeBtn);
     pop.appendChild(elText("p", "pop-title2", item.project));
-    pop.appendChild(popRow("현재 단계", item.stage));
-    pop.appendChild(popRow("금월 Action", item.action));
-    pop.appendChild(popRow("Next Plan", item.nextPlan));
+    pop.appendChild(popRow("계약기간", fmtContractPeriod(item)));
+    pop.appendChild(popRow("D- 값", fmtDDay(item.dDay)));
+    pop.appendChild(popRow("ACTION 알림", item.actionAlert));
     document.body.appendChild(pop);
     const rect = anchorEl.getBoundingClientRect();
     const popRect = pop.getBoundingClientRect();
@@ -898,18 +915,31 @@
     pop.style.top = Math.max(8, top) + "px";
   }
 
+  const MARKER_LABEL = { early: "3개월 전", mid: "2개월 전", urgent: "1개월 전" };
+
+  // ACTION 알림 문구별 배지 색 — 캘린더 칸만 봐도 어떤 조치 단계인지 바로 구분되게.
+  // 시트가 만들어내는 문구가 늘어날 수 있어 키워드 매칭으로 넓게 잡고, 못 맞으면 기본색(--accent)으로.
+  function actionAlertColor(label) {
+    const l = (label || "").toLowerCase();
+    if (l.includes("close") || l.includes("renew")) return "#a2453c";
+    if (l.includes("decision")) return "#8a6420";
+    if (l.includes("tapping") || l.includes("negotiation")) return "#6b4d9e";
+    if (l.includes("review")) return "#5980a6";
+    if (l.includes("active")) return "#7a7a7d";
+    return "#5980a6";
+  }
+
   function buildTrackerCalendarWeeks(year, month, items) {
     const daysInMonth = new Date(year, month, 0).getDate();
     const firstDow = new Date(year, month - 1, 1).getDay();
     const byDay = {};
     const push = (day, entry) => { (byDay[day] = byDay[day] || []).push(entry); };
     items.forEach(it => {
-      if (isDateInMonth(it.reviewDate, year, month)) {
-        push(it.reviewDate.day, { kind: "review", project: it.project, detail: null, item: it });
-      }
-      if (isDateInMonth(it.nextDue, year, month)) {
-        push(it.nextDue.day, { kind: "duedate", project: it.project, detail: it.action || "Next Due", item: it });
-      }
+      (it.markers || []).forEach(m => {
+        if (isDateInMonth(m.date, year, month)) {
+          push(m.date.day, { kind: m.kind, project: it.project, item: it });
+        }
+      });
     });
     const cells = [];
     for (let i = 0; i < firstDow; i++) cells.push(null);
@@ -925,7 +955,7 @@
   function renderTrackerCalendarGrid(weeks, activeFilter, onFilterChange) {
     const wrap = document.createElement("div");
     const legend = el("div", "cal-legend2");
-    [["review", "#8a6420", "Review 예정", "active-review2"], ["duedate", "#a2453c", "Next Due (금월 Action 마감)", "active-duedate2"]].forEach(([kind, dot, label, activeCls]) => {
+    [["early", "#5980a6", "3개월 전", "active-early2"], ["mid", "#8a6420", "2개월 전", "active-mid2"], ["urgent", "#a2453c", "1개월 전", "active-urgent2"]].forEach(([kind, dot, label, activeCls]) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "legend-btn2" + (activeFilter === kind ? " " + activeCls : "") + (activeFilter && activeFilter !== kind ? " dimmed2" : "");
@@ -942,8 +972,12 @@
     const makeEntry = (e) => {
       const tag = el("div", "cal-entry2 kind-" + e.kind + "2" + (activeFilter && activeFilter !== e.kind ? " dimmed2" : ""));
       tag.appendChild(elText("div", "proj2line", e.project));
-      if (e.detail) tag.appendChild(elText("div", "detail2line", e.detail));
-      tag.title = e.detail ? `${e.project} / ${e.detail}` : e.project;
+      if (e.item.actionAlert) {
+        const badge = elText("span", "action-badge2", e.item.actionAlert);
+        badge.style.background = actionAlertColor(e.item.actionAlert);
+        tag.appendChild(badge);
+      }
+      tag.title = e.item.actionAlert ? `${e.project} / ${MARKER_LABEL[e.kind]} / ${e.item.actionAlert}` : e.project;
       tag.addEventListener("click", (ev) => { ev.stopPropagation(); showActionPopover(tag, e.item); });
       return tag;
     };
@@ -989,37 +1023,39 @@
   }
 
   function renderTrackerSummary(items, year, month) {
-    const list = items.filter(it => isDateInMonth(it.reviewDate, year, month) || isDateInMonth(it.nextDue, year, month));
-    const earliestDay = it => Math.min(
-      ...[isDateInMonth(it.reviewDate, year, month) ? it.reviewDate.day : null,
-          isDateInMonth(it.nextDue, year, month) ? it.nextDue.day : null].filter(d => d != null));
-    list.sort((a, b) => earliestDay(a) - earliestDay(b));
+    // 프로젝트 하나가 이번 달에 마커(3/2/1개월 전)를 여러 개 가질 수 있어 마커 단위로 펼쳐서 보여줌.
+    const rows = [];
+    items.forEach(it => {
+      (it.markers || []).forEach(m => {
+        if (isDateInMonth(m.date, year, month)) rows.push({ item: it, marker: m });
+      });
+    });
+    rows.sort((a, b) => a.marker.date.day - b.marker.date.day);
 
     const wrap = el("div", "cal-summary2");
     wrap.appendChild(elText("p", "summary-title2", month + "월 요약"));
-    if (!list.length) {
-      wrap.appendChild(elText("p", "summary-empty2", "이번 달 Review 예정 또는 Next Due 도래 프로젝트가 없어요."));
+    if (!rows.length) {
+      wrap.appendChild(elText("p", "summary-empty2", "이번 달 알림 예정 프로젝트가 없어요."));
       return wrap;
     }
     const table = document.createElement("table");
     table.className = "summary-table2";
     const thead = document.createElement("thead");
     const theadRow = document.createElement("tr");
-    ["프로젝트", "현재 단계", "금월 Action", "Next Due", "Next Plan"].forEach(h => theadRow.appendChild(elText("th", null, h)));
+    ["프로젝트", "알림 구분", "일자", "계약기간", "D-", "ACTION 알림"].forEach(h => theadRow.appendChild(elText("th", null, h)));
     thead.appendChild(theadRow);
     table.appendChild(thead);
     const tbody = document.createElement("tbody");
-    list.forEach(it => {
+    rows.forEach(({ item, marker }) => {
       const tr = document.createElement("tr");
-      const projTd = elText("td", "proj-cell2", it.project);
-      tr.appendChild(projTd);
-      const stageTd = document.createElement("td");
-      if (it.stage) stageTd.appendChild(elText("span", "stage-badge2", it.stage));
-      else stageTd.textContent = "-";
-      tr.appendChild(stageTd);
-      tr.appendChild(elText("td", null, it.action || "-"));
-      tr.appendChild(elText("td", null, it.nextDue ? `${it.nextDue.month}/${it.nextDue.day}` : "-"));
-      tr.appendChild(elText("td", null, it.nextPlan || "-"));
+      tr.appendChild(elText("td", "proj-cell2", item.project));
+      const kindTd = document.createElement("td");
+      kindTd.appendChild(elText("span", "stage-badge2", MARKER_LABEL[marker.kind]));
+      tr.appendChild(kindTd);
+      tr.appendChild(elText("td", null, `${marker.date.month}/${marker.date.day}`));
+      tr.appendChild(elText("td", null, fmtContractPeriod(item)));
+      tr.appendChild(elText("td", null, fmtDDay(item.dDay)));
+      tr.appendChild(elText("td", null, item.actionAlert || "-"));
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
@@ -1031,7 +1067,7 @@
     slotEl.innerHTML = "";
     slotEl.appendChild(renderCalPlaceholder());
     try {
-      const data = await callBackend("calendar");
+      const data = await callBackend("businessCalendar");
       if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
       const currentItems = data.items || [];
       const card = calCard(null);
