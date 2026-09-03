@@ -72,11 +72,23 @@
   .insight-bar2 .insight-kicker2 { font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-700); padding-top: 2px; white-space: nowrap; }
   .insight-bar2 .insight-body2 { margin: 0; font-size: 13px; line-height: 1.6; color: #424244; }
   .insight-main2 { flex: 1; min-width: 0; }
-  .insight-meta2 { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+  .insight-actions2 { flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
+  .insight-edit-toggle2 { display: inline-flex; align-items: center; gap: 5px; font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; padding: 4px 10px 4px 8px; border-radius: 0; border: 1px solid var(--accent-300); background: transparent; color: var(--accent-700); cursor: pointer; white-space: nowrap; }
+  .insight-edit-toggle2:hover { background: rgba(89,128,166,0.12); border-color: var(--accent-700); }
+  .insight-edit-toggle2 svg { flex-shrink: 0; }
+  .insight-meta2 { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
   .insight-meta2 .insight-edited2 { font-size: 11px; color: var(--faint); }
-  .insight-link-btn2 { font-family: inherit; font-size: 11px; font-weight: 700; border: none; background: transparent; color: var(--accent-700); border-bottom: 1px solid var(--accent-700); padding: 0; cursor: pointer; }
-  .insight-edit-textarea2 { width: 100%; box-sizing: border-box; font-family: inherit; font-size: 13px; line-height: 1.6; color: #424244; padding: 8px 10px; border: 1px solid rgba(29,31,32,0.28); background: #fff; resize: vertical; min-height: 64px; }
-  .insight-edit-actions2 { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .insight-reset-btn2 { font-family: inherit; font-size: 11px; font-weight: 600; border: none; background: transparent; color: var(--faint); padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: transparent; transition: text-decoration-color .12s; }
+  .insight-reset-btn2:hover { color: var(--accent-700); text-decoration-color: var(--accent-700); }
+  .insight-edit-panel2 { border: 1px solid var(--accent-300); background: #fff; }
+  .insight-edit-label2 { display: flex; align-items: center; gap: 6px; font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-700); padding: 8px 10px 0; }
+  .insight-edit-textarea2 { display: block; width: 100%; box-sizing: border-box; font-family: inherit; font-size: 13px; line-height: 1.6; color: var(--ink); padding: 8px 10px; border: none; background: transparent; resize: vertical; min-height: 64px; }
+  .insight-edit-textarea2:focus { outline: none; }
+  .insight-edit-actions2 { display: flex; align-items: center; gap: 10px; padding: 0 10px 9px; }
+  .insight-save-btn2 { font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; padding: 5px 14px; border-radius: 0; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+  .insight-save-btn2:hover { background: var(--accent-700); border-color: var(--accent-700); }
+  .insight-cancel-btn2 { font-family: inherit; font-size: 11px; font-weight: 600; border: none; background: transparent; color: var(--faint); padding: 0; cursor: pointer; }
+  .insight-cancel-btn2:hover { color: var(--ink); }
 
   /* ---- 섹션 셸 ---- */
   .dashsec { padding: 20px 22px 22px; margin-bottom: 28px; }
@@ -1316,6 +1328,8 @@
     return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())} 수정`;
   }
 
+  const EDIT_PENCIL_ICON2 = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>';
+
   function renderInsightBar() {
     const slot = document.getElementById("insightSlot");
     slot.innerHTML = "";
@@ -1325,38 +1339,48 @@
     const main = el("div", "insight-main2");
 
     if (insightEditing) {
+      const panel = el("div", "insight-edit-panel2");
+      panel.appendChild(elText("span", "insight-edit-label2", "AI 인사이트 수정"));
+
       const textarea = document.createElement("textarea");
       textarea.className = "insight-edit-textarea2";
       textarea.id = "insightEditTextarea";
       textarea.value = currentInsightText(insightData);
-      main.appendChild(textarea);
+      panel.appendChild(textarea);
 
       const actions = el("div", "insight-edit-actions2");
-      const saveBtn = elText("button", "btn-outline-toggle2", "저장");
+      const saveBtn = elText("button", "insight-save-btn2", "저장");
       saveBtn.addEventListener("click", () => saveInsightEdit(textarea.value));
-      const cancelBtn = elText("button", "insight-link-btn2", "취소");
+      const cancelBtn = elText("button", "insight-cancel-btn2", "취소");
       cancelBtn.addEventListener("click", () => { insightEditing = false; renderInsightBar(); });
       actions.appendChild(saveBtn);
       actions.appendChild(cancelBtn);
-      main.appendChild(actions);
+      panel.appendChild(actions);
+
+      main.appendChild(panel);
+      bar.appendChild(main);
     } else {
       main.appendChild(elText("p", "insight-body2", currentInsightText(insightData)));
 
-      const meta = el("div", "insight-meta2");
-      const editBtn = elText("button", "insight-link-btn2", "수정");
-      editBtn.addEventListener("click", () => { insightEditing = true; renderInsightBar(); });
-      meta.appendChild(editBtn);
       if (insightData && insightData.overrideText) {
-        const resetBtn = elText("button", "insight-link-btn2", "AI 분석으로 되돌리기");
+        const meta = el("div", "insight-meta2");
+        const resetBtn = elText("button", "insight-reset-btn2", "AI 분석으로 되돌리기");
         resetBtn.addEventListener("click", () => saveInsightEdit(""));
         meta.appendChild(resetBtn);
         const editedLabel = fmtEditedAt(insightData.overrideEditedAt);
         if (editedLabel) meta.appendChild(elText("span", "insight-edited2", editedLabel));
+        main.appendChild(meta);
       }
-      main.appendChild(meta);
+      bar.appendChild(main);
+
+      const actionsSlot = el("div", "insight-actions2");
+      const editBtn = el("button", "insight-edit-toggle2", EDIT_PENCIL_ICON2);
+      editBtn.appendChild(document.createTextNode("수정"));
+      editBtn.addEventListener("click", () => { insightEditing = true; renderInsightBar(); });
+      actionsSlot.appendChild(editBtn);
+      bar.appendChild(actionsSlot);
     }
 
-    bar.appendChild(main);
     slot.appendChild(bar);
   }
 
