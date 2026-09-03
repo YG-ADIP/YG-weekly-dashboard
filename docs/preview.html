@@ -217,6 +217,7 @@
   .teamcal-event2 b { color: var(--accent-700); }
   .teamcal-more2 { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--faint); }
   .teamcal-caption2 { margin: 10px 0 0; font-size: 11px; color: var(--faint); }
+  .teamcal-insight-badge2 { display: inline-flex; align-items: center; max-width: 320px; border-radius: 14px; padding: 5px 12px; font-size: 11px; font-weight: 600; line-height: 1.4; background: var(--accent-tint); color: var(--accent-900); border: 1px solid var(--accent-300); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .teamcal-hover-panel2 {
     position: absolute; top: 0; left: 0; right: 0; min-height: 100%;
     background: var(--accent-900); box-shadow: var(--shadow-pop);
@@ -1198,9 +1199,70 @@
   // ============================================================
   const TEAM_CAL_LABEL = "광고 IP 사업팀 캘린더";
 
+  // 팀 일정 캘린더 헤더 옆 "이번 주 AI 인사이트" 배지 — 출장/촬영/업로드 일정만 훑어서 짧게 알려줌.
+  // 캘린더 그리드(어느 달을 보고 있든)와 별개로 항상 "실제 오늘 기준 이번 주"를 계산해서 보여준다.
+  const WEEKLY_INSIGHT_KEYWORDS = ["출장", "촬영", "업로드"];
+
+  function currentWeekRange(base) {
+    const d = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    const dow = d.getDay(); // 일요일(0) 시작 주
+    const start = new Date(d); start.setDate(d.getDate() - dow);
+    const end = new Date(start); end.setDate(start.getDate() + 6);
+    return { start, end };
+  }
+
+  function matchWeeklyKeywordEvents(events, range) {
+    const matched = [];
+    events.forEach(ev => {
+      const r = eventDateRange(ev);
+      if (!r) return;
+      if (r.end < range.start || r.start > range.end) return; // 이번 주와 안 겹치면 제외
+      const title = ev.summary || "";
+      const hit = WEEKLY_INSIGHT_KEYWORDS.find(k => title.includes(k));
+      if (hit) matched.push({ keyword: hit, title });
+    });
+    return matched;
+  }
+
+  function buildWeeklyInsightText(matched) {
+    if (!matched.length) return "이번 주엔 출장·촬영·업로드 일정이 없어요.";
+    const names = matched.slice(0, 2).map(m => m.title).join(", ");
+    const extra = matched.length > 2 ? ` 외 ${matched.length - 2}건` : "";
+    return `이번 주엔 ${names}${extra}가 있어요.`;
+  }
+
+  async function fetchWeeklyInsightText() {
+    const range = currentWeekRange(new Date());
+    const monthKeys = new Set([
+      `${range.start.getFullYear()}-${range.start.getMonth() + 1}`,
+      `${range.end.getFullYear()}-${range.end.getMonth() + 1}`,
+    ]);
+    const results = await Promise.all(Array.from(monthKeys).map(key => {
+      const [y, m] = key.split("-").map(Number);
+      return callBackend("teamCalendar", { year: y, month: m });
+    }));
+    const events = [];
+    results.forEach(r => { if (r.ok) events.push(...(r.events || [])); });
+    return buildWeeklyInsightText(matchWeeklyKeywordEvents(events, range));
+  }
+
+  async function loadWeeklyInsightBadge() {
+    const badgeEl = document.getElementById("teamcalInsightBadge");
+    if (!badgeEl) return;
+    try {
+      const text = await fetchWeeklyInsightText();
+      badgeEl.textContent = text;
+      badgeEl.title = text;
+    } catch (err) {
+      badgeEl.textContent = "이번 주 일정을 불러오지 못했어요.";
+    }
+  }
+
   function teamCalCard() {
     const card = sectionShell(false);
-    card.appendChild(sectionHead("06", "팀 일정 캘린더", false, TEAM_CAL_LABEL));
+    const insightBadge = elText("span", "teamcal-insight-badge2", "이번 주 일정 확인 중…");
+    insightBadge.id = "teamcalInsightBadge";
+    card.appendChild(sectionHead("06", "팀 일정 캘린더", false, TEAM_CAL_LABEL, insightBadge));
     return card;
   }
 
@@ -1321,7 +1383,7 @@
 
     slotEl.innerHTML = "";
     slotEl.appendChild(card);
-    await render();
+    await Promise.all([render(), loadWeeklyInsightBadge()]);
   }
 
   // ============================================================
