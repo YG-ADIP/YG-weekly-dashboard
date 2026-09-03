@@ -20,7 +20,8 @@
  */
 
 var AGENDA_FOLDER_ID = '1Au_nUt3pQ7nVStq-oITUGTAgwZkprWiP'; // 팀 AGENDA
-var CAL_FOLDER_ID = '1WSM_HwsjxzTC2EmU4i2r7aEuA1u7zqhq';    // 사업 캘린더
+var CAL_FOLDER_ID = '1WSM_HwsjxzTC2EmU4i2r7aEuA1u7zqhq';    // 사업 캘린더(구버전, 05_검토 Tracker) — 운영(index.html)이 아직 이걸 씀, 리뉴얼 완료 전까진 유지
+var CAL2_SPREADSHEET_ID = '1hS_eFCaFaVo-shSL3oZiGgG1IEsKc5VnNa8oH6vcPig'; // 사업 캘린더 리뉴얼(개발 서버 전용, 2026-09) — "사업 캘린더(main)" 시트만 사용
 var TREND_FOLDER_ID = '1Yqn8wrnsTePtN9OMIaEgBgBIqr1QEmc6';  // 트렌드 리포트
 var KPI_MASTER_ID = '1Ej7edr36XJFFC_JQPwidWY_ikaet867hT6gD--BomlU'; // 2026 KPI 현황 + 월별 트래킹(같은 파일)
 var TEAM_CAL_ID = 'c_ba39a76170dcab8c99022cc72144d5706bda1be2cfd589a88eabe857259799a3@group.calendar.google.com';
@@ -57,6 +58,7 @@ function doGet(e) {
       case 'agenda': return jsonOutput_(getByWeekSectionData_(AGENDA_FOLDER_ID, extractAgendaFromSheet_));
       case 'trend': return jsonOutput_(getByWeekSectionData_(TREND_FOLDER_ID, extractTrendFromSheet_));
       case 'calendar': return jsonOutput_(getCalendarData_());
+      case 'businessCalendar': return jsonOutput_(getBusinessCalendarData_());
       case 'teamCalendar':
         return jsonOutput_(getTeamCalendarData_(parseInt(params.year, 10), parseInt(params.month, 10)));
       default:
@@ -485,6 +487,71 @@ function getCalendarData_() {
       stage: String(r[col.stage] || '').trim(),
       action: String(r[col.action] || '').trim(),
       nextDue: parseTrackerDate_(r[col.nextDue]),
+    });
+  }
+  return { ok: true, items: items };
+}
+
+// ---- ③-2 사업 캘린더 리뉴얼(개발 서버 preview.html 전용, 2026-09) ----
+//
+// 목적이 "재계약 검토 여부"에서 "기간별 액션 알림"으로 바뀜(엘라 지시) — 이제 "사업 캘린더(main)"
+// 시트 하나만 쓴다. 이 시트는 이미 오늘 날짜(TODAY()) 기준으로 D-DAY·3개월/2개월/1개월 전 알림
+// 날짜·ACTION 알림 문구를 수식으로 계산해두고 있어서, 서버는 그 계산 결과를 그대로 옮기기만 한다
+// (재계산 안 함 — Apps Script가 시트를 열 때마다 그 수식들이 최신 오늘 날짜로 재평가됨).
+//
+// 탭 이름이 아니라 헤더 셀 내용("프로젝트"+"D-DAY"+"ACTION 알림")으로 표를 찾는다 — 같은
+// 스프레드시트 안에 참고용 표(Next Plan 시나리오, 계약별 검토 Tracker 등)가 여러 개 있어서
+// 탭 이름에 의존하면 헷갈리기 쉽다(사업 캘린더(구버전) 05_검토 Tracker에서도 같은 이유로 헤더
+// 내용 매칭 방식을 씀 — findReviewTrackerRows_ 참고).
+function findBusinessCalendarRows_(ss) {
+  var sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    var values = sheets[i].getDataRange().getValues();
+    for (var r = 0; r < values.length; r++) {
+      var row = values[r].map(function (c) { return String(c).trim(); });
+      if (row.indexOf('프로젝트') >= 0 && row.indexOf('D-DAY') >= 0 && row.indexOf('ACTION 알림') >= 0) return values;
+    }
+  }
+  return null;
+}
+
+function getBusinessCalendarData_() {
+  var ss = SpreadsheetApp.openById(CAL2_SPREADSHEET_ID);
+  var rows = findBusinessCalendarRows_(ss);
+  if (!rows) return { ok: true, items: [] };
+  var headerRowIdx = -1;
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i].map(function (c) { return String(c).trim(); });
+    if (row.indexOf('프로젝트') >= 0 && row.indexOf('D-DAY') >= 0 && row.indexOf('ACTION 알림') >= 0) { headerRowIdx = i; break; }
+  }
+  if (headerRowIdx < 0) return { ok: true, items: [] };
+  var header = rows[headerRowIdx].map(function (h) { return String(h).trim(); });
+  var colIdx = function (name) { return header.indexOf(name); };
+  var col = {
+    project: colIdx('프로젝트'), category: colIdx('구분'),
+    start: colIdx('계약 시작일'), end: colIdx('계약 종료일'), months: colIdx('계약기간(개월)'),
+    dday: colIdx('D-DAY'), m3: colIdx('3개월'), m2: colIdx('2개월'), m1: colIdx('1개월'),
+    action: colIdx('ACTION 알림'),
+  };
+  var items = [];
+  for (var j = headerRowIdx + 1; j < rows.length; j++) {
+    var r = rows[j];
+    var rawProject = String(r[col.project] || '').trim();
+    if (!rawProject) continue;
+    var dday = Number(r[col.dday]);
+    var markers = [];
+    var m3 = parseTrackerDate_(r[col.m3]); if (m3) markers.push({ kind: 'early', date: m3 });
+    var m2 = parseTrackerDate_(r[col.m2]); if (m2) markers.push({ kind: 'mid', date: m2 });
+    var m1 = parseTrackerDate_(r[col.m1]); if (m1) markers.push({ kind: 'urgent', date: m1 });
+    items.push({
+      project: abbreviateArtists_(rawProject),
+      category: String(r[col.category] || '').trim(),
+      startDate: parseTrackerDate_(r[col.start]),
+      endDate: parseTrackerDate_(r[col.end]),
+      months: Number(r[col.months]) || null,
+      dDay: isNaN(dday) ? null : dday,
+      actionAlert: String(r[col.action] || '').trim(),
+      markers: markers,
     });
   }
   return { ok: true, items: items };
