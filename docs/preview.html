@@ -192,6 +192,7 @@
   .cal-entry2 { flex-shrink: 0; cursor: pointer; padding: 2px 4px; transition: opacity .12s; border-left: 3px solid; }
   .cal-entry2 .proj2line { font-size: 11px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cal-entry2 .detail2line { font-size: 11px; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .action-badge2 { display: block; margin-top: 2px; width: fit-content; max-width: 100%; padding: 1px 5px; font-size: 10px; font-weight: 700; color: #fff; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cal-entry2.dimmed2 { opacity: 0.25; }
   .cal-entry2.kind-early2 { border-left-color: var(--accent); background: rgba(89,128,166,0.08); color: var(--accent-900); }
   .cal-entry2.kind-mid2 { border-left-color: var(--warn); background: rgba(138,100,32,0.07); color: #6b4d18; }
@@ -920,6 +921,18 @@
 
   const MARKER_LABEL = { early: "3개월 전", mid: "2개월 전", urgent: "1개월 전" };
 
+  // ACTION 알림 문구별 배지 색 — 캘린더 칸만 봐도 어떤 조치 단계인지 바로 구분되게.
+  // 시트가 만들어내는 문구가 늘어날 수 있어 키워드 매칭으로 넓게 잡고, 못 맞으면 기본색(--accent)으로.
+  function actionAlertColor(label) {
+    const l = (label || "").toLowerCase();
+    if (l.includes("close") || l.includes("renew")) return "#a2453c";
+    if (l.includes("decision")) return "#8a6420";
+    if (l.includes("tapping") || l.includes("negotiation")) return "#6b4d9e";
+    if (l.includes("review")) return "#5980a6";
+    if (l.includes("active")) return "#7a7a7d";
+    return "#5980a6";
+  }
+
   function buildTrackerCalendarWeeks(year, month, items) {
     const daysInMonth = new Date(year, month, 0).getDate();
     const firstDow = new Date(year, month - 1, 1).getDay();
@@ -928,7 +941,7 @@
     items.forEach(it => {
       (it.markers || []).forEach(m => {
         if (isDateInMonth(m.date, year, month)) {
-          push(m.date.day, { kind: m.kind, project: it.project, detail: `${MARKER_LABEL[m.kind]} · ${it.actionAlert || "-"}`, item: it });
+          push(m.date.day, { kind: m.kind, project: it.project, item: it });
         }
       });
     });
@@ -963,8 +976,12 @@
     const makeEntry = (e) => {
       const tag = el("div", "cal-entry2 kind-" + e.kind + "2" + (activeFilter && activeFilter !== e.kind ? " dimmed2" : ""));
       tag.appendChild(elText("div", "proj2line", e.project));
-      if (e.detail) tag.appendChild(elText("div", "detail2line", e.detail));
-      tag.title = e.detail ? `${e.project} / ${e.detail}` : e.project;
+      if (e.item.actionAlert) {
+        const badge = elText("span", "action-badge2", e.item.actionAlert);
+        badge.style.background = actionAlertColor(e.item.actionAlert);
+        tag.appendChild(badge);
+      }
+      tag.title = e.item.actionAlert ? `${e.project} / ${MARKER_LABEL[e.kind]} / ${e.item.actionAlert}` : e.project;
       tag.addEventListener("click", (ev) => { ev.stopPropagation(); showActionPopover(tag, e.item); });
       return tag;
     };
