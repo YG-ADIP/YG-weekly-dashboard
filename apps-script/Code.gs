@@ -51,6 +51,9 @@ function doGet(e) {
       case 'kpi': return jsonOutput_(getKpiData_());
       case 'monthlyTracking': return jsonOutput_(getMonthlyTrackingData_());
       case 'insight': return jsonOutput_(getInsightData_());
+      case 'saveInsight':
+        saveInsightOverride_(params.weekLabel, String(params.text || '').trim());
+        return jsonOutput_({ ok: true });
       case 'agenda': return jsonOutput_(getByWeekSectionData_(AGENDA_FOLDER_ID, extractAgendaFromSheet_));
       case 'trend': return jsonOutput_(getByWeekSectionData_(TREND_FOLDER_ID, extractTrendFromSheet_));
       case 'calendar': return jsonOutput_(getCalendarData_());
@@ -79,6 +82,14 @@ function stripUnit_(v) {
   if (v === null || v === undefined || v === '') return NaN;
   var m = String(v).match(/-?[\d.]+/);
   return m ? parseFloat(m[0]) : NaN;
+}
+
+// 퍼센트 서식(예: "2.80%")이 적용된 셀에서 퍼센트 값을 뽑음. getValues()는 퍼센트 서식 셀을
+// 화면 표시값이 아니라 그 소수값(2.80% → 0.028)으로 반환하므로, 숫자 타입이면 100을 곱해야
+// "2.8"이라는 사람이 읽는 퍼센트 숫자가 나온다(문자열로 "2.8%"처럼 직접 입력된 경우는 그대로 파싱).
+function percentCellToPct_(v) {
+  if (typeof v === 'number') return v * 100;
+  return stripUnit_(v);
 }
 
 // 시트명("AUG_2", "SEP_1" 등)에서 월 약어 + 주차 숫자를 함께 뽑음. 폴더 안 파일이 "팀아젠다",
@@ -238,7 +249,7 @@ function getInsightData_() {
       if (String(r[1] || '').trim() !== weekLabel) continue; // 이번 주 항목만
       thisWeek.push({
         category: col0, project: proj,
-        actual: stripUnit_(r[3]), contribPct: stripUnit_(r[4]),
+        actual: stripUnit_(r[3]), contribPct: percentCellToPct_(r[4]),
       });
     }
   }
@@ -264,7 +275,38 @@ function getInsightData_() {
     topAnnual = topAnnual.slice(0, 5);
   }
 
-  return { ok: true, weekLabel: weekLabel, thisWeek: thisWeek, topAnnual: topAnnual };
+  var override = getInsightOverride_();
+  return {
+    ok: true, weekLabel: weekLabel, thisWeek: thisWeek, topAnnual: topAnnual,
+    overrideText: override.weekLabel === weekLabel ? override.text : null,
+    overrideEditedAt: override.weekLabel === weekLabel ? override.editedAt : null,
+  };
+}
+
+// 인사이트 문구 수동 수정(개발 서버 preview.html 전용 테스트 기능) — AI 자동 생성 문구 위에
+// 사람이 덧붙이거나 고친 내용을 스크립트 속성에 저장해서 팀원 모두에게 같은 내용이 보이게 함.
+// weekLabel과 함께 저장해서, 주차가 바뀌면(위 getInsightData_에서 weekLabel 불일치로) 자동으로
+// 새로 생성된 AI 문구로 돌아가고 지난 주 수정 내용이 새 주차에 잘못 남지 않게 함.
+function getInsightOverride_() {
+  var props = PropertiesService.getScriptProperties();
+  return {
+    weekLabel: props.getProperty('INSIGHT_OVERRIDE_WEEK') || null,
+    text: props.getProperty('INSIGHT_OVERRIDE_TEXT') || null,
+    editedAt: props.getProperty('INSIGHT_OVERRIDE_AT') || null,
+  };
+}
+
+function saveInsightOverride_(weekLabel, text) {
+  var props = PropertiesService.getScriptProperties();
+  if (!text) {
+    props.deleteProperty('INSIGHT_OVERRIDE_WEEK');
+    props.deleteProperty('INSIGHT_OVERRIDE_TEXT');
+    props.deleteProperty('INSIGHT_OVERRIDE_AT');
+    return;
+  }
+  props.setProperty('INSIGHT_OVERRIDE_WEEK', weekLabel || '');
+  props.setProperty('INSIGHT_OVERRIDE_TEXT', text);
+  props.setProperty('INSIGHT_OVERRIDE_AT', new Date().toISOString());
 }
 
 // ---- ①-2 월별 트래킹 섹션 ----
@@ -329,7 +371,7 @@ function getMonthlyTrackingData_() {
         weekLabel: String(r[1] || '').trim(),
         project: proj,
         actual: stripUnit_(r[3]),
-        contribPct: stripUnit_(r[4]),
+        contribPct: percentCellToPct_(r[4]),
       });
     }
   }
