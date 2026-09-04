@@ -192,8 +192,46 @@ function getByWeekFromFile_(fileId, extractorFn) {
 // 예전 숫자를 계속 쓰는 문제가 있었음. 상수는 "공개 저장소에 숫자가 안 보이게" 하려던 목적이라,
 // 시트에서 읽어 응답에 실어 보내도 숫자는 여전히 저장소가 아니라 시트/Apps Script에만 있으므로
 // 그 목적은 그대로 유지된다 — 화면 코드는 여전히 서버가 준 값만 그린다.)
-function getKpiData_() {
+// 같은 파일(KPI_MASTER_ID)을 kpi/insight/monthlyTracking 세 섹션이 페이지 하나 불러올 때마다
+// 각자 다시 열어서 전체 시트를 훑던 게 "로딩이 느리다"는 민원의 주 원인이었음(회의 전 다른
+// 아티팩트 버전에서 이미 한 번 겪었던 같은 종류의 문제 — 8/31 README 참고). CacheService로 60초만
+// 캐시해서, 거의 동시에 들어오는 세 요청 중 하나만 실제로 열고 나머지는 캐시를 재사용하게 함.
+// 응답 JSON 모양은 그대로 — 서버 내부 최적화만.
+function getKpiByWeekCached_() {
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'kpiByWeek';
+  var cached = cache.get(cacheKey);
+  if (cached) return JSON.parse(cached);
   var base = getByWeekFromFile_(KPI_MASTER_ID, extractKpiStatusFromSheet_);
+  try { cache.put(cacheKey, JSON.stringify(base), 60); } catch (e) {} // 캐시 실패해도 결과는 그대로 반환
+  return base;
+}
+
+// getInsightData_/getMonthlyTrackingData_가 공통으로 필요로 하는 "가장 최근 주차 시트의 원본
+// 행"만 따로 캐시. 두 함수가 이 결과를 그대로 나눠 쓴다.
+function getLatestKpiSheetRowsCached_() {
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'kpiLatestSheetRows';
+  var cached = cache.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
+  var ss = SpreadsheetApp.openById(KPI_MASTER_ID);
+  var latestSheet = null, latestOrder = -1, latestMw = null;
+  ss.getSheets().forEach(function (sh) {
+    var mw = monthWeekFromSheetName_(sh.getName());
+    if (!mw) return;
+    var order = weekOrder_(mw.monthAbbr, mw.weekNum);
+    if (order > latestOrder) { latestOrder = order; latestSheet = sh; latestMw = mw; }
+  });
+  var result = latestSheet
+    ? { monthAbbr: latestMw.monthAbbr, weekNum: latestMw.weekNum, rows: latestSheet.getDataRange().getValues() }
+    : null;
+  try { cache.put(cacheKey, JSON.stringify(result), 60); } catch (e) {}
+  return result;
+}
+
+function getKpiData_() {
+  var base = getKpiByWeekCached_();
 
   var latest = null, latestOrder = -1;
   Object.keys(base.byWeek).forEach(function (k) {
@@ -221,18 +259,11 @@ function getKpiData_() {
 //    아니라 "하반기"라고 표현해야 함 — 문구는 프런트 buildInsightText에서 조합).
 // 문장 조합(사람이 읽는 텍스트로 만드는 것)은 프런트에서 함 — 여기선 원본 수치만 정리해서 내려줌.
 function getInsightData_() {
-  var ss = SpreadsheetApp.openById(KPI_MASTER_ID);
-  var latestSheet = null, latestOrder = -1, latestMw = null;
-  ss.getSheets().forEach(function (sh) {
-    var mw = monthWeekFromSheetName_(sh.getName());
-    if (!mw) return;
-    var order = weekOrder_(mw.monthAbbr, mw.weekNum);
-    if (order > latestOrder) { latestOrder = order; latestSheet = sh; latestMw = mw; }
-  });
-  if (!latestSheet) return { ok: true, weekLabel: null, thisWeek: [], topAnnual: [] };
-  var rows = latestSheet.getDataRange().getValues();
-  var monthNum = MONTH_ABBR.indexOf(latestMw.monthAbbr) + 1;
-  var weekLabel = monthNum + '월/' + latestMw.weekNum + '주차';
+  var latest = getLatestKpiSheetRowsCached_();
+  if (!latest) return { ok: true, weekLabel: null, thisWeek: [], topAnnual: [] };
+  var rows = latest.rows;
+  var monthNum = MONTH_ABBR.indexOf(latest.monthAbbr) + 1;
+  var weekLabel = monthNum + '월/' + latest.weekNum + '주차';
 
   // "3. 월별 KPI 실적 구성 상세" 표에서 이번 주 라벨과 일치하는 행만 추림.
   var detailHeaderIdx = -1;
@@ -323,17 +354,10 @@ function saveInsightOverride_(weekLabel, text) {
 // 프로젝트 리스트) 두 표만 남음. 주차별 그리드 대신 "이번 달 전체 실적"과 "그 실적을 구성하는
 // 프로젝트별 상세"만 보여주면 되도록 대시보드 쪽 요구사항도 이에 맞춰 변경됨.
 function getMonthlyTrackingData_() {
-  var ss = SpreadsheetApp.openById(KPI_MASTER_ID);
-  var latestSheet = null, latestOrder = -1, latestMw = null;
-  ss.getSheets().forEach(function (sh) {
-    var mw = monthWeekFromSheetName_(sh.getName());
-    if (!mw) return;
-    var order = weekOrder_(mw.monthAbbr, mw.weekNum);
-    if (order > latestOrder) { latestOrder = order; latestSheet = sh; latestMw = mw; }
-  });
-  if (!latestSheet) return { ok: true, monthNum: null, goal: 0, adActual: NaN, ipActual: NaN, actual: 0, breakdown: [] };
-  var rows = latestSheet.getDataRange().getValues();
-  var monthNum = MONTH_ABBR.indexOf(latestMw.monthAbbr) + 1;
+  var latest = getLatestKpiSheetRowsCached_();
+  if (!latest) return { ok: true, monthNum: null, goal: 0, adActual: NaN, ipActual: NaN, actual: 0, breakdown: [] };
+  var rows = latest.rows;
+  var monthNum = MONTH_ABBR.indexOf(latest.monthAbbr) + 1;
 
   // "월 | 목표(억원) | 실적(억원/한화)[광고|IP] | 매출(억원)" 표에서 이번 달 행을 찾는다.
   var planHeaderIdx = -1;
@@ -503,14 +527,22 @@ function getCalendarData_() {
 // 스프레드시트 안에 참고용 표(Next Plan 시나리오, 계약별 검토 Tracker 등)가 여러 개 있어서
 // 탭 이름에 의존하면 헷갈리기 쉽다(사업 캘린더(구버전) 05_검토 Tracker에서도 같은 이유로 헤더
 // 내용 매칭 방식을 씀 — findReviewTrackerRows_ 참고).
+// 이 스프레드시트엔 참고용 표가 여러 개(운영안 요약/시나리오표/검토 Tracker 등) 있어서, 매번
+// 탭마다 전체 데이터를 다 읽어 헤더를 찾으면 안 맞는 탭들 것까지 통째로 읽어오게 됨(로딩 속도
+// 민원 대응 차원에서 줄임). 먼저 위쪽 10행만 얕게 읽어 헤더가 있는지 확인하고, 맞는 탭 하나만
+// 전체를 읽는다.
 function findBusinessCalendarRows_(ss) {
   var sheets = ss.getSheets();
   for (var i = 0; i < sheets.length; i++) {
-    var values = sheets[i].getDataRange().getValues();
-    for (var r = 0; r < values.length; r++) {
-      var row = values[r].map(function (c) { return String(c).trim(); });
-      if (row.indexOf('프로젝트') >= 0 && row.indexOf('D-DAY') >= 0 && row.indexOf('ACTION 알림') >= 0) return values;
-    }
+    var sh = sheets[i];
+    var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
+    if (lastRow < 1 || lastCol < 1) continue;
+    var probe = sh.getRange(1, 1, Math.min(lastRow, 10), lastCol).getValues();
+    var isMatch = probe.some(function (row) {
+      var trimmed = row.map(function (c) { return String(c).trim(); });
+      return trimmed.indexOf('프로젝트') >= 0 && trimmed.indexOf('D-DAY') >= 0 && trimmed.indexOf('ACTION 알림') >= 0;
+    });
+    if (isMatch) return sh.getDataRange().getValues();
   }
   return null;
 }
@@ -644,6 +676,14 @@ function formatCalDate_(d) {
 // 반환 — 클라이언트의 날짜 스팬 계산 로직을 손 안 대고 그대로 재사용하기 위함.
 function getTeamCalendarData_(year, month) {
   if (!year || !month) return { ok: true, events: [] };
+  // 팀 일정 캘린더 그리드와 "차주 인사이트" 배지가 같은 달을 거의 동시에 두 번 요청하는 경우가
+  // 많아서(둘 다 오늘이 속한 달을 봄), 60초 캐시로 중복 CalendarApp 호출을 줄인다(로딩 속도 민원
+  // 대응 — KPI_MASTER_ID 쪽과 같은 이유의 같은 종류 문제). 에러 응답은 캐시하지 않음(재시도 가능하게).
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'teamCal_' + year + '_' + month;
+  var cached = cache.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+
   var cal = CalendarApp.getCalendarById(TEAM_CAL_ID);
   if (!cal) {
     // CalendarApp 권한이 아직 승인 안 됐거나 ID가 잘못된 경우 — 조용히 빈 배열을 주면 "연동이 안
@@ -669,5 +709,7 @@ function getTeamCalendarData_(year, month) {
       end: { dateTime: ev.getEndTime().toISOString() },
     };
   });
-  return { ok: true, events: out };
+  var result = { ok: true, events: out };
+  try { cache.put(cacheKey, JSON.stringify(result), 60); } catch (e) {}
+  return result;
 }
