@@ -272,6 +272,22 @@
   .popover2 .pop-k2 { display: block; font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-700); margin-bottom: 2px; }
   .popover2 .pop-v2 { display: block; font-size: 12px; line-height: 1.55; color: #424244; }
 
+  /* ---- 로딩 오버레이(진행률 체크리스트) ---- */
+  #loadingOverlay { position: fixed; inset: 0; z-index: 500; background: rgba(245,244,241,0.88); display: flex; align-items: center; justify-content: center; transition: opacity .35s ease, visibility 0s linear .35s; }
+  #loadingOverlay.hide2 { opacity: 0; visibility: hidden; pointer-events: none; }
+  .loading-card2 { position: relative; width: 300px; background: var(--ground); border: 1px solid var(--ink); box-shadow: var(--shadow-pop); padding: 20px 22px 22px; }
+  .loading-eyebrow2 { font-family: 'Barlow Condensed', sans-serif; font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-700); margin: 0 0 3px; }
+  .loading-title2 { font-size: 18px; margin: 0 0 14px; }
+  .loading-checklist2 { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .loading-check-row2 { display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--faint); transition: color .2s; }
+  .loading-check-row2.done2 { color: var(--ink); }
+  .loading-dot2 { width: 14px; height: 14px; border: 1.5px solid var(--hairline); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: border-color .2s, background .2s; }
+  .loading-check-row2.done2 .loading-dot2 { border-color: var(--good); background: var(--good); }
+  .loading-dot2 svg { width: 8px; height: 8px; display: block; }
+  .loading-track2 { height: 4px; background: var(--hairline); position: relative; margin-bottom: 6px; }
+  .loading-fill2 { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: var(--accent); transition: width .3s ease; }
+  .loading-count2 { font-size: 10.5px; color: var(--faint); text-align: right; }
+
   /* ---- 푸터 ---- */
   footer.note2 { margin-top: 32px; padding-top: 14px; border-top: 1px solid var(--hairline); font-size: 11px; line-height: 1.6; color: var(--faint); }
 
@@ -1614,8 +1630,79 @@
     trendSlot.appendChild(renderTrendPlaceholder());
   }
 
+  // ============================================================
+  // 로딩 진행률 오버레이 — 7개 섹션이 각자 다른 속도로 채워지는 동안 "뭘 기다리는지"
+  // 체크리스트로 보여줌(로딩이 오래 걸린다는 민원 대응, 시안 검토 후 "오버레이 체크리스트"
+  // 방향으로 확정됨). initGlobalWeeks() 하나가 KPI/팀 AGENDA/트렌드 3개 카드를 한 번에 채우므로
+  // 그 작업 하나가 끝나면 체크리스트 3칸이 동시에 켜진다(실제로 그 셋이 같은 순간에 준비되는 게
+  // 맞아서 오해 소지 없음).
+  // ============================================================
+  const LOADING_SECTIONS2 = ["인사이트", "KPI 실적", "월별 트래킹", "팀 AGENDA", "사업 캘린더", "트렌드 리포트", "팀 일정 캘린더"];
+  const CHECK_SVG2 = '<svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg>';
+  let loadingOverlayEl2 = null;
+  let loadingDoneSet2 = new Set();
+
+  function ensureLoadingOverlay2() {
+    if (loadingOverlayEl2) return loadingOverlayEl2;
+    const overlay = el("div", null);
+    overlay.id = "loadingOverlay";
+    const card = el("div", "loading-card2");
+    ["tl", "tr", "bl", "br"].forEach(pos => card.appendChild(el("i", "corner " + pos)));
+    card.appendChild(elText("p", "loading-eyebrow2", "잠시만요"));
+    card.appendChild(elText("h3", "loading-title2", "데이터 불러오는 중"));
+    const checklist = el("div", "loading-checklist2");
+    LOADING_SECTIONS2.forEach(name => {
+      const row = el("div", "loading-check-row2");
+      row.dataset.section = name;
+      row.appendChild(el("span", "loading-dot2", CHECK_SVG2));
+      row.appendChild(elText("span", null, name));
+      checklist.appendChild(row);
+    });
+    card.appendChild(checklist);
+    const track = el("div", "loading-track2");
+    const fill = el("div", "loading-fill2");
+    fill.id = "loadingFill2";
+    track.appendChild(fill);
+    card.appendChild(track);
+    const count = elText("div", "loading-count2", `0 / ${LOADING_SECTIONS2.length} 완료`);
+    count.id = "loadingCount2";
+    card.appendChild(count);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    loadingOverlayEl2 = overlay;
+    return overlay;
+  }
+
+  function showLoadingOverlay2() {
+    loadingDoneSet2 = new Set();
+    const overlay = ensureLoadingOverlay2();
+    overlay.classList.remove("hide2");
+    overlay.querySelectorAll(".loading-check-row2").forEach(r => r.classList.remove("done2"));
+    document.getElementById("loadingFill2").style.width = "0%";
+    document.getElementById("loadingCount2").textContent = `0 / ${LOADING_SECTIONS2.length} 완료`;
+  }
+
+  function markSectionsDone2(names) {
+    names.forEach(n => loadingDoneSet2.add(n));
+    const done = loadingDoneSet2.size;
+    const pct = Math.round((done / LOADING_SECTIONS2.length) * 100);
+    names.forEach(n => {
+      const row = loadingOverlayEl2 && loadingOverlayEl2.querySelector(`.loading-check-row2[data-section="${n}"]`);
+      if (row) row.classList.add("done2");
+    });
+    const fillEl = document.getElementById("loadingFill2");
+    const countEl = document.getElementById("loadingCount2");
+    if (fillEl) fillEl.style.width = pct + "%";
+    if (countEl) countEl.textContent = `${done} / ${LOADING_SECTIONS2.length} 완료`;
+  }
+
+  function hideLoadingOverlay2() {
+    if (loadingOverlayEl2) loadingOverlayEl2.classList.add("hide2");
+  }
+
   async function loadAll() {
     document.getElementById("connState").textContent = "불러오는 중…";
+    showLoadingOverlay2();
     const tasks = [];
     tasks.push((async () => {
       try {
@@ -1633,14 +1720,17 @@
         errCard.appendChild(elText("p", "err-title2", "불러오지 못했어요: " + err.message));
         errCard.appendChild(elText("p", "err-sub2", "시트 구조가 바뀌었을 수 있어요. 새로고침해도 같으면 담당자에게 알려주세요."));
         kpiSlot.appendChild(errCard);
+      } finally {
+        markSectionsDone2(["KPI 실적", "팀 AGENDA", "트렌드 리포트"]);
       }
     })());
-    tasks.push(loadInsight());
-    tasks.push(loadCalSection(document.getElementById("calSlot")));
-    tasks.push(loadMonthlyTracking());
-    tasks.push(loadTeamCalSection(document.getElementById("teamCalSlot")));
+    tasks.push(loadInsight().then(() => markSectionsDone2(["인사이트"])));
+    tasks.push(loadCalSection(document.getElementById("calSlot")).then(() => markSectionsDone2(["사업 캘린더"])));
+    tasks.push(loadMonthlyTracking().then(() => markSectionsDone2(["월별 트래킹"])));
+    tasks.push(loadTeamCalSection(document.getElementById("teamCalSlot")).then(() => markSectionsDone2(["팀 일정 캘린더"])));
     await Promise.all(tasks);
     document.getElementById("connState").textContent = "";
+    hideLoadingOverlay2();
   }
 
   function boot() {
