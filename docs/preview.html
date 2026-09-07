@@ -152,11 +152,15 @@
   .mt-detail-proj2 { font-size: 13px; font-weight: 500; line-height: 1.45; margin-bottom: 11px; min-height: 38px; }
 
   /* ---- 팀 AGENDA ---- */
-  .agenda-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: var(--hairline); margin: 0 -18px; }
-  .agenda-col2 { background: var(--ground); min-width: 0; padding: 0 18px 4px; }
-  .agenda-col-head2 { display: flex; align-items: center; gap: 7px; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 2px solid; }
+  .agenda-grid2 { display: flex; flex-wrap: wrap; gap: 1px; background: var(--hairline); margin: 0 -18px; }
+  .agenda-col2 { background: var(--ground); min-width: 0; padding: 0 18px 4px; flex: 1 1 260px; }
+  .agenda-col2.collapsed2 { flex: 0 0 auto; width: 220px; padding-bottom: 10px; }
+  .agenda-col-head2 { display: flex; align-items: center; gap: 7px; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 2px solid; cursor: pointer; user-select: none; flex-wrap: wrap; row-gap: 4px; }
+  .agenda-col2.collapsed2 .agenda-col-head2 { margin-bottom: 0; }
   .agenda-col-head2 .label2 { font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 600; letter-spacing: 0.14em; }
   .agenda-col-head2 .count2 { font-size: 11px; color: var(--faint); }
+  .agenda-col-head2 .toggle2 { margin-left: auto; font-size: 10px; color: var(--faint); flex-shrink: 0; }
+  .agenda-col2.collapsed2 .agenda-body2 { display: none; }
   .agenda-item2 { display: flex; gap: 10px; padding: 0 0 14px; margin-bottom: 14px; border-bottom: 1px solid rgba(29,31,32,0.1); }
   .agenda-item2 .badge2 { flex-shrink: 0; height: fit-content; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; padding: 1px 7px; border: 1px solid; white-space: nowrap; }
   .agenda-item2 .body2 { min-width: 0; }
@@ -803,15 +807,28 @@
     { key: "challenge", label: "CHALLENGE", color: "#8a6420", empty: "이번 주 논의할 이슈가 없습니다." },
   ];
 
+  // 섹션별 접기/펼치기 상태 — 사용자가 직접 토글하면 그 값이 우선, 아직 안 건드렸으면
+  // 내용이 없는 섹션은 기본으로 접어서 보여준다(주차가 바뀌어도 사용자가 정한 값은 유지).
+  const agendaCollapsedState = {};
+
   function agendaColumn(def, items) {
-    const col = el("div", "agenda-col2");
+    const collapsed = def.key in agendaCollapsedState ? agendaCollapsedState[def.key] : items.length === 0;
+    const col = el("div", "agenda-col2" + (collapsed ? " collapsed2" : ""));
     const head = el("div", "agenda-col-head2");
     head.style.borderBottomColor = def.color;
     const lab = elText("span", "label2", def.label);
     lab.style.color = def.color;
     head.appendChild(lab);
     if (items.length) head.appendChild(elText("span", "count2", items.length + "건"));
+    const toggle = elText("span", "toggle2", collapsed ? "▸ 펼치기" : "▾ 접기");
+    head.appendChild(toggle);
+    head.addEventListener("click", () => {
+      const nowCollapsed = col.classList.toggle("collapsed2");
+      agendaCollapsedState[def.key] = nowCollapsed;
+      toggle.textContent = nowCollapsed ? "▸ 펼치기" : "▾ 접기";
+    });
     col.appendChild(head);
+    const bodyWrap = el("div", "agenda-body2");
     if (items.length) {
       items.forEach(it => {
         const item = el("div", "agenda-item2");
@@ -824,11 +841,12 @@
         body.appendChild(elText("div", "proj2", it.proj || "-"));
         body.appendChild(elText("div", "content2", it.content || ""));
         item.appendChild(body);
-        col.appendChild(item);
+        bodyWrap.appendChild(item);
       });
     } else {
-      col.appendChild(elText("p", "agenda-empty2", def.empty));
+      bodyWrap.appendChild(elText("p", "agenda-empty2", def.empty));
     }
+    col.appendChild(bodyWrap);
     return col;
   }
 
