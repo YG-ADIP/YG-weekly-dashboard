@@ -344,10 +344,15 @@
   #pwGate .pw-kicker2 { font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent-700); margin: 0 0 4px; }
   #pwGate h2 { font-size: 26px; margin: 0 0 6px; }
   #pwGate .pw-sub2 { margin: 0 0 20px; font-size: 12px; color: var(--soft); }
+  #pwGate .pw-input-wrap2 { position: relative; margin-bottom: 10px; }
   #pwGate input { width: 100%; font-family: inherit; font-size: 14px; padding: 10px 12px; border-radius: 0; border: 1px solid rgba(29,31,32,0.28); background: #fff; color: var(--ink); margin-bottom: 10px; }
+  #pwGate .pw-input-wrap2 input { margin-bottom: 0; padding-right: 40px; }
   #pwGate input.err-input2 { border-color: var(--bad); }
   #pwGate button { width: 100%; font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 0.06em; padding: 11px 12px; border-radius: 0; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
   #pwGate button:hover { background: var(--accent-700); border-color: var(--accent-700); }
+  #pwGate button.pw-toggle2 { position: absolute; top: 0; right: 0; width: 40px; height: 100%; padding: 0; margin: 0; border: none; background: transparent; color: var(--faint); display: flex; align-items: center; justify-content: center; }
+  #pwGate button.pw-toggle2:hover { background: transparent; border: none; color: var(--ink); }
+  #pwGate button.pw-toggle2 svg { width: 18px; height: 18px; display: block; }
   #pwGate .pw-err2 { margin: 10px 0 0; min-height: 17px; font-size: 12px; color: var(--bad); }
   body.locked .wrap { display: none; }
 </style>
@@ -360,7 +365,12 @@
     <p class="pw-kicker2">광고IP사업팀</p>
     <h2>주간회의 대시보드</h2>
     <p class="pw-sub2">팀 공용 비밀번호를 입력하세요</p>
-    <input type="password" id="pwInput" placeholder="비밀번호">
+    <div class="pw-input-wrap2">
+      <input type="password" id="pwInput" placeholder="비밀번호">
+      <button type="button" id="pwToggle" class="pw-toggle2" aria-label="비밀번호 표시">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+    </div>
     <button id="pwSubmit">입장</button>
     <p class="pw-err2" id="pwErr"></p>
   </div>
@@ -461,6 +471,18 @@
 
   document.getElementById("pwSubmit").addEventListener("click", submitPw);
   document.getElementById("pwInput").addEventListener("keydown", (ev) => { if (ev.key === "Enter") submitPw(); });
+
+  const EYE_ICON2 = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const EYE_OFF_ICON2 = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a18.5 18.5 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 7 11 7a18.46 18.46 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+  document.getElementById("pwToggle").addEventListener("click", () => {
+    const inputEl = document.getElementById("pwInput");
+    const toggleBtn = document.getElementById("pwToggle");
+    const showing = inputEl.type === "text";
+    inputEl.type = showing ? "password" : "text";
+    toggleBtn.innerHTML = showing ? EYE_ICON2 : EYE_OFF_ICON2;
+    toggleBtn.setAttribute("aria-label", showing ? "비밀번호 표시" : "비밀번호 숨기기");
+    inputEl.focus();
+  });
   async function submitPw() {
     const pw = document.getElementById("pwInput").value;
     const errEl = document.getElementById("pwErr");
