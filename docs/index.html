@@ -30,6 +30,20 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
+  /* 여러 줄로 흐르는 본문형 텍스트 공통 규칙 — 화면이 넓어져도 한 줄이 너무 길게 늘어나지
+     않도록 폭을 75%로 제한하고, 줄바꿈은 항상 단어(어절) 경계에서만 일어나게 한다
+     (word-break: keep-all — 음절 중간에서 잘리는 걸 막음). overflow-wrap은 어절 하나가
+     그 자체로 너무 길 때(URL 등)의 최후 안전장치. white-space: pre-wrap은 구글시트에서
+     팀원이 셀 안에 직접 입력한 줄바꿈(\n)이 그대로 살아서 보이게 함 — 기본값(normal)은
+     줄바꿈을 공백으로 뭉개버려서 여러 줄로 쓴 내용이 한 줄로 붙어 보이는 문제가 있었음. */
+  .insight-body2, .mt-detail-proj2, .agenda-item2 .content2, .agenda-item2 .proj2,
+  .agenda-empty2, .voc-line2, .trend-line2, .err-sub2, .state-msg2, footer.note2,
+  .teamcal-caption2, .summary-empty2, .popover2 .pop-v2, .summary-table2 td {
+    max-width: 75%;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+  }
   body {
     font-family: 'Barlow', 'Noto Sans KR', system-ui, sans-serif;
     font-variant-numeric: tabular-nums;
@@ -152,17 +166,21 @@
   .mt-detail-proj2 { font-size: 13px; font-weight: 500; line-height: 1.45; margin-bottom: 11px; min-height: 38px; }
 
   /* ---- 팀 AGENDA ---- */
-  .agenda-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: var(--hairline); margin: 0 -18px; }
-  .agenda-col2 { background: var(--ground); min-width: 0; padding: 0 18px 4px; }
+  .agenda-chips2 { display: flex; gap: 6px; flex-wrap: wrap; }
+  .agenda-chip2 { font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 0.02em; padding: 3px 10px; border: 1px solid rgba(29,31,32,0.2); background: transparent; color: var(--soft); cursor: pointer; }
+  .agenda-chip2.active2 { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .agenda-grid2 { display: flex; flex-wrap: wrap; gap: 1px; background: var(--hairline); margin: 0 -18px; }
+  .agenda-col2 { background: var(--ground); min-width: 0; padding: 0 18px 4px; flex: 1 1 260px; }
+  .agenda-col2.hidden2 { display: none; }
   .agenda-col-head2 { display: flex; align-items: center; gap: 7px; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 2px solid; }
-  .agenda-col-head2 .label2 { font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: 600; letter-spacing: 0.14em; }
-  .agenda-col-head2 .count2 { font-size: 11px; color: var(--faint); }
+  .agenda-col-head2 .label2 { font-family: 'Barlow Condensed', sans-serif; font-size: 17px; font-weight: 600; letter-spacing: 0.14em; }
+  .agenda-col-head2 .count2 { font-size: 13px; color: var(--faint); }
   .agenda-item2 { display: flex; gap: 10px; padding: 0 0 14px; margin-bottom: 14px; border-bottom: 1px solid rgba(29,31,32,0.1); }
-  .agenda-item2 .badge2 { flex-shrink: 0; height: fit-content; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; padding: 1px 7px; border: 1px solid; white-space: nowrap; }
+  .agenda-item2 .badge2 { flex-shrink: 0; height: fit-content; font-size: 13px; font-weight: 700; letter-spacing: 0.04em; padding: 1px 7px; border: 1px solid; white-space: nowrap; }
   .agenda-item2 .body2 { min-width: 0; }
-  .agenda-item2 .proj2 { font-size: 13px; font-weight: 700; margin-bottom: 3px; }
-  .agenda-item2 .content2 { font-size: 12px; color: var(--soft); line-height: 1.55; }
-  .agenda-empty2 { margin: 0; font-size: 12px; color: var(--faint); padding: 14px 0; }
+  .agenda-item2 .proj2 { font-size: 16px; font-weight: 700; margin-bottom: 3px; }
+  .agenda-item2 .content2 { font-size: 14px; color: var(--soft); line-height: 1.55; }
+  .agenda-empty2 { margin: 0; font-size: 14px; color: var(--faint); padding: 14px 0; }
 
   /* ---- 사업 캘린더 / 팀 일정 캘린더 공통 ---- */
   .split-row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(620px, 1fr)); gap: 28px; margin-bottom: 28px; align-items: start; }
@@ -275,6 +293,35 @@
   /* ---- 로딩 오버레이(진행률 체크리스트) ---- */
   #loadingOverlay { position: fixed; inset: 0; z-index: 500; background: rgba(245,244,241,0.88); display: flex; align-items: center; justify-content: center; transition: opacity .35s ease, visibility 0s linear .35s; }
   #loadingOverlay.hide2 { opacity: 0; visibility: hidden; pointer-events: none; }
+
+  /* ---- 자동 로그인 안내(저장된 비번으로 재검증하는 짧은 순간에만 보임) ---- */
+  #autoLoginOverlay { position: fixed; inset: 0; z-index: 500; background: rgba(245,244,241,0.88); display: flex; align-items: center; justify-content: center; transition: opacity .35s ease, visibility 0s linear .35s; }
+  #autoLoginOverlay.hide2 { opacity: 0; visibility: hidden; pointer-events: none; }
+  .loading-card2.autologin-card2 { width: 258px; padding: 16px 18px 18px; }
+  .autologin-head2 { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .autologin-icon2 { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--accent-700); display: flex; align-items: center; justify-content: center; }
+  .autologin-icon2 svg { display: block; width: 16px; height: 16px; stroke: #fff; }
+  .autologin-headtext2 { min-width: 0; }
+  .autologin-headtext2 .loading-eyebrow2 { margin: 0 0 1px; }
+  .autologin-headtext2 .loading-title2 { margin: 0; font-size: 16px; }
+  .autologin-sub2 { margin: 0; font-size: 12px; line-height: 1.55; color: var(--soft); word-break: keep-all; overflow-wrap: break-word; }
+  /* 얼마나 걸릴지 알 수 없어 답답하다는 피드백 반영 — 정확한 시간 대신 "지금 움직이고
+     있다"는 걸 보여주는 불확정(indeterminate) 진행바. 끝나는 시점을 못 맞추므로 폭/속도가
+     아니라 "멈춰있지 않다"는 인상이 목적. */
+  .autologin-progress2 { position: relative; height: 3px; background: var(--hairline); margin-top: 12px; overflow: hidden; }
+  .autologin-progress2::after {
+    content: "";
+    position: absolute; top: 0; left: -40%; height: 100%; width: 40%;
+    background: var(--accent-700);
+    animation: autologinSlide2 1.1s ease-in-out infinite;
+  }
+  @keyframes autologinSlide2 {
+    0% { left: -40%; }
+    100% { left: 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .autologin-progress2::after { animation: none; left: 0; width: 100%; opacity: 0.5; }
+  }
   .loading-card2 { position: relative; width: 300px; background: var(--ground); border: 1px solid var(--ink); box-shadow: var(--shadow-pop); padding: 20px 22px 22px; }
   .loading-eyebrow2 { font-family: 'Barlow Condensed', sans-serif; font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-700); margin: 0 0 3px; }
   .loading-title2 { font-size: 18px; margin: 0 0 14px; }
@@ -303,8 +350,6 @@
   #pwGate button:hover { background: var(--accent-700); border-color: var(--accent-700); }
   #pwGate .pw-err2 { margin: 10px 0 0; min-height: 17px; font-size: 12px; color: var(--bad); }
   body.locked .wrap { display: none; }
-
-
 </style>
 </head>
 <body class="locked">
@@ -318,6 +363,21 @@
     <input type="password" id="pwInput" placeholder="비밀번호">
     <button id="pwSubmit">입장</button>
     <p class="pw-err2" id="pwErr"></p>
+  </div>
+</div>
+
+<div id="autoLoginOverlay" class="hide2">
+  <div class="loading-card2 autologin-card2">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <div class="autologin-head2">
+      <span class="autologin-icon2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3.2 8.5-7 10-3.8-1.5-7-5-7-10V6l7-3z"/><path d="M9 12.2l2 2 4-4.4"/></svg></span>
+      <div class="autologin-headtext2">
+        <p class="loading-eyebrow2">자동 로그인</p>
+        <h3 class="loading-title2">다시 접속하셨네요</h3>
+      </div>
+    </div>
+    <p class="autologin-sub2">같은 세션이라 비밀번호 입력이 필요 없어요. 잠깐만 기다려 주세요.</p>
+    <div class="autologin-progress2"></div>
   </div>
 </div>
 
@@ -794,13 +854,35 @@
   }
 
   const AGENDA_SECTIONS = [
-    { key: "wins", label: "WINS", color: "#2f6b52", empty: "이번 주 작성된 Wins가 없습니다." },
-    { key: "share", label: "SHARE", color: "#416180", empty: "이번 주 공유 사항이 없습니다." },
-    { key: "challenge", label: "CHALLENGE", color: "#8a6420", empty: "이번 주 논의할 이슈가 없습니다." },
+    { key: "wins", label: "WINS", chip: "WIN", color: "#2f6b52", empty: "이번 주 작성된 Wins가 없습니다." },
+    { key: "share", label: "SHARE", chip: "SHARE", color: "#416180", empty: "이번 주 공유 사항이 없습니다." },
+    { key: "challenge", label: "CHALLENGE", chip: "CHALL", color: "#8a6420", empty: "이번 주 논의할 이슈가 없습니다." },
   ];
 
+  // 필터 상태("all"/"wins"/"share"/"challenge") — 주차가 바뀌어도 사용자가 고른 필터는 유지한다.
+  let agendaFilter = "all";
+
+  function agendaFilterChips(onChange) {
+    const wrap = el("div", "agenda-chips2");
+    const opts = [{ key: "all", label: "전체" }].concat(AGENDA_SECTIONS.map(s => ({ key: s.key, label: s.chip })));
+    opts.forEach(opt => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "agenda-chip2" + (agendaFilter === opt.key ? " active2" : "");
+      btn.textContent = opt.label;
+      btn.addEventListener("click", () => {
+        if (agendaFilter === opt.key) return;
+        agendaFilter = opt.key;
+        onChange();
+      });
+      wrap.appendChild(btn);
+    });
+    return wrap;
+  }
+
   function agendaColumn(def, items) {
-    const col = el("div", "agenda-col2");
+    const hidden = agendaFilter !== "all" && agendaFilter !== def.key;
+    const col = el("div", "agenda-col2" + (hidden ? " hidden2" : ""));
     const head = el("div", "agenda-col-head2");
     head.style.borderBottomColor = def.color;
     const lab = elText("span", "label2", def.label);
@@ -828,38 +910,52 @@
     return col;
   }
 
-  function renderAgendaPlaceholder() {
-    const card = agendaCard("예시");
+  function buildAgendaGrid(dataByKey) {
     const grid = el("div", "agenda-grid2");
+    AGENDA_SECTIONS.forEach(def => grid.appendChild(agendaColumn(def, dataByKey[def.key] || [])));
+    return grid;
+  }
+
+  function renderAgendaPlaceholder() {
+    const container = el("div", null);
     const placeholderItems = (n) => Array.from({ length: n }, () => ({ label: "광고", proj: "프로젝트명을 입력하세요", content: "예시 내용입니다." }));
-    grid.appendChild(agendaColumn(AGENDA_SECTIONS[0], placeholderItems(2)));
-    grid.appendChild(agendaColumn(AGENDA_SECTIONS[1], placeholderItems(1)));
-    grid.appendChild(agendaColumn(AGENDA_SECTIONS[2], placeholderItems(2)));
-    card.appendChild(grid);
-    return card;
+    const dataByKey = { wins: placeholderItems(2), share: placeholderItems(1), challenge: placeholderItems(2) };
+    function render() {
+      container.innerHTML = "";
+      const card = sectionShell(false);
+      card.appendChild(sectionHead("03", "팀 AGENDA", false, "예시", agendaFilterChips(render)));
+      card.appendChild(buildAgendaGrid(dataByKey));
+      container.appendChild(card);
+    }
+    render();
+    return container;
   }
 
   function loadAgendaForWeek(key) {
     const entry = sectionCache.agenda && sectionCache.agenda.byWeek[key];
     const label = weekLabel(entry, key);
     const slotEl = document.getElementById("agendaSlot");
-    const card = agendaCard(label);
     if (!entry) {
+      const card = agendaCard(label);
       card.appendChild(elText("p", "state-msg2", "이 주차 자료가 아직 없어요."));
       slotEl.innerHTML = "";
       slotEl.appendChild(card);
       return;
     }
     const data = entry.data || {};
-    const grid = el("div", "agenda-grid2");
+    const dataByKey = {};
     AGENDA_SECTIONS.forEach(def => {
       // "공통" 항목은 구분 상관없이 항상 맨 위로 — 나머지는 원래 순서 유지(안정 정렬).
-      const items = (data[def.key] || []).slice().sort((a, b) => (a.label === "공통" ? 0 : 1) - (b.label === "공통" ? 0 : 1));
-      grid.appendChild(agendaColumn(def, items));
+      dataByKey[def.key] = (data[def.key] || []).slice().sort((a, b) => (a.label === "공통" ? 0 : 1) - (b.label === "공통" ? 0 : 1));
     });
-    card.appendChild(grid);
-    slotEl.innerHTML = "";
-    slotEl.appendChild(card);
+    function render() {
+      const card = sectionShell(false);
+      card.appendChild(sectionHead("03", "팀 AGENDA", false, label, agendaFilterChips(render)));
+      card.appendChild(buildAgendaGrid(dataByKey));
+      slotEl.innerHTML = "";
+      slotEl.appendChild(card);
+    }
+    render();
   }
 
   // ============================================================
@@ -1740,19 +1836,26 @@
 
   document.getElementById("refreshBtn").addEventListener("click", () => loadAll());
 
-  // 페이지 로드 시 이미 입력된 비밀번호가 있으면 바로 시도.
+  // 페이지 로드 시 이미 입력된 비밀번호가 있으면 바로 시도 — 이 경우 비번 입력창을 보여줄
+  // 필요가 없으므로, 검증하는 동안에는 "다시 접속하셨네요" 안내 카드를 대신 보여준다
+  // (게이트보다 z-index가 높아 그 위를 덮음). 검증 실패 시에만 안내를 걷어 원래 비번
+  // 입력 화면으로 되돌아간다.
   (async function initGate() {
     if (storedPw()) {
+      const notice = document.getElementById("autoLoginOverlay");
+      notice.classList.remove("hide2");
       try {
         const data = await callBackend("kpi");
         if (data.ok) {
           cachedKpiData = data;
           document.body.classList.remove("locked");
           document.getElementById("pwGate").remove();
+          notice.remove();
           boot();
           return;
         }
       } catch (err) {}
+      notice.classList.add("hide2");
     }
     document.getElementById("pwInput").focus();
   })();
