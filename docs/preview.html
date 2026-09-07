@@ -30,6 +30,17 @@
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
+  /* 여러 줄로 흐르는 본문형 텍스트 공통 규칙 — 화면이 넓어져도 한 줄이 너무 길게 늘어나지
+     않도록 폭을 75%로 제한하고, 줄바꿈은 항상 단어(어절) 경계에서만 일어나게 한다
+     (word-break: keep-all — 음절 중간에서 잘리는 걸 막음). overflow-wrap은 어절 하나가
+     그 자체로 너무 길 때(URL 등)의 최후 안전장치. */
+  .insight-body2, .mt-detail-proj2, .agenda-item2 .content2, .agenda-item2 .proj2,
+  .agenda-empty2, .voc-line2, .trend-line2, .err-sub2, .state-msg2, footer.note2,
+  .teamcal-caption2, .summary-empty2, .popover2 .pop-v2, .summary-table2 td {
+    max-width: 75%;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
   body {
     font-family: 'Barlow', 'Noto Sans KR', system-ui, sans-serif;
     font-variant-numeric: tabular-nums;
