@@ -293,6 +293,11 @@
   /* ---- 로딩 오버레이(진행률 체크리스트) ---- */
   #loadingOverlay { position: fixed; inset: 0; z-index: 500; background: rgba(245,244,241,0.88); display: flex; align-items: center; justify-content: center; transition: opacity .35s ease, visibility 0s linear .35s; }
   #loadingOverlay.hide2 { opacity: 0; visibility: hidden; pointer-events: none; }
+
+  /* ---- 자동 로그인 안내(저장된 비번으로 재검증하는 짧은 순간에만 보임) ---- */
+  #autoLoginOverlay { position: fixed; inset: 0; z-index: 500; background: rgba(245,244,241,0.88); display: flex; align-items: center; justify-content: center; transition: opacity .35s ease, visibility 0s linear .35s; }
+  #autoLoginOverlay.hide2 { opacity: 0; visibility: hidden; pointer-events: none; }
+  .autologin-sub2 { margin: 0; font-size: 13px; line-height: 1.6; color: var(--soft); }
   .loading-card2 { position: relative; width: 300px; background: var(--ground); border: 1px solid var(--ink); box-shadow: var(--shadow-pop); padding: 20px 22px 22px; }
   .loading-eyebrow2 { font-family: 'Barlow Condensed', sans-serif; font-size: 10.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-700); margin: 0 0 3px; }
   .loading-title2 { font-size: 18px; margin: 0 0 14px; }
@@ -340,6 +345,15 @@
     <input type="password" id="pwInput" placeholder="비밀번호">
     <button id="pwSubmit">입장</button>
     <p class="pw-err2" id="pwErr"></p>
+  </div>
+</div>
+
+<div id="autoLoginOverlay" class="hide2">
+  <div class="loading-card2">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <p class="loading-eyebrow2">자동 로그인</p>
+    <h3 class="loading-title2">다시 접속하셨네요</h3>
+    <p class="autologin-sub2">같은 세션이라 비밀번호 입력이 필요 없어요. 잠깐만 기다려 주세요.</p>
   </div>
 </div>
 
@@ -1799,23 +1813,25 @@
   document.getElementById("refreshBtn").addEventListener("click", () => loadAll());
 
   // 페이지 로드 시 이미 입력된 비밀번호가 있으면 바로 시도 — 이 경우 비번 입력창을 보여줄
-  // 필요가 없으므로, 검증하는 동안에도 비번 게이트 대신 로딩 오버레이(로딩 오버레이가
-  // z-index로 게이트 위에 뜸)를 바로 보여준다. 검증 실패 시에만 오버레이를 걷어 원래
-  // 비번 입력 화면으로 되돌아간다.
+  // 필요가 없으므로, 검증하는 동안에는 "다시 접속하셨네요" 안내 카드를 대신 보여준다
+  // (게이트보다 z-index가 높아 그 위를 덮음). 검증 실패 시에만 안내를 걷어 원래 비번
+  // 입력 화면으로 되돌아간다.
   (async function initGate() {
     if (storedPw()) {
-      showLoadingOverlay2();
+      const notice = document.getElementById("autoLoginOverlay");
+      notice.classList.remove("hide2");
       try {
         const data = await callBackend("kpi");
         if (data.ok) {
           cachedKpiData = data;
           document.body.classList.remove("locked");
           document.getElementById("pwGate").remove();
+          notice.remove();
           boot();
           return;
         }
       } catch (err) {}
-      hideLoadingOverlay2();
+      notice.classList.add("hide2");
     }
     document.getElementById("pwInput").focus();
   })();
