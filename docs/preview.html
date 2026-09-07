@@ -1798,9 +1798,13 @@
 
   document.getElementById("refreshBtn").addEventListener("click", () => loadAll());
 
-  // 페이지 로드 시 이미 입력된 비밀번호가 있으면 바로 시도.
+  // 페이지 로드 시 이미 입력된 비밀번호가 있으면 바로 시도 — 이 경우 비번 입력창을 보여줄
+  // 필요가 없으므로, 검증하는 동안에도 비번 게이트 대신 로딩 오버레이(로딩 오버레이가
+  // z-index로 게이트 위에 뜸)를 바로 보여준다. 검증 실패 시에만 오버레이를 걷어 원래
+  // 비번 입력 화면으로 되돌아간다.
   (async function initGate() {
     if (storedPw()) {
+      showLoadingOverlay2();
       try {
         const data = await callBackend("kpi");
         if (data.ok) {
@@ -1811,6 +1815,7 @@
           return;
         }
       } catch (err) {}
+      hideLoadingOverlay2();
     }
     document.getElementById("pwInput").focus();
   })();
