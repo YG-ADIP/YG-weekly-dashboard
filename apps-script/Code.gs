@@ -53,7 +53,7 @@ function doGet(e) {
       case 'monthlyTracking': return jsonOutput_(getMonthlyTrackingData_());
       case 'insight': return jsonOutput_(getInsightData_());
       case 'saveInsight':
-        saveInsightOverride_(params.weekLabel, String(params.text || '').trim());
+        saveInsightOverride_(resolveInsightWeekKey_(params), String(params.text || '').trim());
         return jsonOutput_({ ok: true });
       case 'agenda': return jsonOutput_(getByWeekSectionData_(AGENDA_FOLDER_ID, extractAgendaFromSheet_));
       case 'trend': return jsonOutput_(getByWeekSectionData_(TREND_FOLDER_ID, extractTrendFromSheet_));
@@ -248,24 +248,24 @@ function getKpiData_() {
 // ---- 최상단 AI 인사이트 바 ----
 //
 // 9월부터 수동 문구 대신 자동 생성으로 전환(엘라 지시: "해당 주 신규 실적"과 "연간 실적에 가장
-// 큰 영향을 미치는 프로젝트"를 매번 데이터에서 뽑아서 보여줄 것). KPI_MASTER_ID 파일의 가장 최근
-// (월+주차) 시트 하나에서 두 가지를 읽는다:
-// 1) "3. 월별 KPI 실적 구성 상세" 표 중, weekLabel이 정확히 "이번 주"(예: "9월/1주차")와 일치하는
-//    행만 = 이번 주에 새로 반영된 실적. 시트 전체를 이전 주차와 비교(diff)하는 방식은 과거에
-//    시도했다가 폐기된 적 있음(오타 정정이 "새 변화"로 잘못 잡히는 문제) — 이번엔 각 행에 週가
+// 큰 영향을 미치는 프로젝트"를 매번 데이터에서 뽑아서 보여줄 것). KPI_MASTER_ID 파일 안의 각
+// (월+주차) 시트마다 아래 두 가지를 읽는다(= KPI/팀AGENDA/트렌드와 동일한 by-week 패턴 —
+// 2026-09-11부터 전체 주차 토글에 포함되도록 전환, 예전엔 "가장 최근 시트"만 봤음):
+// 1) "3. 월별 KPI 실적 구성 상세" 표 중, weekLabel이 그 시트 자신의 주차(예: "9월/1주차")와
+//    일치하는 행만 = 그 주에 새로 반영된 실적. 시트 전체를 이전 주차와 비교(diff)하는 방식은
+//    과거에 시도했다가 폐기된 적 있음(오타 정정이 "새 변화"로 잘못 잡히는 문제) — 각 행에 週가
 //    이미 라벨로 박혀 있어서 diff 없이 라벨 매칭만으로 안전하게 뽑을 수 있음.
 // 2) "실적 인정 사업 리스트"(하반기 누적 확정 실적) 표를 신규 계약금 내림차순 정렬한 상위 항목
 //    = 하반기 실적에 가장 큰 영향을 미치는 프로젝트(이 표 자체가 하반기 기준 리스트라 "연간"이
-//    아니라 "하반기"라고 표현해야 함 — 문구는 프런트 buildInsightText에서 조합).
+//    아니라 "하반기"라고 표현해야 함 — 문구는 프런트 buildAutoInsightText에서 조합).
 // 문장 조합(사람이 읽는 텍스트로 만드는 것)은 프런트에서 함 — 여기선 원본 수치만 정리해서 내려줌.
-function getInsightData_() {
-  var latest = getLatestKpiSheetRowsCached_();
-  if (!latest) return { ok: true, weekLabel: null, thisWeek: [], topAnnual: [] };
-  var rows = latest.rows;
-  var monthNum = MONTH_ABBR.indexOf(latest.monthAbbr) + 1;
-  var weekLabel = monthNum + '월/' + latest.weekNum + '주차';
+function extractInsightFromSheet_(sheet) {
+  var mw = monthWeekFromSheetName_(sheet.getName());
+  if (!mw) return { thisWeek: [], topAnnual: [] };
+  var rows = sheet.getDataRange().getValues();
+  var weekLabel = (MONTH_ABBR.indexOf(mw.monthAbbr) + 1) + '월/' + mw.weekNum + '주차';
 
-  // "3. 월별 KPI 실적 구성 상세" 표에서 이번 주 라벨과 일치하는 행만 추림.
+  // "3. 월별 KPI 실적 구성 상세" 표에서 그 주차 라벨과 일치하는 행만 추림.
   var detailHeaderIdx = -1;
   for (var k = 0; k < rows.length; k++) {
     if (String(rows[k][0] || '').trim() === '구분' && String(rows[k][1] || '').indexOf('월/주차') >= 0) { detailHeaderIdx = k; break; }
@@ -279,7 +279,7 @@ function getInsightData_() {
       if (col0 && restEmpty) break; // 다음 섹션 제목 행 도달
       var proj = String(r[2] || '').trim();
       if (!proj) continue;
-      if (String(r[1] || '').trim() !== weekLabel) continue; // 이번 주 항목만
+      if (String(r[1] || '').trim() !== weekLabel) continue; // 그 주 항목만
       thisWeek.push({
         category: col0, project: proj,
         actual: stripUnit_(r[3]), contribPct: percentCellToPct_(r[4]),
@@ -308,38 +308,88 @@ function getInsightData_() {
     topAnnual = topAnnual.slice(0, 5);
   }
 
-  var override = getInsightOverride_();
-  return {
-    ok: true, weekLabel: weekLabel, thisWeek: thisWeek, topAnnual: topAnnual,
-    overrideText: override.weekLabel === weekLabel ? override.text : null,
-    overrideEditedAt: override.weekLabel === weekLabel ? override.editedAt : null,
-  };
+  return { thisWeek: thisWeek, topAnnual: topAnnual };
 }
 
-// 인사이트 문구 수동 수정(개발 서버 preview.html 전용 테스트 기능) — AI 자동 생성 문구 위에
-// 사람이 덧붙이거나 고친 내용을 스크립트 속성에 저장해서 팀원 모두에게 같은 내용이 보이게 함.
-// weekLabel과 함께 저장해서, 주차가 바뀌면(위 getInsightData_에서 weekLabel 불일치로) 자동으로
-// 새로 생성된 AI 문구로 돌아가고 지난 주 수정 내용이 새 주차에 잘못 남지 않게 함.
-function getInsightOverride_() {
-  var props = PropertiesService.getScriptProperties();
-  return {
-    weekLabel: props.getProperty('INSIGHT_OVERRIDE_WEEK') || null,
-    text: props.getProperty('INSIGHT_OVERRIDE_TEXT') || null,
-    editedAt: props.getProperty('INSIGHT_OVERRIDE_AT') || null,
-  };
+// KPI(getKpiByWeekCached_)와 동일한 이유로 60초 캐시.
+function getInsightByWeekCached_() {
+  var cache = CacheService.getScriptCache();
+  var cacheKey = 'insightByWeek';
+  var cached = cache.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+  var base = getByWeekFromFile_(KPI_MASTER_ID, extractInsightFromSheet_);
+  try { cache.put(cacheKey, JSON.stringify(base), 60); } catch (e) {}
+  return base;
 }
 
-function saveInsightOverride_(weekLabel, text) {
-  var props = PropertiesService.getScriptProperties();
-  if (!text) {
-    props.deleteProperty('INSIGHT_OVERRIDE_WEEK');
-    props.deleteProperty('INSIGHT_OVERRIDE_TEXT');
-    props.deleteProperty('INSIGHT_OVERRIDE_AT');
-    return;
+function getInsightData_() {
+  var base = getInsightByWeekCached_();
+  var overrides = getInsightOverrides_();
+  var latestKey = null, latestOrder = -1;
+  Object.keys(base.byWeek).forEach(function (key) {
+    var entry = base.byWeek[key];
+    var ov = overrides[key];
+    entry.overrideText = ov ? ov.text : null;
+    entry.overrideEditedAt = ov ? ov.editedAt : null;
+    var order = weekOrder_(entry.monthAbbr, entry.weekNum);
+    if (order > latestOrder) { latestOrder = order; latestKey = key; }
+  });
+
+  // 하위 호환: 운영(index.html)은 아직 주차 토글 없이 "가장 최근 주차 인사이트"만 최상위 필드로
+  // 읽는 예전 방식 그대로라, byWeek만 내려주면 운영 인사이트 바가 깨진다(로딩 오버레이가 안
+  // 사라지는 문제까지 발생). index.html이 이 by-week 방식으로 승격되기 전까지는 반드시 최상위
+  // weekLabel/thisWeek/topAnnual/overrideText/overrideEditedAt도 "가장 최근 주차" 기준으로
+  // 함께 내려줘야 함 — 지우지 말 것.
+  if (latestKey) {
+    var latest = base.byWeek[latestKey];
+    base.weekLabel = (MONTH_ABBR.indexOf(latest.monthAbbr) + 1) + '월/' + latest.weekNum + '주차';
+    base.thisWeek = latest.data.thisWeek;
+    base.topAnnual = latest.data.topAnnual;
+    base.overrideText = latest.overrideText;
+    base.overrideEditedAt = latest.overrideEditedAt;
+  } else {
+    base.weekLabel = null; base.thisWeek = []; base.topAnnual = [];
+    base.overrideText = null; base.overrideEditedAt = null;
   }
-  props.setProperty('INSIGHT_OVERRIDE_WEEK', weekLabel || '');
-  props.setProperty('INSIGHT_OVERRIDE_TEXT', text);
-  props.setProperty('INSIGHT_OVERRIDE_AT', new Date().toISOString());
+  return base;
+}
+
+// 인사이트 문구 "확정"/수동 수정 — AI 자동 생성 문구 위에 사람이 고치거나 그대로 확정한 내용을
+// 주차별(weekKey, 예: "SEP_1")로 스크립트 속성에 저장해서 팀원 모두에게 같은 내용이 보이게 함.
+// 예전엔 override 슬롯이 하나뿐이라 다른 주차를 확정하면 이전 주차 확정 내용이 사라졌는데(주차
+// 토글로 과거 주차를 오가며 각각 확정해야 하는 지금 방식엔 안 맞음), 이제 { weekKey: {text,
+// editedAt} } 맵 하나를 JSON으로 저장해 주차마다 독립적으로 유지되게 함.
+function getInsightOverrides_() {
+  var raw = PropertiesService.getScriptProperties().getProperty('INSIGHT_OVERRIDES_JSON');
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch (e) { return {}; }
+}
+
+// 하위 호환: 운영(index.html)은 아직 "확정 버튼/주차별 저장" 이전 방식이라 weekKey 없이
+// weekLabel만(혹은 그마저도 없이) 저장 요청을 보낸다 — 그 경우 항상 "가장 최근 주차"에 저장해서
+// 예전 단일 슬롯 동작(최신 주차 하나만 수정 가능)과 똑같이 동작하게 함. 개발 서버(preview.html)는
+// 항상 weekKey를 함께 보내므로 이 폴백을 타지 않는다.
+function resolveInsightWeekKey_(params) {
+  if (params.weekKey) return params.weekKey;
+  var base = getInsightByWeekCached_();
+  var latestKey = null, latestOrder = -1;
+  Object.keys(base.byWeek).forEach(function (key) {
+    var e = base.byWeek[key];
+    var order = weekOrder_(e.monthAbbr, e.weekNum);
+    if (order > latestOrder) { latestOrder = order; latestKey = key; }
+  });
+  return latestKey || '';
+}
+
+function saveInsightOverride_(weekKey, text) {
+  var props = PropertiesService.getScriptProperties();
+  var overrides = getInsightOverrides_();
+  if (!text) {
+    delete overrides[weekKey];
+  } else {
+    overrides[weekKey] = { text: text, editedAt: new Date().toISOString() };
+  }
+  props.setProperty('INSIGHT_OVERRIDES_JSON', JSON.stringify(overrides));
 }
 
 // ---- ①-2 월별 트래킹 섹션 ----
