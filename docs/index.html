@@ -239,9 +239,18 @@
   .teamcal-event2 b { color: var(--accent-700); }
   .teamcal-more2 { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--faint); }
   .teamcal-caption2 { margin: 10px 0 0; font-size: 11px; color: var(--faint); }
-  .teamcal-insight-badge2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: fit-content; max-width: 100%; border-radius: 14px; padding: 6px 14px; margin: 0 0 16px; font-size: 12px; font-weight: 600; line-height: 1.5; background: var(--accent-tint); color: var(--accent-900); border: 1px solid var(--accent-300); white-space: normal; }
+  .teamcal-insight-row2 { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+  .teamcal-insight-badge2 { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; max-width: 100%; border-radius: 14px; padding: 6px 14px; font-size: 12px; font-weight: 600; line-height: 1.5; background: var(--accent-tint); color: var(--accent-900); border: 1px solid var(--accent-300); white-space: normal; }
   /* 이벤트별 네모칸 — 여러 일정이 붙어 보이지 않고 각각 구분되도록 */
   .teamcal-insight-chip2 { display: inline-block; padding: 2px 8px; border: 1px solid var(--accent-300); border-radius: 4px; background: rgba(255,255,255,0.6); font-weight: 700; white-space: nowrap; }
+  .teamcal-insight-edit2 { flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; padding: 4px 10px 4px 8px; border-radius: 0; border: 1px solid var(--accent-300); background: transparent; color: var(--accent-700); cursor: pointer; white-space: nowrap; }
+  .teamcal-insight-edit2:hover { background: rgba(89,128,166,0.12); border-color: var(--accent-700); }
+  .teamcal-insight-edit2 svg { flex-shrink: 0; }
+  .teamcal-insight-mode2 { font-size: 11px; color: var(--faint); margin: -4px 0 10px; }
+  .teamcal-insight-panel2 { border: 1px solid var(--accent-300); background: #fff; margin-bottom: 16px; }
+  .teamcal-insight-checklist2 { max-height: 220px; overflow-y: auto; padding: 6px 10px; display: flex; flex-direction: column; gap: 2px; }
+  .teamcal-insight-check-row2 { display: flex; align-items: center; gap: 8px; padding: 4px 2px; font-size: 12px; color: var(--ink); cursor: pointer; }
+  .teamcal-insight-check-row2 input { flex-shrink: 0; }
   .teamcal-hover-panel2 {
     position: absolute; top: 0; left: 0; right: 0; min-height: 100%;
     background: var(--accent-900); box-shadow: var(--shadow-pop);
@@ -1376,13 +1385,13 @@
 
   function buildUpcomingInsightText(matched) {
     if (!matched.length) return "차주엔 출장·촬영·업로드 일정이 없어요.";
-    const names = matched.slice(0, 3).map(m => `${fmtEventDateSpan(m)} ${m.title}`).join(", ");
-    const extra = matched.length > 3 ? ` 외 ${matched.length - 3}건` : "";
-    return `차주엔 ${names}${extra}가 있어요.`;
+    const names = matched.map(m => `${fmtEventDateSpan(m)} ${m.title}`).join(", ");
+    return `차주엔 ${names}가 있어요.`;
   }
 
   // 일정끼리 붙어 보이지 않도록 이벤트 하나당 네모칸(칩) 하나로 렌더 — 텍스트는 buildUpcomingInsightText()와
   // 동일한 내용을 담되, 배지 안에서 각 이벤트가 시각적으로 구분되도록 DOM 노드로 조립.
+  // 2026-09-11: 3개로 자르던 것 없앰 — 직접 선택 기능이 생기면서 4개 이상 골라도 전부 보여야 함.
   function buildUpcomingInsightNodes(matched) {
     const frag = document.createDocumentFragment();
     if (!matched.length) {
@@ -1390,17 +1399,23 @@
       return frag;
     }
     frag.appendChild(document.createTextNode("차주엔"));
-    matched.slice(0, 3).forEach(m => {
+    matched.forEach(m => {
       frag.appendChild(elText("span", "teamcal-insight-chip2", `${fmtEventDateSpan(m)} ${m.title}`));
     });
-    if (matched.length > 3) {
-      frag.appendChild(document.createTextNode(`외 ${matched.length - 3}건`));
-    }
     frag.appendChild(document.createTextNode("일정이 있어요."));
     return frag;
   }
 
-  async function fetchUpcomingInsightMatched() {
+  // "차주엔~" 배지에 보여줄 일정을 자동(키워드) 대신 직접 체크박스로 골라 고정할 수 있는 기능
+  // (2026-09-11). 이벤트 자체엔 안정적인 식별자가 없을 수 있어(백엔드가 id를 못 준 예외 상황),
+  // id가 있으면 그걸 쓰고 없으면 "제목+시작시각" 조합을 대체 키로 쓴다.
+  function upcomingEventKey(ev) {
+    return ev.id || `${ev.title}|${ev.startDate.toISOString()}`;
+  }
+
+  // 앞으로 10일 범위 안에 있는 일정 전체(키워드 상관없이)를 가져옴 — 편집 패널의 체크리스트와
+  // 자동/직접 선택 계산이 이 목록 하나를 공유한다.
+  async function fetchUpcomingWindowEvents() {
     const range = upcomingInsightRange(new Date());
     const monthKeys = new Set([
       `${range.start.getFullYear()}-${range.start.getMonth() + 1}`,
@@ -1412,28 +1427,146 @@
     }));
     const events = [];
     results.forEach(r => { if (r.ok) events.push(...(r.events || [])); });
-    return matchUpcomingKeywordEvents(events, range);
+    const inRange = [];
+    events.forEach(ev => {
+      const r = eventDateRange(ev);
+      if (!r) return;
+      if (r.end < range.start || r.start > range.end) return; // 기간과 안 겹치면 제외
+      inRange.push({ id: ev.id || null, title: ev.summary || "", startDate: r.start, endDate: r.end });
+    });
+    inRange.sort((a, b) => a.startDate - b.startDate);
+    return inRange;
+  }
+
+  let upcomingWindowEvents = []; // 앞으로 10일 안의 일정 전체(편집 패널용)
+  let upcomingSelection = { mode: "auto", ids: [] }; // 백엔드에 저장된 현재 모드/선택
+  let upcomingEditing = false;
+  let upcomingLoaded = false;
+
+  // 지금 배지에 실제로 보여줄 목록 — 'manual'이면 직접 고른 것만(그 중에서도 여전히 10일 범위
+  // 안에 있는 것만, 날짜 지난 건 자동으로 빠짐), 'auto'면 기존처럼 키워드 매칭.
+  function resolveUpcomingDisplayList() {
+    if (upcomingSelection.mode === "manual") {
+      const idSet = new Set(upcomingSelection.ids || []);
+      return upcomingWindowEvents.filter(ev => idSet.has(upcomingEventKey(ev)));
+    }
+    return upcomingWindowEvents.filter(ev => UPCOMING_INSIGHT_KEYWORDS.some(k => ev.title.includes(k)));
   }
 
   async function loadWeeklyInsightBadge() {
-    const badgeEl = document.getElementById("teamcalInsightBadge");
-    if (!badgeEl) return;
     try {
-      const matched = await fetchUpcomingInsightMatched();
-      badgeEl.replaceChildren(buildUpcomingInsightNodes(matched));
-      badgeEl.title = buildUpcomingInsightText(matched);
+      const [events, selRes] = await Promise.all([fetchUpcomingWindowEvents(), callBackend("upcomingSelection")]);
+      upcomingWindowEvents = events;
+      upcomingSelection = (selRes && selRes.ok && selRes.selection) ? selRes.selection : { mode: "auto", ids: [] };
+      upcomingLoaded = true;
     } catch (err) {
-      badgeEl.textContent = "차주 일정을 불러오지 못했어요.";
+      upcomingWindowEvents = [];
+      upcomingLoaded = false;
     }
+    renderUpcomingInsightArea();
+  }
+
+  async function saveUpcomingSelection(checkedKeys) {
+    try {
+      const res = await callBackend("saveUpcomingSelection", { mode: "manual", ids: JSON.stringify(checkedKeys) });
+      if (!res.ok) throw new Error(res.message || res.error || "알 수 없는 오류");
+    } catch (err) {
+      alert("저장에 실패했어요: " + err.message);
+      return;
+    }
+    upcomingEditing = false;
+    await loadWeeklyInsightBadge();
+  }
+
+  async function resetUpcomingSelection() {
+    try {
+      const res = await callBackend("saveUpcomingSelection", { mode: "auto" });
+      if (!res.ok) throw new Error(res.message || res.error || "알 수 없는 오류");
+    } catch (err) {
+      alert("되돌리기에 실패했어요: " + err.message);
+      return;
+    }
+    upcomingEditing = false;
+    await loadWeeklyInsightBadge();
+  }
+
+  function renderUpcomingEditPanel() {
+    const panel = el("div", "teamcal-insight-panel2");
+    panel.appendChild(elText("span", "insight-edit-label2", "차주 배지에 보여줄 일정 선택"));
+
+    const preChecked = new Set(resolveUpcomingDisplayList().map(upcomingEventKey));
+    const list = el("div", "teamcal-insight-checklist2");
+    if (!upcomingWindowEvents.length) {
+      list.appendChild(elText("p", "state-msg2", "앞으로 10일 안에 예정된 일정이 없어요."));
+    } else {
+      upcomingWindowEvents.forEach(ev => {
+        const key = upcomingEventKey(ev);
+        const label = el("label", "teamcal-insight-check-row2");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.value = key;
+        cb.checked = preChecked.has(key);
+        label.appendChild(cb);
+        label.appendChild(elText("span", null, `${fmtEventDateSpan(ev)} ${ev.title}`));
+        list.appendChild(label);
+      });
+    }
+    panel.appendChild(list);
+
+    const actions = el("div", "insight-edit-actions2");
+    const saveBtn = elText("button", "insight-save-btn2", "저장");
+    saveBtn.addEventListener("click", () => {
+      const checked = Array.from(list.querySelectorAll("input[type=checkbox]:checked")).map(cb => cb.value);
+      saveUpcomingSelection(checked);
+    });
+    const resetBtn = elText("button", "insight-reset-btn2", "자동으로 되돌리기");
+    resetBtn.addEventListener("click", () => resetUpcomingSelection());
+    const cancelBtn = elText("button", "insight-cancel-btn2", "취소");
+    cancelBtn.addEventListener("click", () => { upcomingEditing = false; renderUpcomingInsightArea(); });
+    actions.appendChild(saveBtn);
+    actions.appendChild(resetBtn);
+    actions.appendChild(cancelBtn);
+    panel.appendChild(actions);
+
+    return panel;
+  }
+
+  function renderUpcomingInsightArea() {
+    const area = document.getElementById("teamcalInsightArea");
+    if (!area) return;
+    area.innerHTML = "";
+
+    const row = el("div", "teamcal-insight-row2");
+    const badge = el("div", "teamcal-insight-badge2");
+    if (!upcomingLoaded) {
+      badge.textContent = "다음 일정 확인 중…";
+    } else {
+      const displayList = resolveUpcomingDisplayList();
+      badge.appendChild(buildUpcomingInsightNodes(displayList));
+      badge.title = buildUpcomingInsightText(displayList);
+    }
+    row.appendChild(badge);
+
+    const editBtn = el("button", "teamcal-insight-edit2", EDIT_PENCIL_ICON2);
+    editBtn.appendChild(document.createTextNode("편집"));
+    editBtn.addEventListener("click", () => { upcomingEditing = !upcomingEditing; renderUpcomingInsightArea(); });
+    row.appendChild(editBtn);
+    area.appendChild(row);
+
+    if (upcomingLoaded && upcomingSelection.mode === "manual") {
+      area.appendChild(elText("div", "teamcal-insight-mode2", "직접 선택한 일정만 표시 중"));
+    }
+
+    if (upcomingEditing) area.appendChild(renderUpcomingEditPanel());
   }
 
   function teamCalCard() {
     const card = sectionShell(false);
     card.appendChild(sectionHead("06", "팀 일정 캘린더", false, TEAM_CAL_LABEL));
     // 헤더 옆 좁은 칸에 끼워 넣으면 텍스트가 길 때 잘려서, 헤더 아래 별도 줄로 뺌(자연스럽게 줄바꿈).
-    const insightBadge = elText("div", "teamcal-insight-badge2", "다음 일정 확인 중…");
-    insightBadge.id = "teamcalInsightBadge";
-    card.appendChild(insightBadge);
+    const area = el("div", null);
+    area.id = "teamcalInsightArea";
+    card.appendChild(area);
     return card;
   }
 
