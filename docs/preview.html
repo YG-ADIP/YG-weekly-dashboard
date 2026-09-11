@@ -37,7 +37,7 @@
      팀원이 셀 안에 직접 입력한 줄바꿈(\n)이 그대로 살아서 보이게 함 — 기본값(normal)은
      줄바꿈을 공백으로 뭉개버려서 여러 줄로 쓴 내용이 한 줄로 붙어 보이는 문제가 있었음. */
   .insight-body2, .mt-detail-proj2, .agenda-item2 .content2, .agenda-item2 .proj2,
-  .agenda-empty2, .voc-line2, .trend-line2, .err-sub2, .state-msg2, footer.note2,
+  .agenda-empty2, .voc-line2, .err-sub2, .state-msg2, footer.note2,
   .teamcal-caption2, .summary-empty2, .popover2 .pop-v2, .summary-table2 td {
     max-width: 75%;
     word-break: keep-all;
@@ -235,7 +235,9 @@
   .teamcal-event2 b { color: var(--accent-700); }
   .teamcal-more2 { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--faint); }
   .teamcal-caption2 { margin: 10px 0 0; font-size: 11px; color: var(--faint); }
-  .teamcal-insight-badge2 { display: block; width: fit-content; max-width: 100%; border-radius: 14px; padding: 6px 14px; margin: 0 0 16px; font-size: 12px; font-weight: 600; line-height: 1.5; background: var(--accent-tint); color: var(--accent-900); border: 1px solid var(--accent-300); white-space: normal; }
+  .teamcal-insight-badge2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: fit-content; max-width: 100%; border-radius: 14px; padding: 6px 14px; margin: 0 0 16px; font-size: 12px; font-weight: 600; line-height: 1.5; background: var(--accent-tint); color: var(--accent-900); border: 1px solid var(--accent-300); white-space: normal; }
+  /* 이벤트별 네모칸 — 여러 일정이 붙어 보이지 않고 각각 구분되도록 */
+  .teamcal-insight-chip2 { display: inline-block; padding: 2px 8px; border: 1px solid var(--accent-300); border-radius: 4px; background: rgba(255,255,255,0.6); font-weight: 700; white-space: nowrap; }
   .teamcal-hover-panel2 {
     position: absolute; top: 0; left: 0; right: 0; min-height: 100%;
     background: var(--accent-900); box-shadow: var(--shadow-pop);
@@ -255,7 +257,9 @@
   .trend-item2 { padding: 0 0 11px; margin-bottom: 11px; border-bottom: 1px solid rgba(29,31,32,0.1); }
   .trend-item2:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
   .trend-label2 { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; margin-bottom: 4px; }
-  .trend-line2 { display: block; font-size: 13px; line-height: 1.5; font-weight: 500; color: var(--ink); }
+  /* 트렌드 리포트만 예외: 위 공통 규칙(75% 폭 제한)을 적용하지 않고 카드 폭 전체를 씀 —
+     줄바꿈 트리거만 뺀 것이라 어절 단위 줄바꿈/구글시트 줄바꿈 보존은 그대로 유지 */
+  .trend-line2 { display: block; font-size: 13px; line-height: 1.5; font-weight: 500; color: var(--ink); max-width: 100%; word-break: keep-all; overflow-wrap: break-word; white-space: pre-wrap; }
   .trend-voc2 { margin-top: 8px; padding: 8px 10px; border-left: 2px solid rgba(29,31,32,0.2); background: rgba(29,31,32,0.035); }
   .voc-line2 { display: block; font-size: 12px; font-style: italic; line-height: 1.5; color: var(--soft); }
 
@@ -1379,7 +1383,26 @@
     return `차주엔 ${names}${extra}가 있어요.`;
   }
 
-  async function fetchUpcomingInsightText() {
+  // 일정끼리 붙어 보이지 않도록 이벤트 하나당 네모칸(칩) 하나로 렌더 — 텍스트는 buildUpcomingInsightText()와
+  // 동일한 내용을 담되, 배지 안에서 각 이벤트가 시각적으로 구분되도록 DOM 노드로 조립.
+  function buildUpcomingInsightNodes(matched) {
+    const frag = document.createDocumentFragment();
+    if (!matched.length) {
+      frag.appendChild(document.createTextNode("차주엔 출장·촬영·업로드 일정이 없어요."));
+      return frag;
+    }
+    frag.appendChild(document.createTextNode("차주엔"));
+    matched.slice(0, 3).forEach(m => {
+      frag.appendChild(elText("span", "teamcal-insight-chip2", `${fmtEventDateSpan(m)} ${m.title}`));
+    });
+    if (matched.length > 3) {
+      frag.appendChild(document.createTextNode(`외 ${matched.length - 3}건`));
+    }
+    frag.appendChild(document.createTextNode("일정이 있어요."));
+    return frag;
+  }
+
+  async function fetchUpcomingInsightMatched() {
     const range = upcomingInsightRange(new Date());
     const monthKeys = new Set([
       `${range.start.getFullYear()}-${range.start.getMonth() + 1}`,
@@ -1391,16 +1414,16 @@
     }));
     const events = [];
     results.forEach(r => { if (r.ok) events.push(...(r.events || [])); });
-    return buildUpcomingInsightText(matchUpcomingKeywordEvents(events, range));
+    return matchUpcomingKeywordEvents(events, range);
   }
 
   async function loadWeeklyInsightBadge() {
     const badgeEl = document.getElementById("teamcalInsightBadge");
     if (!badgeEl) return;
     try {
-      const text = await fetchUpcomingInsightText();
-      badgeEl.textContent = text;
-      badgeEl.title = text;
+      const matched = await fetchUpcomingInsightMatched();
+      badgeEl.replaceChildren(buildUpcomingInsightNodes(matched));
+      badgeEl.title = buildUpcomingInsightText(matched);
     } catch (err) {
       badgeEl.textContent = "차주 일정을 불러오지 못했어요.";
     }
