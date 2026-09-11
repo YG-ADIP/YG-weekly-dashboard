@@ -1391,13 +1391,13 @@
 
   function buildUpcomingInsightText(matched) {
     if (!matched.length) return "차주엔 출장·촬영·업로드 일정이 없어요.";
-    const names = matched.slice(0, 3).map(m => `${fmtEventDateSpan(m)} ${m.title}`).join(", ");
-    const extra = matched.length > 3 ? ` 외 ${matched.length - 3}건` : "";
-    return `차주엔 ${names}${extra}가 있어요.`;
+    const names = matched.map(m => `${fmtEventDateSpan(m)} ${m.title}`).join(", ");
+    return `차주엔 ${names}가 있어요.`;
   }
 
   // 일정끼리 붙어 보이지 않도록 이벤트 하나당 네모칸(칩) 하나로 렌더 — 텍스트는 buildUpcomingInsightText()와
   // 동일한 내용을 담되, 배지 안에서 각 이벤트가 시각적으로 구분되도록 DOM 노드로 조립.
+  // 2026-09-11: 3개로 자르던 것 없앰 — 직접 선택 기능이 생기면서 4개 이상 골라도 전부 보여야 함.
   function buildUpcomingInsightNodes(matched) {
     const frag = document.createDocumentFragment();
     if (!matched.length) {
@@ -1405,12 +1405,9 @@
       return frag;
     }
     frag.appendChild(document.createTextNode("차주엔"));
-    matched.slice(0, 3).forEach(m => {
+    matched.forEach(m => {
       frag.appendChild(elText("span", "teamcal-insight-chip2", `${fmtEventDateSpan(m)} ${m.title}`));
     });
-    if (matched.length > 3) {
-      frag.appendChild(document.createTextNode(`외 ${matched.length - 3}건`));
-    }
     frag.appendChild(document.createTextNode("일정이 있어요."));
     return frag;
   }
