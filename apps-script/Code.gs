@@ -61,6 +61,10 @@ function doGet(e) {
       case 'businessCalendar': return jsonOutput_(getBusinessCalendarData_());
       case 'teamCalendar':
         return jsonOutput_(getTeamCalendarData_(parseInt(params.year, 10), parseInt(params.month, 10)));
+      case 'upcomingSelection': return jsonOutput_({ ok: true, selection: getUpcomingSelection_() });
+      case 'saveUpcomingSelection':
+        saveUpcomingSelection_(params.mode, params.ids);
+        return jsonOutput_({ ok: true });
       default:
         return jsonOutput_({ ok: false, error: 'unknown_section' });
     }
@@ -718,6 +722,35 @@ function extractTrendOldFormat_(rows, headerIdx) {
 
 // ---- ⑤ 팀 일정 캘린더(구글 캘린더) 섹션 ----
 
+// "차주엔~" 인사이트 배지에 보여줄 일정을 엘라가 직접 고를 수 있는 기능(2026-09-11) — 기본은
+// 'auto'(제목에 출장/촬영/업로드가 들어간 일정을 자동으로 뽑음, 프런트 matchUpcomingKeywordEvents
+// 참고)이고, 프런트에서 개별 일정 체크박스로 골라 저장하면 'manual'로 전환되어 그 이벤트 id
+// 목록만 보여준다. "자동으로 되돌리기"를 누르면 이 속성을 지워 다시 자동 판별로 돌아간다.
+// 날짜가 지난 일정은 선택 목록에 남아있어도 (프런트에서 항상 "앞으로 10일" 범위로 다시 걸러
+// 보여주므로) 자연히 배지에서 빠진다 — 이 저장값 자체를 서버가 주기적으로 청소할 필요는 없음.
+function getUpcomingSelection_() {
+  var raw = PropertiesService.getScriptProperties().getProperty('UPCOMING_INSIGHT_SELECTION_JSON');
+  if (!raw) return { mode: 'auto', ids: [] };
+  try {
+    var parsed = JSON.parse(raw);
+    return { mode: parsed.mode === 'manual' ? 'manual' : 'auto', ids: Array.isArray(parsed.ids) ? parsed.ids : [] };
+  } catch (e) {
+    return { mode: 'auto', ids: [] };
+  }
+}
+
+function saveUpcomingSelection_(mode, idsJson) {
+  var props = PropertiesService.getScriptProperties();
+  if (mode !== 'manual') {
+    props.deleteProperty('UPCOMING_INSIGHT_SELECTION_JSON');
+    return;
+  }
+  var ids = [];
+  try { ids = JSON.parse(idsJson || '[]'); } catch (e) { ids = []; }
+  if (!Array.isArray(ids)) ids = [];
+  props.setProperty('UPCOMING_INSIGHT_SELECTION_JSON', JSON.stringify({ mode: 'manual', ids: ids }));
+}
+
 function formatCalDate_(d) {
   return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 }
@@ -746,14 +779,19 @@ function getTeamCalendarData_(year, month) {
   var rangeEnd = new Date(year, month, 1);
   var events = cal.getEvents(rangeStart, rangeEnd);
   var out = events.map(function (ev) {
+    // getId()는 구글 캘린더가 이벤트마다 부여하는 고유 식별자 — "차주 인사이트 배지에 보여줄
+    // 일정 직접 선택" 기능(2026-09-11)이 제목/날짜가 아니라 이 id로 선택을 저장해서, 제목이
+    // 같은 반복 일정이 여러 개 있어도 서로 안 헷갈리게 구분한다.
     if (ev.isAllDayEvent()) {
       return {
+        id: ev.getId(),
         summary: ev.getTitle(),
         start: { date: formatCalDate_(ev.getStartTime()) },
         end: { date: formatCalDate_(ev.getEndTime()) },
       };
     }
     return {
+      id: ev.getId(),
       summary: ev.getTitle(),
       start: { dateTime: ev.getStartTime().toISOString() },
       end: { dateTime: ev.getEndTime().toISOString() },
