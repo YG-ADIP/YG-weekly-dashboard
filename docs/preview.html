@@ -501,6 +501,9 @@
   function numOr0(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : n; }
   function fmtAmt(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : Math.round(n * 100) / 100; }
   function fmtPct(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : Math.round(n); }
+  // KPI 달성률 전용: 소수점 한 자리(시트 표기와 동일). 정수 반올림하면 99.6%가 "100%"로 보여
+  // 미달인데 달성한 것처럼 읽히는 문제가 있어서 KPI 카드만 이 함수를 쓴다.
+  function fmtAch(n) { return (n === null || n === undefined || isNaN(n)) ? "0.0" : n.toFixed(1); }
 
   // ---- 비밀번호 게이트 + 데이터 레이어 ----
   function storedPw() { try { return sessionStorage.getItem("dashPw") || ""; } catch { return ""; } }
@@ -674,7 +677,7 @@
       const xp = (coords[i][0] / W) * 100;
       const badgeShift = i === 0 ? "translate(0, -100%)" : i === n - 1 ? "translate(-100%, -100%)" : "translate(-50%, -100%)";
       const labelShift = i === 0 ? "translateX(0)" : i === n - 1 ? "translateX(-100%)" : "translateX(-50%)";
-      const badge = elText("span", "spark-badge2", fmtPct(p.actual * 100) + "%");
+      const badge = elText("span", "spark-badge2", fmtAch(p.actual * 100) + "%");
       badge.style.left = xp.toFixed(2) + "%";
       badge.style.top = (((coords[i][1] - 8) / H) * 100).toFixed(2) + "%";
       badge.style.transform = badgeShift;
@@ -777,7 +780,7 @@
     const add = (tag, goal, ach) => {
       if (goal == null) return;
       if (kind === "goal") lines.push({ tag, num: String(fmtAmt(goal)), unit: "억원" });
-      else if (kind === "ach") lines.push({ tag, num: ach.toFixed(0) + "%", unit: "", color: achColorOf(ach) });
+      else if (kind === "ach") lines.push({ tag, num: fmtAch(ach) + "%", unit: "", color: achColorOf(ach) });
       else if (kind === "remain") { const r = remainParts(goal, p.actual); lines.push({ tag, num: r.num, unit: r.unit, color: "#94bce3" }); }
     };
     add("S", p.goal, p.ach);
@@ -855,8 +858,8 @@
           if (hasS) cell(p.goal != null ? fmtAmt(p.goal) + "억" : "-");
           if (hasB) cell(p.goalBase != null ? fmtAmt(p.goalBase) + "억" : "-");
           cell(fmtAmt(p.actual) + "억");
-          if (hasS) cell(p.ach != null ? p.ach.toFixed(0) + "%" : "-", p.ach != null ? achColorOf(p.ach) : null);
-          if (hasB) cell(p.achBase != null ? p.achBase.toFixed(0) + "%" : "-", p.achBase != null ? achColorOf(p.achBase) : null);
+          if (hasS) cell(p.ach != null ? fmtAch(p.ach) + "%" : "-", p.ach != null ? achColorOf(p.ach) : null);
+          if (hasB) cell(p.achBase != null ? fmtAch(p.achBase) + "%" : "-", p.achBase != null ? achColorOf(p.achBase) : null);
           tbody.appendChild(tr);
         });
         table.appendChild(tbody);
