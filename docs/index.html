@@ -154,9 +154,12 @@
   .kpi-cmp-table2 th, .kpi-cmp-table2 td { border: 1px solid rgba(255,255,255,0.22); padding: 9px 12px; text-align: right; white-space: nowrap; }
   .kpi-cmp-table2 thead th { font-size: 11px; font-weight: 600; color: #9a9a9e; background: rgba(255,255,255,0.04); padding: 6px 12px; }
   .kpi-cmp-table2 thead th:first-child { width: 24%; }
-  .kpi-cmp-table2 tbody th { text-align: left; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.12em; border-left-width: 4px; }
-  .kpi-cmp-table2 tbody th.stretch2 { color: #ffffff; border-left-color: #ffffff; }
-  .kpi-cmp-table2 tbody th.base2 { color: #d9ab5a; border-left-color: #d9ab5a; }
+  .kpi-cmp-table2 tbody th { text-align: left; }
+  /* STRETCH/BASE 기준 표기: 흑백 대비로 구분 — STRETCH = 흰색 채움 칩, BASE = 흰색 테두리 칩.
+     상태색(파랑·빨강)과 겹치지 않고 대시보드 블루프린트 톤을 유지(전체 보기·상세보기 공통). */
+  .basis-chip2 { display: inline-block; font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; line-height: 1; padding: 4px 9px; border: 1.5px solid #e6e6e8; }
+  .basis-chip2.s2 { background: #e6e6e8; color: #1d1f20; }
+  .basis-chip2.b2 { background: transparent; color: #ffffff; }
   .kpi-cmp-table2 tbody td { font-family: 'Barlow Condensed', sans-serif; font-size: 24px; font-weight: 600; line-height: 1.1; color: #ffffff; }
   .kpi-cmp-table2 tbody td .unit2 { font-family: 'Noto Sans KR', sans-serif; font-size: 11px; font-weight: 500; margin-left: 2px; }
   .kpi-cmp-table2 tbody tr + tr { border-top: 1px dashed rgba(255,255,255,0.3); }
@@ -178,15 +181,15 @@
   .kpi-half2 { margin-bottom: 20px; }
   .kpi-part-table2 td.act2 { color: #ffffff; font-weight: 700; }
   /* 상세보기: 열을 STRETCH 묶음 | BASE 묶음으로 나눈 2단 헤더. 본문 셀은 S/B 구분 없이 같은 색으로 두고,
-     상단 그룹 제목 셀만 채움색으로 구분(STRETCH 흰색 / BASE 앰버 — 상태색 파랑·빨강과 겹치지 않게). */
+     상단 그룹 제목 셀의 기준 칩(.basis-chip2)으로만 구분. */
   .kpi-part-table2 thead th.grp2 { text-align: center; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.14em; color: #1d1f20; }
-  .kpi-part-table2 thead th.grp-s2 { background: #e6e6e8; }
-  .kpi-part-table2 thead th.grp-b2 { background: #d9ab5a; }
+  .kpi-part-table2 thead th.grp2 { padding: 7px 10px; }
   .kpi-head-actions2 { display: inline-flex; align-items: center; gap: 10px; }
   @media (max-width: 560px) {
     #kpiSlot .kpi-hero2 { grid-template-columns: minmax(0, 1fr); }
     .kpi-cmp-table2 th, .kpi-cmp-table2 td { padding: 8px 6px; }
-    .kpi-cmp-table2 tbody th { font-size: 11px; letter-spacing: 0.06em; }
+    .basis-chip2 { font-size: 10px; letter-spacing: 0.04em; padding: 3px 5px; }
+    .kpi-cmp-table2 thead th:first-child { width: 30%; }
     .kpi-cmp-table2 tbody td { font-size: 19px; }
     .kpi-part-table2 th, .kpi-part-table2 td { padding: 6px 5px; }
   }
@@ -723,7 +726,9 @@
     const tbody = el("tbody", null);
     rows.forEach(r => {
       const tr = el("tr", null);
-      tr.appendChild(elText("th", r.basis === "BASE" ? "base2" : "stretch2", r.basis));
+      const th = el("th", null);
+      th.appendChild(elText("span", "basis-chip2 " + (r.basis === "BASE" ? "b2" : "s2"), r.basis));
+      tr.appendChild(th);
       const cell = (v) => {
         const td = el("td", null);
         td.appendChild(document.createTextNode(v.num));
@@ -907,14 +912,15 @@
     const table = el("table", "kpi-part-table2");
     // 2단 헤더: 1행 = 파트·구분·실적(2행 병합) + STRETCH/BASE 그룹, 2행 = 그룹별 목표·달성률·잔여 KPI.
     const groups = [];
-    if (hasS) groups.push({ basis: "STRETCH", grp: "grp-s2", goal: "goal", ach: "ach" });
-    if (hasB) groups.push({ basis: "BASE", grp: "grp-b2", goal: "goalBase", ach: "achBase" });
+    if (hasS) groups.push({ basis: "STRETCH", chip: "s2", goal: "goal", ach: "ach" });
+    if (hasB) groups.push({ basis: "BASE", chip: "b2", goal: "goalBase", ach: "achBase" });
     const thead = el("thead", null), tr1 = el("tr", null), tr2 = el("tr", null);
     [["파트", "lft2"], ["구분", "lft2"], ["실적", null]].forEach(([h, cls]) => {
       const th = elText("th", cls, h); th.rowSpan = 2; tr1.appendChild(th);
     });
     groups.forEach(g => {
-      const th = elText("th", "grp2 " + g.grp, g.basis);
+      const th = el("th", "grp2");
+      th.appendChild(elText("span", "basis-chip2 " + g.chip, g.basis));
       th.colSpan = 3;
       tr1.appendChild(th);
       ["목표", "달성률", "잔여 KPI"].forEach(h => tr2.appendChild(elText("th", null, h)));
