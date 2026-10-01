@@ -160,12 +160,6 @@
   .kpi-cmp-table2 tbody td { font-family: 'Barlow Condensed', sans-serif; font-size: 24px; font-weight: 600; line-height: 1.1; color: #ffffff; }
   .kpi-cmp-table2 tbody td .unit2 { font-family: 'Noto Sans KR', sans-serif; font-size: 11px; font-weight: 500; margin-left: 2px; }
   .kpi-cmp-table2 tbody tr + tr { border-top: 1px dashed rgba(255,255,255,0.3); }
-  /* 연간 외 데이터(하반기 등): 전부 옅은 회색 + 한 단계 작게 */
-  .kpi-cmp2.dim2 .kpi-block-kicker2, .kpi-cmp2.dim2 .kpi-cmp-actual2, .kpi-cmp2.dim2 .kpi-cmp-actual2 b,
-  .kpi-cmp2.dim2 .kpi-cmp-table2 tbody th, .kpi-cmp2.dim2 .kpi-cmp-table2 tbody td { color: #6f6f74; }
-  .kpi-cmp2.dim2 .kpi-cmp-table2 tbody th { border-left-color: rgba(255,255,255,0.2); }
-  .kpi-cmp2.dim2 .kpi-cmp-table2 tbody td { font-size: 17px; }
-  .kpi-cmp2.dim2 .kpi-cmp-actual2 b { font-size: 20px; }
   .kpi-legend2 { font-size: 11px; color: #9a9a9e; margin: 0 0 18px; }
   .kpi-legend2 .ok2 { color: #5aa9ff; font-weight: 700; }
   .kpi-legend2 .ng2 { color: #ff6b6b; font-weight: 700; }
@@ -180,7 +174,17 @@
   .kpi-part-table2 td.lft2 { font-family: 'Noto Sans KR', sans-serif; font-size: 12px; font-weight: 500; }
   .kpi-part-table2 tr.annual2 td { background: rgba(255,255,255,0.06); color: #ffffff; font-size: 18px; }
   .kpi-part-table2 tr.annual2 td.lft2 { font-size: 12px; font-weight: 700; }
-  .kpi-part-table2 tr.annual2 + tr td, .kpi-part-table2 tbody tr:first-child td { border-top-color: rgba(255,255,255,0.22); }
+  /* 상·하반기 표(전체 보기): 회색 기본 + 실적 열만 흰색 굵게 */
+  .kpi-half2 { margin-bottom: 20px; }
+  .kpi-part-table2 td.act2 { color: #ffffff; font-weight: 700; }
+  /* 상세보기: 열을 STRETCH 묶음 | BASE 묶음으로 나누고 2단 헤더 + 굵은 경계선 + STRETCH 영역 옅은 배경 */
+  .kpi-part-table2 thead th.grp2 { text-align: center; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.14em; border-top-width: 3px; }
+  .kpi-part-table2 thead th.grp-s2 { color: #ffffff; border-top-color: #ffffff; background: rgba(255,255,255,0.10); }
+  .kpi-part-table2 thead th.grp-b2 { color: #b9b9bc; border-top-color: rgba(255,255,255,0.45); }
+  .kpi-part-table2 .s2 { background: rgba(255,255,255,0.05); }
+  .kpi-part-table2 thead th.s2 { color: #e6e6e8; background: rgba(255,255,255,0.08); }
+  .kpi-part-table2 tr.annual2 td.s2 { background: rgba(255,255,255,0.11); }
+  .kpi-part-table2 .bstart2 { border-left: 3px solid rgba(255,255,255,0.55); }
   .kpi-head-actions2 { display: inline-flex; align-items: center; gap: 10px; }
   @media (max-width: 560px) {
     #kpiSlot .kpi-hero2 { grid-template-columns: minmax(0, 1fr); }
@@ -710,18 +714,16 @@
       'S = STRETCH · B = BASE 목표 기준 · <span class="ok2">파랑</span> 달성 / <span class="ng2">빨강</span> 미달 · 잔여 KPI의 +는 목표 초과 달성분 · 연간 외 수치는 회색');
   }
 
-  // 전체 보기용 Stretch/Base 비교표 블록. rows: [{basis:'STRETCH'|'BASE', goal, ach, remain}]
-  // (값은 이미 화면용 문자열/색으로 가공된 상태). opts.dim이면 연간 외 데이터 — 전부 회색, 상태색 없음.
-  // opts.showRemain=false면 잔여 KPI 열 생략(하반기는 시트에 잔여 열이 없으므로).
-  function kpiCompareBlock(title, actualText, rows, opts) {
-    const o = opts || {};
-    const block = el("div", "kpi-cmp2" + (o.dim ? " dim2" : ""));
+  // 전체 보기용 연간 Stretch/Base 비교표 블록. rows: [{basis:'STRETCH'|'BASE', goal, ach, remain}]
+  // (값은 이미 화면용 문자열/색으로 가공된 상태).
+  function kpiCompareBlock(title, actualText, rows) {
+    const block = el("div", "kpi-cmp2");
     const head = el("div", "kpi-cmp-head2");
     head.appendChild(elText("p", "kpi-block-kicker2", title));
     head.appendChild(el("span", "kpi-cmp-actual2", "실적<b>" + actualText + "</b>억원"));
     block.appendChild(head);
     const table = el("table", "kpi-cmp-table2");
-    const cols = ["목표", "달성률"].concat(o.showRemain === false ? [] : ["잔여 KPI"]);
+    const cols = ["목표", "달성률", "잔여 KPI"];
     const thead = el("thead", null), htr = el("tr", null);
     htr.appendChild(elText("th", null, "기준"));
     cols.forEach(c => htr.appendChild(elText("th", null, c)));
@@ -735,12 +737,12 @@
         const td = el("td", null);
         td.appendChild(document.createTextNode(v.num));
         if (v.unit) td.appendChild(elText("span", "unit2", v.unit));
-        if (v.color && !o.dim) td.style.color = v.color;
+        if (v.color) td.style.color = v.color;
         tr.appendChild(td);
       };
       cell(r.goal);
       cell(r.ach);
-      if (o.showRemain !== false) cell(r.remain);
+      cell(r.remain);
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
@@ -748,11 +750,51 @@
     return block;
   }
 
-  function kpiHeroBody(annualBlock, h2Block, chartPoints, showLegend) {
+  // 전체 보기 하단 상·하반기 표: 구분 | 목표(S) | 목표(B) | 실적 | 달성률(S) | 달성률(B).
+  // 연간 외 데이터라 기본은 회색, 실적 열만 흰색 굵게(요청). 목표가 없는 기준 열은 생략(구양식 주차).
+  // periods: [{name, p}] (p = kpiPeriod 결과 또는 null — null이면 "–" 행).
+  function kpiHalvesBlock(periods, placeholder) {
+    const shown = periods.filter(x => x.p);
+    const hasS = placeholder || shown.some(x => x.p.goal != null);
+    const hasB = placeholder || shown.some(x => x.p.goalBase != null);
+    const block = el("div", "kpi-half2");
+    block.appendChild(elText("p", "kpi-block-kicker2", "상·하반기"));
+    const table = el("table", "kpi-part-table2");
+    const heads = [["구분", "lft2"]];
+    if (hasS) heads.push(["목표(S)"]);
+    if (hasB) heads.push(["목표(B)"]);
+    heads.push(["실적"]);
+    if (hasS) heads.push(["달성률(S)"]);
+    if (hasB) heads.push(["달성률(B)"]);
+    const thead = el("thead", null), htr = el("tr", null);
+    heads.forEach(([h, cls]) => htr.appendChild(elText("th", cls || null, h)));
+    thead.appendChild(htr);
+    table.appendChild(thead);
+    const tbody = el("tbody", null);
+    periods.forEach(({ name, p }) => {
+      const tr = el("tr", null);
+      const cell = (text, cls) => tr.appendChild(elText("td", cls || null, text));
+      const v = (x, f) => placeholder ? "00" : (p && x != null ? f(x) : "–");
+      cell(name, "lft2");
+      if (hasS) cell(v(p && p.goal, x => fmtAmt(x) + "억"));
+      if (hasB) cell(v(p && p.goalBase, x => fmtAmt(x) + "억"));
+      cell(v(p && p.actual, x => fmtAmt(x) + "억"), "act2");
+      if (hasS) cell(v(p && p.ach, x => fmtAch(x) + "%"));
+      if (hasB) cell(v(p && p.achBase, x => fmtAch(x) + "%"));
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    const wrap = el("div", "kpi-part-table-wrap2");
+    wrap.appendChild(table);
+    block.appendChild(wrap);
+    return block;
+  }
+
+  function kpiHeroBody(annualBlock, halvesBlock, chartPoints, showLegend) {
     const body = el("div", "kpi-hero2");
     const left = el("div", null);
     left.appendChild(annualBlock);
-    if (h2Block) left.appendChild(h2Block);
+    if (halvesBlock) left.appendChild(halvesBlock);
     if (showLegend) left.appendChild(kpiLegend());
     body.appendChild(left);
 
@@ -780,7 +822,7 @@
     const row = basis => ({ basis, goal: { num: "00", unit: "억원", color: grey }, ach: { num: "00%", color: grey }, remain: { num: "00", unit: "억원", color: grey } });
     card.appendChild(kpiHeroBody(
       kpiCompareBlock("2026년 전체", "00", [row("STRETCH"), row("BASE")]),
-      kpiCompareBlock("하반기", "00", [row("STRETCH"), row("BASE")], { dim: true, showRemain: false }),
+      kpiHalvesBlock([{ name: "상반기", p: null }, { name: "하반기", p: null }], true),
       demo, true,
     ));
     return card;
@@ -872,17 +914,24 @@
     const hasB = flat.some(p => p.goalBase != null);
 
     const table = el("table", "kpi-part-table2");
-    const heads = [["파트", "lft2"], ["구분", "lft2"]];
-    if (hasS) heads.push(["목표(S)"]);
-    if (hasB) heads.push(["목표(B)"]);
-    heads.push(["실적"]);
-    if (hasS) heads.push(["달성률(S)"]);
-    if (hasB) heads.push(["달성률(B)"]);
-    if (hasS) heads.push(["잔여 KPI(S)"]);
-    if (hasB) heads.push(["잔여 KPI(B)"]);
-    const thead = el("thead", null), htr = el("tr", null);
-    heads.forEach(([h, cls]) => htr.appendChild(elText("th", cls || null, h)));
-    thead.appendChild(htr);
+    // 2단 헤더: 1행 = 파트·구분·실적(2행 병합) + STRETCH/BASE 그룹, 2행 = 그룹별 목표·달성률·잔여 KPI.
+    const groups = [];
+    if (hasS) groups.push({ basis: "STRETCH", cls: "s2", grp: "grp-s2", goal: "goal", ach: "ach" });
+    if (hasB) groups.push({ basis: "BASE", cls: "b2", grp: "grp-b2", goal: "goalBase", ach: "achBase" });
+    const thead = el("thead", null), tr1 = el("tr", null), tr2 = el("tr", null);
+    [["파트", "lft2"], ["구분", "lft2"], ["실적", null]].forEach(([h, cls]) => {
+      const th = elText("th", cls, h); th.rowSpan = 2; tr1.appendChild(th);
+    });
+    groups.forEach((g, gi) => {
+      const th = elText("th", "grp2 " + g.grp + (gi > 0 ? " bstart2" : ""), g.basis);
+      th.colSpan = 3;
+      tr1.appendChild(th);
+      ["목표", "달성률", "잔여 KPI"].forEach((h, hi) => {
+        tr2.appendChild(elText("th", g.cls + (gi > 0 && hi === 0 ? " bstart2" : ""), h));
+      });
+    });
+    thead.appendChild(tr1);
+    thead.appendChild(tr2);
     table.appendChild(thead);
 
     const tbody = el("tbody", null);
@@ -900,15 +949,16 @@
           if (color && isAnnual) td.style.color = color;
           tr.appendChild(td);
         };
-        const remainTxt = goal => { if (!isAnnual || goal == null) return "–"; const r = remainParts(goal, p.actual); return r.num + "억"; };
         cell(row.name, null, "lft2");
-        if (hasS) cell(p.goal != null ? fmtAmt(p.goal) + "억" : "–");
-        if (hasB) cell(p.goalBase != null ? fmtAmt(p.goalBase) + "억" : "–");
         cell(fmtAmt(p.actual) + "억");
-        if (hasS) cell(p.ach != null ? fmtAch(p.ach) + "%" : "–", p.ach != null ? achColorOf(p.ach) : null);
-        if (hasB) cell(p.achBase != null ? fmtAch(p.achBase) + "%" : "–", p.achBase != null ? achColorOf(p.achBase) : null);
-        if (hasS) cell(remainTxt(p.goal), p.ach != null ? achColorOf(p.ach) : null);
-        if (hasB) cell(remainTxt(p.goalBase), p.achBase != null ? achColorOf(p.achBase) : null);
+        groups.forEach((g, gi) => {
+          const goal = p[g.goal], ach = p[g.ach];
+          const color = ach != null ? achColorOf(ach) : null;
+          const first = g.cls + (gi > 0 ? " bstart2" : "");
+          cell(goal != null ? fmtAmt(goal) + "억" : "–", null, first);
+          cell(ach != null ? fmtAch(ach) + "%" : "–", color, g.cls);
+          cell(isAnnual && goal != null ? remainParts(goal, p.actual).num + "억" : "–", color, g.cls);
+        });
         tbody.appendChild(tr);
       });
     });
@@ -955,9 +1005,12 @@
     } else {
       const trendPoints = buildKpiTrendPoints(key);
       const annualBlock = kpiCompareBlock("2026년 전체", String(fmtAmt(annual.actual)), sbRows(annual));
-      const h2 = kpiPeriod(status.h2, KPI_GOAL.h2Goal);
-      const h2Block = h2 ? kpiCompareBlock("하반기", String(fmtAmt(h2.actual)), sbRows(h2), { dim: true, showRemain: false }) : null;
-      card.appendChild(kpiHeroBody(annualBlock, h2Block, trendPoints, true));
+      const halves = [
+        { name: "상반기", p: kpiPeriod(status.h1, null) },
+        { name: "하반기", p: kpiPeriod(status.h2, KPI_GOAL.h2Goal) },
+      ];
+      const halvesBlock = halves.some(x => x.p) ? kpiHalvesBlock(halves) : null;
+      card.appendChild(kpiHeroBody(annualBlock, halvesBlock, trendPoints, true));
     }
     slotEl.innerHTML = "";
     slotEl.appendChild(card);
