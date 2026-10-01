@@ -156,7 +156,7 @@
   .kpi-cmp-table2 thead th:first-child { width: 24%; }
   .kpi-cmp-table2 tbody th { text-align: left; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.12em; border-left-width: 4px; }
   .kpi-cmp-table2 tbody th.stretch2 { color: #ffffff; border-left-color: #ffffff; }
-  .kpi-cmp-table2 tbody th.base2 { color: #b9b9bc; border-left-color: rgba(255,255,255,0.45); }
+  .kpi-cmp-table2 tbody th.base2 { color: #d9ab5a; border-left-color: #d9ab5a; }
   .kpi-cmp-table2 tbody td { font-family: 'Barlow Condensed', sans-serif; font-size: 24px; font-weight: 600; line-height: 1.1; color: #ffffff; }
   .kpi-cmp-table2 tbody td .unit2 { font-family: 'Noto Sans KR', sans-serif; font-size: 11px; font-weight: 500; margin-left: 2px; }
   .kpi-cmp-table2 tbody tr + tr { border-top: 1px dashed rgba(255,255,255,0.3); }
@@ -177,14 +177,11 @@
   /* 상·하반기 표(전체 보기): 회색 기본 + 실적 열만 흰색 굵게 */
   .kpi-half2 { margin-bottom: 20px; }
   .kpi-part-table2 td.act2 { color: #ffffff; font-weight: 700; }
-  /* 상세보기: 열을 STRETCH 묶음 | BASE 묶음으로 나누고 2단 헤더 + 굵은 경계선 + STRETCH 영역 옅은 배경 */
-  .kpi-part-table2 thead th.grp2 { text-align: center; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.14em; border-top-width: 3px; }
-  .kpi-part-table2 thead th.grp-s2 { color: #ffffff; border-top-color: #ffffff; background: rgba(255,255,255,0.10); }
-  .kpi-part-table2 thead th.grp-b2 { color: #b9b9bc; border-top-color: rgba(255,255,255,0.45); }
-  .kpi-part-table2 .s2 { background: rgba(255,255,255,0.05); }
-  .kpi-part-table2 thead th.s2 { color: #e6e6e8; background: rgba(255,255,255,0.08); }
-  .kpi-part-table2 tr.annual2 td.s2 { background: rgba(255,255,255,0.11); }
-  .kpi-part-table2 .bstart2 { border-left: 3px solid rgba(255,255,255,0.55); }
+  /* 상세보기: 열을 STRETCH 묶음 | BASE 묶음으로 나눈 2단 헤더. 본문 셀은 S/B 구분 없이 같은 색으로 두고,
+     상단 그룹 제목 셀만 채움색으로 구분(STRETCH 흰색 / BASE 앰버 — 상태색 파랑·빨강과 겹치지 않게). */
+  .kpi-part-table2 thead th.grp2 { text-align: center; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.14em; color: #1d1f20; }
+  .kpi-part-table2 thead th.grp-s2 { background: #e6e6e8; }
+  .kpi-part-table2 thead th.grp-b2 { background: #d9ab5a; }
   .kpi-head-actions2 { display: inline-flex; align-items: center; gap: 10px; }
   @media (max-width: 560px) {
     #kpiSlot .kpi-hero2 { grid-template-columns: minmax(0, 1fr); }
@@ -910,19 +907,17 @@
     const table = el("table", "kpi-part-table2");
     // 2단 헤더: 1행 = 파트·구분·실적(2행 병합) + STRETCH/BASE 그룹, 2행 = 그룹별 목표·달성률·잔여 KPI.
     const groups = [];
-    if (hasS) groups.push({ basis: "STRETCH", cls: "s2", grp: "grp-s2", goal: "goal", ach: "ach" });
-    if (hasB) groups.push({ basis: "BASE", cls: "b2", grp: "grp-b2", goal: "goalBase", ach: "achBase" });
+    if (hasS) groups.push({ basis: "STRETCH", grp: "grp-s2", goal: "goal", ach: "ach" });
+    if (hasB) groups.push({ basis: "BASE", grp: "grp-b2", goal: "goalBase", ach: "achBase" });
     const thead = el("thead", null), tr1 = el("tr", null), tr2 = el("tr", null);
     [["파트", "lft2"], ["구분", "lft2"], ["실적", null]].forEach(([h, cls]) => {
       const th = elText("th", cls, h); th.rowSpan = 2; tr1.appendChild(th);
     });
-    groups.forEach((g, gi) => {
-      const th = elText("th", "grp2 " + g.grp + (gi > 0 ? " bstart2" : ""), g.basis);
+    groups.forEach(g => {
+      const th = elText("th", "grp2 " + g.grp, g.basis);
       th.colSpan = 3;
       tr1.appendChild(th);
-      ["목표", "달성률", "잔여 KPI"].forEach((h, hi) => {
-        tr2.appendChild(elText("th", g.cls + (gi > 0 && hi === 0 ? " bstart2" : ""), h));
-      });
+      ["목표", "달성률", "잔여 KPI"].forEach(h => tr2.appendChild(elText("th", null, h)));
     });
     thead.appendChild(tr1);
     thead.appendChild(tr2);
@@ -945,13 +940,12 @@
         };
         cell(row.name, null, "lft2");
         cell(fmtAmt(p.actual) + "억");
-        groups.forEach((g, gi) => {
+        groups.forEach(g => {
           const goal = p[g.goal], ach = p[g.ach];
           const color = ach != null ? achColorOf(ach) : null;
-          const first = g.cls + (gi > 0 ? " bstart2" : "");
-          cell(goal != null ? fmtAmt(goal) + "억" : "–", null, first);
-          cell(ach != null ? fmtAch(ach) + "%" : "–", color, g.cls);
-          cell(isAnnual && goal != null ? remainParts(goal, p.actual).num + "억" : "–", color, g.cls);
+          cell(goal != null ? fmtAmt(goal) + "억" : "–");
+          cell(ach != null ? fmtAch(ach) + "%" : "–", color);
+          cell(isAnnual && goal != null ? remainParts(goal, p.actual).num + "억" : "–", color);
         });
         tbody.appendChild(tr);
       });
