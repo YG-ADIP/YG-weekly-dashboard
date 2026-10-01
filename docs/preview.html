@@ -142,6 +142,30 @@
   .tile.tile-sm .tile-label { margin-bottom: 3px; }
   .kpi-block-kicker2 { font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #9a9a9e; margin: 0 0 8px; }
 
+  /* ---- KPI Stretch(S)/Base(B) 병기 타일 + 파트별 상세보기 ---- */
+  .tile-dual .tile-line { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+  .tile-dual .tile-line + .tile-line { margin-top: 3px; }
+  .tile-dual .tile-line .tile-value { font-size: 22px; }
+  .tile-dual .tile-line.base2 .tile-value { font-size: 17px; }
+  .tile-tag2 { flex-shrink: 0; font-family: 'Barlow Condensed', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; line-height: 1; padding: 2px 4px; border: 1px solid rgba(255,255,255,0.35); color: #b9b9bc; }
+  .kpi-legend2 { font-size: 11px; color: #9a9a9e; margin: -10px 0 18px; }
+  .kpi-part-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 32px; align-items: start; }
+  .kpi-part-table-wrap2 { overflow-x: auto; }
+  /* 모바일: S/B 두 줄 타일이 4칸에 안 들어가므로 KPI 카드 안에서만 2칸으로 접음 */
+  @media (max-width: 560px) {
+    #kpiSlot .kpi-hero2 { grid-template-columns: minmax(0, 1fr); }
+    #kpiSlot .tile-grid-4, #kpiSlot .tile-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .kpi-part-table2 th, .kpi-part-table2 td { padding: 5px 4px; font-size: 11px; }
+    .kpi-part-table2 td { font-size: 13px; }
+  }
+  .kpi-part-table2 { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .kpi-part-table2 th, .kpi-part-table2 td { padding: 6px 8px; border: 1px solid rgba(255,255,255,0.22); text-align: right; white-space: nowrap; }
+  .kpi-part-table2 th { font-weight: 600; color: #b9b9bc; background: rgba(255,255,255,0.05); }
+  .kpi-part-table2 th:first-child, .kpi-part-table2 td:first-child { text-align: left; }
+  .kpi-part-table2 td { font-family: 'Barlow Condensed', 'Noto Sans KR', sans-serif; font-size: 15px; font-weight: 600; }
+  .kpi-part-table2 td:first-child { font-family: 'Noto Sans KR', sans-serif; font-size: 12px; font-weight: 500; color: #b9b9bc; }
+  .kpi-head-actions2 { display: inline-flex; align-items: center; gap: 10px; }
+
   /* ---- KPI 히어로 + 스파크라인 ---- */
   .kpi-hero2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 32px; align-items: start; }
   .spark-head2 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
@@ -477,6 +501,9 @@
   function numOr0(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : n; }
   function fmtAmt(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : Math.round(n * 100) / 100; }
   function fmtPct(n) { return (n === null || n === undefined || isNaN(n)) ? 0 : Math.round(n); }
+  // KPI 달성률 전용: 소수점 한 자리(시트 표기와 동일). 정수 반올림하면 99.6%가 "100%"로 보여
+  // 미달인데 달성한 것처럼 읽히는 문제가 있어서 KPI 카드만 이 함수를 쓴다.
+  function fmtAch(n) { return (n === null || n === undefined || isNaN(n)) ? "0.0" : n.toFixed(1); }
 
   // ---- 비밀번호 게이트 + 데이터 레이어 ----
   function storedPw() { try { return sessionStorage.getItem("dashPw") || ""; } catch { return ""; } }
@@ -558,28 +585,58 @@
     return section;
   }
 
-  function kpiHeader(badgeText) {
+  // 상세보기(파트별 KPI 현황) 토글 상태 — 주차 토글을 바꿔도 보고 있던 뷰를 유지하려고 전역으로 둠.
+  let kpiDetailView = false;
+  let kpiCurrentKey = null;
+
+  // opts.onToggle이 있으면 "상세보기 ↔ 전체 보기" 토글 버튼을 붙임(그 주차 시트에 파트별 표가
+  // 있을 때만). 예전 "상세보기 ↗"(원본 시트 링크)는 이 토글과 이름이 겹쳐서 "원본 시트 ↗"로 변경.
+  function kpiHeader(badgeText, opts) {
     const card = sectionShell(true);
+    const actions = el("span", "kpi-head-actions2");
+    if (opts && opts.onToggle) {
+      const toggleBtn = document.createElement("button");
+      toggleBtn.type = "button";
+      toggleBtn.className = "btn-outline-toggle2";
+      toggleBtn.textContent = kpiDetailView ? "전체 보기" : "상세보기";
+      toggleBtn.addEventListener("click", opts.onToggle);
+      actions.appendChild(toggleBtn);
+    }
     const rawLink = document.createElement("a");
     rawLink.className = "link-detail2";
     rawLink.href = KPI_RAW_URL;
     rawLink.target = "_blank";
     rawLink.rel = "noopener noreferrer";
-    rawLink.textContent = "상세보기 ↗";
-    card.appendChild(sectionHead("01", "2026 KPI 현황", true, badgeText, rawLink));
+    rawLink.textContent = "원본 시트 ↗";
+    actions.appendChild(rawLink);
+    card.appendChild(sectionHead("01", "2026 KPI 현황", true, badgeText, actions));
     return card;
   }
 
+  // 타일 하나에 값이 하나면 t.num/t.unit, Stretch/Base 두 줄이면 t.lines([{tag,num,unit,color}])로 넘김.
   function tileGrid(gridCls, tiles, small) {
     const grid = el("div", gridCls);
     tiles.forEach(t => {
-      const tile = el("div", "tile" + (small ? " tile-sm" : ""));
+      const tile = el("div", "tile" + (small ? " tile-sm" : "") + (t.lines ? " tile-dual" : ""));
       tile.appendChild(elText("div", "tile-label", t.label));
-      const val = el("div", "tile-value");
-      val.style.color = t.color || "#ffffff";
-      val.appendChild(document.createTextNode(t.num));
-      if (t.unit) val.appendChild(elText("span", "unit2", t.unit));
-      tile.appendChild(val);
+      if (t.lines) {
+        t.lines.forEach(ln => {
+          const row = el("div", "tile-line" + (ln.tag === "B" ? " base2" : ""));
+          if (ln.tag) row.appendChild(elText("span", "tile-tag2", ln.tag));
+          const val = el("span", "tile-value");
+          val.style.color = ln.color || "#ffffff";
+          val.appendChild(document.createTextNode(ln.num));
+          if (ln.unit) val.appendChild(elText("span", "unit2", ln.unit));
+          row.appendChild(val);
+          tile.appendChild(row);
+        });
+      } else {
+        const val = el("div", "tile-value");
+        val.style.color = t.color || "#ffffff";
+        val.appendChild(document.createTextNode(t.num));
+        if (t.unit) val.appendChild(elText("span", "unit2", t.unit));
+        tile.appendChild(val);
+      }
       grid.appendChild(tile);
     });
     return grid;
@@ -620,7 +677,7 @@
       const xp = (coords[i][0] / W) * 100;
       const badgeShift = i === 0 ? "translate(0, -100%)" : i === n - 1 ? "translate(-100%, -100%)" : "translate(-50%, -100%)";
       const labelShift = i === 0 ? "translateX(0)" : i === n - 1 ? "translateX(-100%)" : "translateX(-50%)";
-      const badge = elText("span", "spark-badge2", fmtPct(p.actual * 100) + "%");
+      const badge = elText("span", "spark-badge2", fmtAch(p.actual * 100) + "%");
       badge.style.left = xp.toFixed(2) + "%";
       badge.style.top = (((coords[i][1] - 8) / H) * 100).toFixed(2) + "%";
       badge.style.transform = badgeShift;
@@ -634,11 +691,14 @@
     return wrap;
   }
 
-  function kpiHeroBody(annualTiles, h2Tiles, chartPoints) {
+  const KPI_LEGEND_TEXT = "S = Stretch 목표 · B = Base 목표 · 잔여 KPI의 +는 목표 초과 달성분";
+
+  function kpiHeroBody(annualTiles, h2Tiles, chartPoints, showLegend) {
     const body = el("div", "kpi-hero2");
     const left = el("div", null);
     left.appendChild(elText("p", "kpi-block-kicker2", "2026년 전체"));
     left.appendChild(tileGrid("tile-grid-4", annualTiles));
+    if (showLegend) left.appendChild(elText("p", "kpi-legend2", KPI_LEGEND_TEXT));
     left.appendChild(elText("p", "kpi-block-kicker2", "하반기"));
     left.appendChild(tileGrid("tile-grid-3", h2Tiles));
     body.appendChild(left);
@@ -663,43 +723,70 @@
   function renderKpiPlaceholder() {
     const card = kpiHeader("예시");
     const demo = [0.1, 0.14, 0.2, 0.25, 0.28, 0.3, 0.32, 0.34].map((v, i) => ({ actual: v, label: (i + 1) + "주" }));
+    const grey = "#b9b9bc";
+    const dual = (num, unit) => [{ tag: "S", num, unit, color: grey }, { tag: "B", num, unit, color: grey }];
     card.appendChild(kpiHeroBody(
       [
-        { label: "2026 KPI 목표", num: "00", unit: "억원", color: "#b9b9bc" },
-        { label: "실적", num: "00", unit: "억원", color: "#b9b9bc" },
-        { label: "달성률", num: "00%", unit: "", color: "#b9b9bc" },
-        { label: "잔여 KPI", num: "00", unit: "억원", color: "#b9b9bc" },
+        { label: "2026 KPI 목표", lines: dual("00", "억원") },
+        { label: "실적", num: "00", unit: "억원", color: grey },
+        { label: "달성률", lines: dual("00%", "") },
+        { label: "잔여 KPI", lines: dual("00", "억원") },
       ],
       [
-        { label: "하반기 KPI 목표", num: "00", unit: "억원", color: "#b9b9bc" },
-        { label: "하반기 실적", num: "00", unit: "억원", color: "#b9b9bc" },
-        { label: "달성률", num: "00%", unit: "", color: "#b9b9bc" },
+        { label: "하반기 KPI 목표", lines: dual("00", "억원") },
+        { label: "하반기 실적", num: "00", unit: "억원", color: grey },
+        { label: "달성률", lines: dual("00%", "") },
       ],
-      demo,
+      demo, true,
     ));
     return card;
   }
 
-  function formatRemainKpi(goal, actual) {
+  // 서버 응답에서 NaN은 JSON 직렬화 시 null로 바뀌어 오므로(isNaN(null) === false 함정), 숫자 여부는
+  // 항상 이 함수로 판정한다.
+  function kpiNum(v) { return (typeof v === "number" && isFinite(v)) ? v : null; }
+
+  function achColorOf(ach) { return ach >= 100 ? "#6fbf9a" : ach < 60 ? "#d9ab5a" : "#94bce3"; }
+
+  // 잔여 KPI는 시트의 "잔여" 열을 쓰지 않고 목표-실적으로 직접 계산 — 구양식(남은 금액이 양수)과
+  // 신양식(실적-목표라 남은 금액이 음수)의 부호가 반대여서, 시트값을 그대로 쓰면 주차마다 의미가 뒤집힘.
+  // 화면 표기: 남은 금액 "43.8억원", 초과 달성 "+8억원".
+  function remainParts(goal, actual) {
     const diff = goal - actual;
-    if (diff > 0) return fmtAmt(diff) + "억원";
-    if (diff < 0) return "+" + fmtAmt(Math.abs(diff)) + "억원";
-    return "0억원";
+    if (diff > 0) return { num: String(fmtAmt(diff)), unit: "억원" };
+    if (diff < 0) return { num: "+" + fmtAmt(Math.abs(diff)), unit: "억원" };
+    return { num: "0", unit: "억원" };
   }
 
-  // 목표(goal/h2Goal)는 KPI_GOAL(서버에서 받은 값) 사용, 실적(actual/h2Actual)만 status에서 사용.
-  function computeKpiFromStatus(status) {
-    if (!status.annual || isNaN(status.annual.actual)) return null;
-    const goal = KPI_GOAL.goal, h2Goal = KPI_GOAL.h2Goal;
-    const actual = status.annual.actual;
-    const h2Actual = status.h2 && !isNaN(status.h2.actual) ? status.h2.actual : null;
+  // 한 기간(연간/상반기/하반기) 레코드 → 화면용 수치. 목표는 그 주차 시트에 적힌 값을 우선 쓰고,
+  // 없을 때만 fallbackGoal(최신 시트 기준 KPI_GOAL)로 대체. Base는 그 주차 시트에 Base 열이 있을 때만
+  // 표시(구양식 주차에 최신 Base 목표를 끼워 넣으면 그때 없던 기준이 섞여 보이므로).
+  function kpiPeriod(rec, fallbackGoal) {
+    if (!rec) return null;
+    const actual = kpiNum(rec.actual);
+    if (actual == null) return null;
+    const goal = kpiNum(rec.goal) != null ? rec.goal : kpiNum(fallbackGoal);
+    const goalBase = kpiNum(rec.goalBase);
     return {
-      goal, actual,
-      ach: (actual / goal) * 100,
-      remainLabel: formatRemainKpi(goal, actual),
-      h2Goal, h2Actual,
-      h2Ach: h2Actual != null ? (h2Actual / h2Goal) * 100 : null,
+      actual, goal, goalBase,
+      ach: goal ? (actual / goal) * 100 : null,
+      achBase: goalBase ? (actual / goalBase) * 100 : null,
     };
+  }
+
+  // S/B 각 줄을 값이 있는 것만 만들어 타일 lines로 반환(Base가 없는 구양식 주차는 S 한 줄만).
+  function sbLines(p, kind) {
+    const lines = [];
+    const add = (tag, goal, ach) => {
+      if (goal == null) return;
+      if (kind === "goal") lines.push({ tag, num: String(fmtAmt(goal)), unit: "억원" });
+      else if (kind === "ach") lines.push({ tag, num: fmtAch(ach) + "%", unit: "", color: achColorOf(ach) });
+      else if (kind === "remain") { const r = remainParts(goal, p.actual); lines.push({ tag, num: r.num, unit: r.unit, color: "#94bce3" }); }
+    };
+    add("S", p.goal, p.ach);
+    add("B", p.goalBase, p.achBase);
+    if (lines.length === 1 && p.goalBase == null) lines[0].tag = null; // 구양식: S 표시 없이 예전처럼 한 줄
+    return lines.length ? lines : [{ tag: null, num: "-", unit: "", color: "#b9b9bc" }];
   }
 
   // 주차가 쌓일수록(연말엔 20주 넘음) 스파크라인 한 줄에 점이 다 안 들어가고 %뱃지/라벨이
@@ -723,7 +810,74 @@
     return points.slice(-TREND_WINDOW_WEEKS);
   }
 
+  function toggleKpiDetail() {
+    kpiDetailView = !kpiDetailView;
+    if (kpiCurrentKey) loadKpiForWeek(kpiCurrentKey);
+  }
+
+  // 상세보기: "1-1 파트별 2026 KPI 현황" 표(광고/IP) — 파트마다 연간 4타일(목표/실적/달성률/잔여,
+  // S·B 병기) + 상·하반기 표.
+  function kpiPartsBody(parts) {
+    const grid = el("div", "kpi-part-grid2");
+    parts.forEach(part => {
+      const col = el("div", null);
+      col.appendChild(elText("p", "kpi-block-kicker2", part.name + " 파트 · 연간"));
+      const annual = kpiPeriod(part.annual, null);
+      if (annual) {
+        col.appendChild(tileGrid("tile-grid-4", [
+          { label: "목표", lines: sbLines(annual, "goal") },
+          { label: "실적", num: String(fmtAmt(annual.actual)), unit: "억원", color: "#ffffff" },
+          { label: "달성률", lines: sbLines(annual, "ach") },
+          { label: "잔여 KPI", lines: sbLines(annual, "remain") },
+        ]));
+      } else {
+        col.appendChild(elText("p", "state-msg2", "연간 실적이 아직 입력되지 않았어요."));
+      }
+      const halves = [["상반기", part.h1], ["하반기", part.h2]]
+        .map(([name, rec]) => [name, kpiPeriod(rec, null)])
+        .filter(([, p]) => p);
+      if (halves.length) {
+        const hasS = halves.some(([, p]) => p.goal != null);
+        const hasB = halves.some(([, p]) => p.goalBase != null);
+        const table = el("table", "kpi-part-table2");
+        const heads = ["구분"];
+        if (hasS) heads.push("목표(S)");
+        if (hasB) heads.push("목표(B)");
+        heads.push("실적");
+        if (hasS) heads.push("달성률(S)");
+        if (hasB) heads.push("달성률(B)");
+        const thead = el("thead", null), htr = el("tr", null);
+        heads.forEach(h => htr.appendChild(elText("th", null, h)));
+        thead.appendChild(htr);
+        table.appendChild(thead);
+        const tbody = el("tbody", null);
+        halves.forEach(([name, p]) => {
+          const tr = el("tr", null);
+          const cell = (text, color) => { const td = elText("td", null, text); if (color) td.style.color = color; tr.appendChild(td); };
+          cell(name);
+          if (hasS) cell(p.goal != null ? fmtAmt(p.goal) + "억" : "-");
+          if (hasB) cell(p.goalBase != null ? fmtAmt(p.goalBase) + "억" : "-");
+          cell(fmtAmt(p.actual) + "억");
+          if (hasS) cell(p.ach != null ? fmtAch(p.ach) + "%" : "-", p.ach != null ? achColorOf(p.ach) : null);
+          if (hasB) cell(p.achBase != null ? fmtAch(p.achBase) + "%" : "-", p.achBase != null ? achColorOf(p.achBase) : null);
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        const tableWrap = el("div", "kpi-part-table-wrap2");
+        tableWrap.appendChild(table);
+        col.appendChild(tableWrap);
+      }
+      grid.appendChild(col);
+    });
+    const wrap = el("div", null);
+    wrap.appendChild(grid);
+    wrap.appendChild(elText("p", "kpi-legend2", KPI_LEGEND_TEXT));
+    wrap.lastChild.style.margin = "14px 0 0";
+    return wrap;
+  }
+
   function loadKpiForWeek(key) {
+    kpiCurrentKey = key;
     const entry = sectionCache.kpi && sectionCache.kpi.byWeek[key];
     const label = weekLabel(entry, key);
     const slotEl = document.getElementById("kpiSlot");
@@ -735,35 +889,39 @@
       slotEl.appendChild(card);
       return;
     }
-    const computed = computeKpiFromStatus(status);
-    if (!computed) {
+    const annual = kpiPeriod(status.annual, KPI_GOAL.goal);
+    if (!annual) {
       slotEl.innerHTML = "";
       const card = kpiHeader(label);
       card.appendChild(elText("p", "state-msg2", "이 주차엔 아직 실적이 입력되지 않았어요."));
       slotEl.appendChild(card);
       return;
     }
-    const trendPoints = buildKpiTrendPoints(key);
-    const achColor = computed.ach >= 100 ? "#6fbf9a" : computed.ach < 60 ? "#d9ab5a" : "#94bce3";
-    const annualTiles = [
-      { label: "2026 KPI 목표", num: fmtAmt(computed.goal), unit: "억원", color: "#ffffff" },
-      { label: "실적", num: fmtAmt(computed.actual), unit: "억원", color: "#ffffff" },
-      { label: "달성률", num: computed.ach.toFixed(0) + "%", unit: "", color: achColor },
-      { label: "잔여 KPI", num: computed.remainLabel, unit: "", color: "#94bce3" },
-    ];
-    let h2Tiles;
-    if (computed.h2Actual != null) {
-      const h2Color = computed.h2Ach >= 100 ? "#6fbf9a" : computed.h2Ach < 60 ? "#d9ab5a" : "#94bce3";
-      h2Tiles = [
-        { label: "하반기 KPI 목표", num: fmtAmt(computed.h2Goal), unit: "억원", color: "#ffffff" },
-        { label: "하반기 실적", num: fmtAmt(computed.h2Actual), unit: "억원", color: "#ffffff" },
-        { label: "달성률", num: computed.h2Ach.toFixed(0) + "%", unit: "", color: h2Color },
-      ];
+    const parts = Array.isArray(status.parts) ? status.parts : [];
+    const headerOpts = parts.length ? { onToggle: toggleKpiDetail } : null;
+    const showDetail = kpiDetailView && parts.length > 0;
+    const card = kpiHeader(label, headerOpts);
+
+    if (showDetail) {
+      card.appendChild(kpiPartsBody(parts));
     } else {
-      h2Tiles = [{ label: "하반기 실적", num: "-", unit: "", color: "#b9b9bc" }];
+      const trendPoints = buildKpiTrendPoints(key);
+      const annualTiles = [
+        { label: "2026 KPI 목표", lines: sbLines(annual, "goal") },
+        { label: "실적", num: String(fmtAmt(annual.actual)), unit: "억원", color: "#ffffff" },
+        { label: "달성률", lines: sbLines(annual, "ach") },
+        { label: "잔여 KPI", lines: sbLines(annual, "remain") },
+      ];
+      const h2 = kpiPeriod(status.h2, KPI_GOAL.h2Goal);
+      const h2Tiles = h2
+        ? [
+          { label: "하반기 KPI 목표", lines: sbLines(h2, "goal") },
+          { label: "하반기 실적", num: String(fmtAmt(h2.actual)), unit: "억원", color: "#ffffff" },
+          { label: "달성률", lines: sbLines(h2, "ach") },
+        ]
+        : [{ label: "하반기 실적", num: "-", unit: "", color: "#b9b9bc" }];
+      card.appendChild(kpiHeroBody(annualTiles, h2Tiles, trendPoints, annual.goalBase != null));
     }
-    const card = kpiHeader(label);
-    card.appendChild(kpiHeroBody(annualTiles, h2Tiles, trendPoints));
     slotEl.innerHTML = "";
     slotEl.appendChild(card);
   }
@@ -1870,7 +2028,7 @@
     sectionCache.agenda = agendaData;
     sectionCache.trend = trendData;
     sectionCache.insight = insightData;
-    KPI_GOAL = { goal: kpiData.goal, h2Goal: kpiData.h2Goal };
+    KPI_GOAL = { goal: kpiData.goal, h2Goal: kpiData.h2Goal, goalBase: kpiData.goalBase, h2GoalBase: kpiData.h2GoalBase };
 
     // 네 섹션(KPI/AGENDA/트렌드/인사이트) 중 어느 하나라도 그 주차 시트가 있으면 토글에 포함 —
     // 월+주차 조합 키를 쓰기 때문에 다음 달 시트("SEP_1" 등)가 새로 생기면 코드 수정 없이

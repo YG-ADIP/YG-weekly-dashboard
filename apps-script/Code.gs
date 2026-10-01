@@ -148,7 +148,53 @@ function getByWeekSectionData_(folderId, extractorFn) {
 
 // ---- ① KPI 섹션 ----
 
-// 시트 안 "1. 2026 KPI 현황" 표를 읽어 {annual:{goal,actual,ach}, h2:{...}} 형태로 반환.
+// 2026-10(SEP_5)부터 시트 양식이 바뀜 — "1. 2026 KPI 현황" 표가 Stretch/Base 목표를 나란히 두는
+// "구분 | 목표(Stretch) | 목표(Base) | 실적 | 달성률(S) | 달성률(B) | 잔여 KPI(S) | 잔여 KPI(B)"
+// 구조가 됨(이전: "구분 | 목표 | 실적 | 달성률 | 잔여 KPI"). 예전처럼 열 "위치"로 읽으면 신양식에선
+// 3번째 열(목표(Base))을 실적으로 잘못 읽어 화면에 엉뚱한 숫자가 조용히 나오므로, 열은 항상 헤더
+// "이름"으로 찾는다. 신·구 양식 모두 이 매핑 하나로 처리되어 과거 주차 시트도 그대로 읽힘.
+// defaultBasis: "(S)/(B)" 표시 없이 그냥 "목표"라고만 적힌 구양식 열을 Stretch/Base 중 어디로 볼지
+// (표 제목에 "Baseline 기준"이라고 적혀 있으면 'B', 그 외는 'S').
+// 같은 행 오른쪽에 참고용 표("ZUS COFFEE/치타토 하반기 집계시" 등)가 붙어 있는 경우가 있어서,
+// 같은 이름의 열이 두 번 나오면 왼쪽(첫 번째)만 쓴다.
+function mapKpiHeader_(header, startCol, defaultBasis) {
+  var col = {};
+  var setOnce = function (k, j) { if (col[k] === undefined) col[k] = j; };
+  for (var j = startCol; j < header.length; j++) {
+    var h = String(header[j] || '').replace(/\s+/g, '');
+    if (!h) continue;
+    var basis = /\((Stretch|S)\)/i.test(h) ? 'S' : /\((Base|Baseline|B)\)/i.test(h) ? 'B' : null;
+    var b = basis || defaultBasis;
+    if (h.indexOf('목표') === 0) setOnce(b === 'B' ? 'goalBase' : 'goal', j);
+    else if (h.indexOf('실적') === 0) setOnce('actual', j);
+    else if (h.indexOf('달성률') === 0) setOnce(b === 'B' ? 'achBase' : 'ach', j);
+    else if (h.indexOf('잔여') === 0) setOnce(b === 'B' ? 'remainBase' : 'remain', j);
+  }
+  return col;
+}
+
+// 매핑된 열에서 값을 꺼내 {goal, goalBase, actual, ach, achBase, remain, remainBase}로 만듦.
+// goal/ach/remain = Stretch 기준(기존 필드명 그대로 — 운영 화면 하위 호환), *Base = Base 기준.
+// 잔여 KPI는 시트 부호 그대로 전달(신양식은 "실적-목표"라 미달이 음수) — 화면은 이 값을 쓰지 않고
+// 목표-실적으로 직접 다시 계산해 신·구 양식 부호 차이에 영향받지 않게 함.
+function readKpiRow_(row, col) {
+  var pick = function (k, pct) {
+    if (col[k] === undefined) return NaN;
+    return pct ? percentCellToPct_(row[col[k]]) : stripUnit_(row[col[k]]);
+  };
+  return {
+    goal: pick('goal'), goalBase: pick('goalBase'), actual: pick('actual'),
+    ach: pick('ach', true), achBase: pick('achBase', true),
+    remain: pick('remain'), remainBase: pick('remainBase'),
+  };
+}
+
+// "1-2", "2." 처럼 다음 섹션 번호로 시작하는 제목 행인지("2026년 전체"는 숫자로 시작해도 아님).
+function isSectionTitle_(label) {
+  return /^\d+(\.|-\d)/.test(label);
+}
+
+// 시트 안 "1. 2026 KPI 현황" 표를 읽어 {annual:{...}, h1:{...}, h2:{...}, parts:[...]} 형태로 반환.
 function extractKpiStatusFromSheet_(sheet) {
   var values = sheet.getDataRange().getValues();
   var headerIdx = -1;
@@ -158,18 +204,48 @@ function extractKpiStatusFromSheet_(sheet) {
     if (c0 === '구분' && c1.indexOf('목표') >= 0) { headerIdx = i; break; }
   }
   if (headerIdx < 0) return null;
+  var titleAbove = headerIdx > 0 ? String(values[headerIdx - 1][0] || '') : '';
+  var col = mapKpiHeader_(values[headerIdx], 1, /Baseline/i.test(titleAbove) ? 'B' : 'S');
   var out = {};
   for (var j = headerIdx + 1; j < values.length; j++) {
     var label = String(values[j][0] || '').trim();
     if (!label) continue;
-    if (/^\d+\./.test(label)) break; // 다음 섹션("2. 월별 팀 KPI PLAN") 시작
-    var goal = stripUnit_(values[j][1]), actual = stripUnit_(values[j][2]), ach = stripUnit_(values[j][3]);
-    if (isNaN(goal) && isNaN(actual)) continue;
-    if (label.indexOf('전체') >= 0) out.annual = { goal: goal, actual: actual, ach: ach };
-    else if (label.indexOf('상반기') >= 0) out.h1 = { goal: goal, actual: actual, ach: ach };
-    else if (label.indexOf('하반기') >= 0) out.h2 = { goal: goal, actual: actual, ach: ach };
+    if (isSectionTitle_(label)) break; // 다음 섹션("1-1 파트별 ..." / "2. 월별 팀 KPI PLAN") 시작
+    var rec = readKpiRow_(values[j], col);
+    if (isNaN(rec.goal) && isNaN(rec.goalBase) && isNaN(rec.actual)) continue;
+    if (label.indexOf('전체') >= 0) out.annual = rec;
+    else if (label.indexOf('상반기') >= 0) out.h1 = rec;
+    else if (label.indexOf('하반기') >= 0) out.h2 = rec;
   }
+  out.parts = extractKpiPartsFromRows_(values);
   return (out.annual || out.h2) ? out : null;
+}
+
+// "1-1 파트별 2026 KPI 현황" 표: 파트 | 구분(연간/상반기/하반기) | 목표(S) | 목표(B) | 실적 | ...
+// 파트명(광고/IP)은 그 파트의 첫 행에만 적혀 있고 아래 행은 비어 있으므로 직전 파트명을 이어 씀.
+// 반환: [{ name:'광고', annual:{...}, h1:{...}, h2:{...} }, ...] — 표가 없는 주차(SEP_1/2)는 [].
+function extractKpiPartsFromRows_(values) {
+  var headerIdx = -1;
+  for (var i = 0; i < values.length; i++) {
+    if (String(values[i][0] || '').trim() === '파트' && String(values[i][1] || '').trim() === '구분') { headerIdx = i; break; }
+  }
+  if (headerIdx < 0) return [];
+  var titleAbove = headerIdx > 0 ? String(values[headerIdx - 1][0] || '') : '';
+  var col = mapKpiHeader_(values[headerIdx], 2, /Baseline/i.test(titleAbove) ? 'B' : 'S');
+  var parts = [], cur = null;
+  for (var j = headerIdx + 1; j < values.length; j++) {
+    var name = String(values[j][0] || '').trim();
+    if (name && isSectionTitle_(name)) break;
+    var period = String(values[j][1] || '').trim();
+    if (name) { cur = { name: name, annual: null, h1: null, h2: null }; parts.push(cur); }
+    if (!cur || !period) continue;
+    var rec = readKpiRow_(values[j], col);
+    if (isNaN(rec.goal) && isNaN(rec.goalBase) && isNaN(rec.actual)) continue;
+    if (period.indexOf('연간') >= 0) cur.annual = rec;
+    else if (period.indexOf('상반기') >= 0) cur.h1 = rec;
+    else if (period.indexOf('하반기') >= 0) cur.h2 = rec;
+  }
+  return parts.filter(function (p) { return p.annual || p.h1 || p.h2; });
 }
 
 // getByWeekSectionData_와 같은 동작이지만, 폴더를 뒤져 "최근 수정 파일"을 찾는 대신 지정한
@@ -246,6 +322,12 @@ function getKpiData_() {
   var sheetH2Goal = latest && latest.h2 ? latest.h2.goal : NaN;
   base.goal = isNaN(sheetGoal) ? KPI_GOAL_ANNUAL : sheetGoal;
   base.h2Goal = isNaN(sheetH2Goal) ? KPI_GOAL_H2 : sheetH2Goal;
+  // Base 목표(2026-10 신양식부터) — 구양식 시트만 있으면 null(화면은 Base 줄을 숨김). 고정값
+  // 폴백 상수는 두지 않음(Base는 시트에만 있는 값).
+  var sheetGoalBase = latest && latest.annual ? latest.annual.goalBase : NaN;
+  var sheetH2GoalBase = latest && latest.h2 ? latest.h2.goalBase : NaN;
+  base.goalBase = isNaN(sheetGoalBase) ? null : sheetGoalBase;
+  base.h2GoalBase = isNaN(sheetH2GoalBase) ? null : sheetH2GoalBase;
   return base;
 }
 
