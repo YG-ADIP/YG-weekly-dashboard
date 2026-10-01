@@ -148,8 +148,11 @@
   .kpi-cmp2 { margin-bottom: 20px; }
   .kpi-cmp-head2 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
   .kpi-cmp-head2 .kpi-block-kicker2 { margin: 0; }
-  .kpi-cmp-actual2 { font-size: 12px; color: #b9b9bc; white-space: nowrap; }
-  .kpi-cmp-actual2 b { font-family: 'Barlow Condensed', sans-serif; font-size: 28px; font-weight: 600; color: #ffffff; margin: 0 2px 0 6px; }
+  /* 연간 실적 카드: 비교표 위 왼쪽 정렬, 밝은 면 + 흰색 좌측 막대로 첫 시선이 가도록 강조 */
+  .kpi-actual-card2 { display: inline-flex; align-items: baseline; gap: 12px; padding: 12px 20px 12px 16px; margin-bottom: 12px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.28); border-left: 4px solid #ffffff; }
+  .kpi-actual-card2 .lbl2 { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; color: #b9b9bc; }
+  .kpi-actual-card2 .num2 { font-family: 'Barlow Condensed', sans-serif; font-size: 42px; font-weight: 700; line-height: 1; color: #ffffff; }
+  .kpi-actual-card2 .unit2 { font-size: 14px; font-weight: 500; color: #ffffff; margin-left: 3px; }
   .kpi-cmp-table2 { width: 100%; border-collapse: collapse; table-layout: fixed; }
   .kpi-cmp-table2 th, .kpi-cmp-table2 td { border: 1px solid rgba(255,255,255,0.22); padding: 9px 12px; text-align: right; white-space: nowrap; }
   .kpi-cmp-table2 thead th { font-size: 11px; font-weight: 600; color: #9a9a9e; background: rgba(255,255,255,0.04); padding: 6px 12px; }
@@ -199,6 +202,8 @@
   .spark-head2 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
   .spark-legend2 { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #b9b9bc; }
   .spark-legend2 .dot3 { width: 8px; height: 8px; background: #94bce3; display: inline-block; }
+  .spark-legend2 .dot3.base3 { background: #b8a4f5; margin-left: 8px; }
+  .spark-badge2.base3 { background: #b8a4f5; }
   .spark-box2 { position: relative; border: 1px solid rgba(255,255,255,0.22); padding: 8px 6px 4px; }
   .spark-overlay2 { position: absolute; inset: 8px 6px 4px; pointer-events: none; }
   .spark-badge2 { position: absolute; background: #94bce3; color: #1d1f20; font-size: 11px; font-weight: 700; line-height: 1; padding: 3px 6px; white-space: nowrap; }
@@ -659,42 +664,62 @@
   let sparkChartUid = 0;
   // 스파크라인: SVG엔 그리드/면/선/점만 그리고, %뱃지·주차라벨은 HTML 오버레이로 얹는다
   // (SVG <text>는 리사이즈 시 폰트가 왜곡되므로 이 구조를 유지).
+  // points: [{actual(STRETCH 달성률 0~1), base(BASE 달성률, 없으면 null), label}]. BASE 선은 모든 점에
+  // base 값이 있을 때만 그림. BASE 목표가 STRETCH보다 낮아 BASE 선이 항상 위에 오므로, BASE 뱃지는
+  // 점 위 / STRETCH 뱃지는 점 아래에 붙여 두 선의 뱃지가 겹치지 않게 함.
+  const SPARK_S_COLOR = "#94bce3", SPARK_B_COLOR = "#b8a4f5";
   function sparkChart(points) {
-    const W = 520, H = 172, padX = 30, padTop = 34, baseY = 138, plotH = baseY - padTop;
+    const W = 520, H = 180, padX = 30, padTop = 30, plotBottom = 118, baseY = 146, plotH = plotBottom - padTop;
     const n = points.length;
-    const vals = points.map(p => p.actual);
+    const hasBase = points.every(p => p.base != null);
+    const vals = points.map(p => p.actual).concat(hasBase ? points.map(p => p.base) : []);
     let vMin = Math.min(...vals), vMax = Math.max(...vals);
     if (vMax - vMin < 0.03) { const m = (vMax + vMin) / 2; vMin = m - 0.015; vMax = m + 0.015; }
-    const pad = (vMax - vMin) * 0.35;
-    const dMin = Math.max(0, vMin - pad), dMax = Math.min(1, vMax + pad);
+    const pad = (vMax - vMin) * 0.2;
+    const dMin = Math.max(0, vMin - pad), dMax = vMax > 1 ? vMax + pad : Math.min(1, vMax + pad);
     const xAt = i => padX + (n === 1 ? (W - 2 * padX) / 2 : (i / (n - 1)) * (W - 2 * padX));
     const yAt = v => padTop + (1 - (Math.max(dMin, Math.min(dMax, v)) - dMin) / (dMax - dMin)) * plotH;
+    const toPath = cs => cs.map((c, i) => (i === 0 ? "M" : "L") + c[0].toFixed(1) + "," + c[1].toFixed(1)).join(" ");
     const coords = points.map((p, i) => [xAt(i), yAt(p.actual)]);
-    const line = coords.map((c, i) => (i === 0 ? "M" : "L") + c[0].toFixed(1) + "," + c[1].toFixed(1)).join(" ");
+    const bCoords = hasBase ? points.map((p, i) => [xAt(i), yAt(p.base)]) : [];
+    const line = toPath(coords);
     const area = n ? line + " L" + coords[n - 1][0].toFixed(1) + "," + baseY + " L" + coords[0][0].toFixed(1) + "," + baseY + " Z" : "";
     const gridYs = [padTop, (padTop + baseY) / 2, baseY];
     const gid = "sparkFade" + (sparkChartUid++);
     const gridLines = gridYs.map(y => `<line x1="24" y1="${y}" x2="496" y2="${y}" stroke="rgba(255,255,255,0.16)" stroke-width="1"/>`).join("");
-    const dots = coords.map(c => `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="3" fill="#94bce3"/>`).join("");
+    const dotsOf = (cs, color) => cs.map(c => `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="3" fill="${color}"/>`).join("");
+    const lineOf = (d, color) => `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
     const svgHtml = `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none" style="display:block;aspect-ratio:${W}/${H};">` +
       `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">` +
-      `<stop offset="0%" stop-color="#94bce3" stop-opacity="0.26"/>` +
-      `<stop offset="100%" stop-color="#94bce3" stop-opacity="0"/>` +
+      `<stop offset="0%" stop-color="${SPARK_S_COLOR}" stop-opacity="0.26"/>` +
+      `<stop offset="100%" stop-color="${SPARK_S_COLOR}" stop-opacity="0"/>` +
       `</linearGradient></defs>` +
       gridLines +
       `<path d="${area}" fill="url(#${gid})"/>` +
-      `<path d="${line}" fill="none" stroke="#94bce3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>` +
-      dots + `</svg>`;
+      (hasBase ? lineOf(toPath(bCoords), SPARK_B_COLOR) : "") +
+      lineOf(line, SPARK_S_COLOR) +
+      (hasBase ? dotsOf(bCoords, SPARK_B_COLOR) : "") +
+      dotsOf(coords, SPARK_S_COLOR) + `</svg>`;
     const wrap = el("div", "spark-box2", svgHtml);
     const overlay = el("div", "spark-overlay2");
     points.forEach((p, i) => {
       const xp = (coords[i][0] / W) * 100;
-      const badgeShift = i === 0 ? "translate(0, -100%)" : i === n - 1 ? "translate(-100%, -100%)" : "translate(-50%, -100%)";
-      const labelShift = i === 0 ? "translateX(0)" : i === n - 1 ? "translateX(-100%)" : "translateX(-50%)";
+      const hx = i === 0 ? "0" : i === n - 1 ? "-100%" : "-50%";
+      const labelShift = "translateX(" + hx + ")";
       const badge = elText("span", "spark-badge2", fmtAch(p.actual * 100) + "%");
       badge.style.left = xp.toFixed(2) + "%";
-      badge.style.top = (((coords[i][1] - 8) / H) * 100).toFixed(2) + "%";
-      badge.style.transform = badgeShift;
+      if (hasBase) {
+        badge.style.top = (((coords[i][1] + 7) / H) * 100).toFixed(2) + "%";
+        badge.style.transform = "translate(" + hx + ", 0)";
+        const bBadge = elText("span", "spark-badge2 base3", fmtAch(p.base * 100) + "%");
+        bBadge.style.left = xp.toFixed(2) + "%";
+        bBadge.style.top = (((bCoords[i][1] - 7) / H) * 100).toFixed(2) + "%";
+        bBadge.style.transform = "translate(" + hx + ", -100%)";
+        overlay.appendChild(bBadge);
+      } else {
+        badge.style.top = (((coords[i][1] - 8) / H) * 100).toFixed(2) + "%";
+        badge.style.transform = "translate(" + hx + ", -100%)";
+      }
       overlay.appendChild(badge);
       const lab = elText("span", "spark-label2", p.label);
       lab.style.left = xp.toFixed(2) + "%";
@@ -720,8 +745,14 @@
     const block = el("div", "kpi-cmp2");
     const head = el("div", "kpi-cmp-head2");
     head.appendChild(elText("p", "kpi-block-kicker2", title));
-    head.appendChild(el("span", "kpi-cmp-actual2", "실적<b>" + actualText + "</b>억원"));
     block.appendChild(head);
+    const actualCard = el("div", "kpi-actual-card2");
+    actualCard.appendChild(elText("span", "lbl2", "누적 실적"));
+    const num = el("span", null);
+    num.appendChild(elText("span", "num2", actualText));
+    num.appendChild(elText("span", "unit2", "억원"));
+    actualCard.appendChild(num);
+    block.appendChild(actualCard);
     const table = el("table", "kpi-cmp-table2");
     const cols = ["목표", "달성률", "잔여 KPI"];
     const thead = el("thead", null), htr = el("tr", null);
@@ -805,7 +836,11 @@
     sh.appendChild(elText("p", "kpi-block-kicker2", "주별 달성률 추이"));
     const legend = el("span", "spark-legend2");
     legend.appendChild(el("i", "dot3"));
-    legend.appendChild(document.createTextNode("실제 달성률"));
+    legend.appendChild(document.createTextNode("STRETCH"));
+    if (chartPoints && chartPoints.length && chartPoints.every(p => p.base != null)) {
+      legend.appendChild(el("i", "dot3 base3"));
+      legend.appendChild(document.createTextNode("BASE"));
+    }
     sh.appendChild(legend);
     right.appendChild(sh);
     if (chartPoints && chartPoints.length >= 2) {
@@ -819,7 +854,7 @@
 
   function renderKpiPlaceholder() {
     const card = kpiHeader("예시");
-    const demo = [0.1, 0.14, 0.2, 0.25, 0.28, 0.3, 0.32, 0.34].map((v, i) => ({ actual: v, label: (i + 1) + "주" }));
+    const demo = [0.1, 0.14, 0.2, 0.25, 0.28, 0.3, 0.32, 0.34].map((v, i) => ({ actual: v, base: v * 1.2, label: (i + 1) + "주" }));
     const grey = "#b9b9bc";
     const row = basis => ({ basis, goal: { num: "00", unit: "억원", color: grey }, ach: { num: "00%", color: grey }, remain: { num: "00", unit: "억원", color: grey } });
     card.appendChild(kpiHeroBody(
@@ -894,7 +929,14 @@
     for (const e of entries) {
       const status = e.data;
       if (!status || !status.annual || isNaN(status.annual.actual)) continue;
-      points.push({ actual: status.annual.actual / KPI_GOAL.goal, label: e.monthAbbr + "_" + e.weekNum });
+      // STRETCH 선과 같은 방식으로, BASE도 최신 시트의 Base 목표(KPI_GOAL.goalBase)를 전 주차에 동일 적용
+      // — 구양식 주차(Base 열 없음)도 추이 선이 끊기지 않게. Base 목표가 아예 없으면 BASE 선 생략.
+      const goalBase = kpiNum(KPI_GOAL.goalBase);
+      points.push({
+        actual: status.annual.actual / KPI_GOAL.goal,
+        base: goalBase ? status.annual.actual / goalBase : null,
+        label: e.monthAbbr + "_" + e.weekNum,
+      });
     }
     return points.slice(-TREND_WINDOW_WEEKS);
   }
