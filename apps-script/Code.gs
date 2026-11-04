@@ -65,6 +65,9 @@ function doGet(e) {
       case 'saveUpcomingSelection':
         saveUpcomingSelection_(params.mode, params.ids);
         return jsonOutput_({ ok: true });
+      case 'bizEventOverrides': return jsonOutput_({ ok: true, overrides: getBizEventOverrides_() });
+      case 'saveBizEventOverrides':
+        return jsonOutput_({ ok: true, overrides: saveBizEventOverrides_(params.include, params.exclude, params.clear) });
       default:
         return jsonOutput_({ ok: false, error: 'unknown_section' });
     }
@@ -845,6 +848,63 @@ function saveUpcomingSelection_(mode, idsJson) {
   try { ids = JSON.parse(idsJson || '[]'); } catch (e) { ids = []; }
   if (!Array.isArray(ids)) ids = [];
   props.setProperty('UPCOMING_INSIGHT_SELECTION_JSON', JSON.stringify({ mode: 'manual', ids: ids }));
+}
+
+// ---- 사업 캘린더 "사업 일정" 직접 선택(2026-11) ----
+// 자동 기준(◈ 표시·키워드 — 판정은 프런트에서 함) 위에, 팀원이 일정을 직접 사업 일정으로 추가(include)하거나
+// 자동으로 잡힌 걸 빼는(exclude) 선택을 저장한다. 키는 "캘린더 일정 ID|시작일(yyyy-MM-dd)" — 반복 일정은
+// 인스턴스마다 getId()가 같아서 날짜를 붙여 구분한다. 저장 요청은 바뀐 키만 보낸다(include/exclude: 새로
+// 기록할 키, clear: 자동 기준과 같아져서 기록을 지울 키) — GET URL 길이를 작게 유지하기 위함.
+// 스크립트 속성 값 한도(약 9KB) 때문에 저장할 때마다 시작일이 6개월보다 오래된 키는 지운다.
+var BIZ_OVERRIDE_PROP = 'BIZ_EVENT_OVERRIDES_JSON';
+var BIZ_OVERRIDE_MAX_CHARS = 8500;
+
+function getBizEventOverrides_() {
+  var raw = PropertiesService.getScriptProperties().getProperty(BIZ_OVERRIDE_PROP);
+  if (!raw) return { include: [], exclude: [] };
+  try {
+    var parsed = JSON.parse(raw);
+    return {
+      include: Array.isArray(parsed.include) ? parsed.include : [],
+      exclude: Array.isArray(parsed.exclude) ? parsed.exclude : [],
+    };
+  } catch (e) {
+    return { include: [], exclude: [] };
+  }
+}
+
+function parseKeyList_(json) {
+  try {
+    var arr = JSON.parse(json || '[]');
+    return Array.isArray(arr) ? arr.map(String) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveBizEventOverrides_(includeJson, excludeJson, clearJson) {
+  var inc = parseKeyList_(includeJson), exc = parseKeyList_(excludeJson), clr = parseKeyList_(clearJson);
+  // 여러 팀원이 동시에 저장해도 서로의 선택을 덮어쓰지 않도록 읽기-병합-쓰기를 잠금 안에서 처리.
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var cur = getBizEventOverrides_();
+    var touched = {};
+    inc.concat(exc, clr).forEach(function (k) { touched[k] = true; });
+    var cutoff = formatCalDate_(new Date(new Date().getTime() - 183 * 86400000));
+    var keep = function (k) {
+      if (touched[k]) return false;
+      var d = String(k).split('|').pop();
+      return !(/^\d{4}-\d{2}-\d{2}$/.test(d) && d < cutoff);
+    };
+    var next = { include: cur.include.filter(keep).concat(inc), exclude: cur.exclude.filter(keep).concat(exc) };
+    var json = JSON.stringify(next);
+    if (json.length > BIZ_OVERRIDE_MAX_CHARS) throw new Error('직접 선택한 일정이 너무 많아 저장할 수 없습니다. 대시보드 담당자에게 알려주세요.');
+    PropertiesService.getScriptProperties().setProperty(BIZ_OVERRIDE_PROP, json);
+    return next;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function formatCalDate_(d) {

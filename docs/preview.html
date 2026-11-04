@@ -309,6 +309,11 @@
   .issue-title2 { margin: 0; font-size: 13px; font-weight: 700; line-height: 1.4; color: var(--ink); word-break: keep-all; overflow-wrap: anywhere; }
   .issue-meta2 { margin: 4px 0 0; font-size: 11px; color: var(--soft); }
   .issue-hint2 { margin: 8px 0 0; font-size: 11px; color: var(--faint); }
+  .issue-edit-btn2 { margin-left: auto; }
+  .issue-edit-panel2 { margin-bottom: 12px; }
+  .issue-edit-panel2 .teamcal-insight-checklist2 { max-height: 280px; }
+  .issue-auto-tag2 { flex-shrink: 0; margin-left: auto; font-size: 10px; font-weight: 700; color: var(--accent-700); border: 1px solid var(--accent-300); padding: 0 5px; }
+  .issue-edit-msg2 { font-size: 11px; color: var(--bad); }
 
   /* ---- 팀 일정 캘린더 이벤트 + 호버 패널 ---- */
   .teamcal-event2 { flex-shrink: 0; font-size: 11px; line-height: 1.4; padding: 2px 5px; border-left: 2px solid var(--accent); background: rgba(238,246,255,0.9); color: var(--accent-900); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
@@ -1341,6 +1346,40 @@
     return t.includes(BIZ_EVENT_MARK) || BIZ_EVENT_KEYWORDS.some(k => t.includes(k.toUpperCase()));
   }
 
+  // 사업 일정 직접 선택(2026-11): 자동 기준 위에 팀원이 고른 추가/제외를 덧씌운다. 서버(스크립트 속성)에
+  // 저장되어 모든 팀원 화면에 같이 반영되고, 04 사업 캘린더와 06 팀 일정 캘린더가 같은 결과를 쓴다.
+  // 서버에서 못 불러오면(재배포 전 등) 자동 기준만으로 표시.
+  let bizOverrides = { include: new Set(), exclude: new Set() };
+  let bizOverridesPromise = null;
+  let teamCalRerender = null; // 06 팀 일정 캘린더 현재 달 다시 그리기(저장 직후 분류 반영용)
+  function setBizOverrides(o) {
+    bizOverrides = { include: new Set((o && o.include) || []), exclude: new Set((o && o.exclude) || []) };
+  }
+  function loadBizOverrides() {
+    if (!bizOverridesPromise) {
+      bizOverridesPromise = callBackend("bizEventOverrides")
+        .then(r => { if (r.ok) setBizOverrides(r.overrides); })
+        .catch(() => {});
+    }
+    return bizOverridesPromise;
+  }
+  function ymdKey(date) {
+    const pad = n => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  }
+  // 반복 일정은 인스턴스마다 id가 같아서 시작일을 붙여 날짜별로 구분(서버 키 형식과 동일).
+  function bizEventKey(ev) {
+    const r = eventDateRange(ev);
+    return `${ev.id || ev.summary || ""}|${r ? ymdKey(r.start) : ""}`;
+  }
+  function bizEventStatus(ev) {
+    const auto = isBusinessEvent(ev.summary);
+    const key = bizEventKey(ev);
+    if (bizOverrides.exclude.has(key)) return { isBiz: false, auto, manual: true };
+    if (bizOverrides.include.has(key)) return { isBiz: true, auto, manual: true };
+    return { isBiz: auto, auto, manual: false };
+  }
+
   const CONTRACT_ALERT_LABEL = { m3: "3개월 전", m1: "1개월 전" };
 
   function isDateInMonth(d, year, month) {
@@ -1399,8 +1438,8 @@
     return out.sort((a, b) => a.date - b.date);
   }
 
-  // 이 달에 걸치는 사업 일정 — 여러 날에 걸친 일정도 카드 한 장(이 달 안의 첫 날 기준 정렬).
-  function bizIssuesInMonth(events, year, month) {
+  // 이 달에 걸치는 일정 — 여러 날에 걸친 일정도 한 건(이 달 안의 첫 날 기준 정렬). 카드와 편집 목록이 같이 씀.
+  function eventsInMonth(events, year, month) {
     const monthStart = new Date(year, month - 1, 1), monthEnd = new Date(year, month, 0);
     const out = [];
     events.forEach(ev => {
@@ -1410,6 +1449,7 @@
       const endDate = new Date(r.end.getFullYear(), r.end.getMonth(), r.end.getDate());
       if (endDate < monthStart || startDate > monthEnd) return;
       out.push({
+        ev,
         title: (ev.summary || "(제목 없음)").replace(BIZ_EVENT_MARK, "").trim(),
         time: r.isAllDay ? null : r.start.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Seoul" }),
         startDate, endDate,
@@ -1431,11 +1471,12 @@
     return card;
   }
 
-  function issueGroup(title, cards, emptyText, hintText) {
+  function issueGroup(title, cards, emptyText, hintText, headAction) {
     const group = el("div", "issue-group2");
     const head = el("div", "issue-group-head2");
     head.appendChild(elText("p", "issue-group-title2", title));
     head.appendChild(elText("span", "issue-count2", cards.length + "건"));
+    if (headAction) head.appendChild(headAction);
     group.appendChild(head);
     if (cards.length) {
       const grid = el("div", "issue-grid2");
@@ -1457,23 +1498,100 @@
     return issueGroup("계약", cards, "이번 달 계약 알림(3개월 전·1개월 전)이 없어요.", "계약 종료일 기준 3개월 전·1개월 전 알림 / 종료일 미정 계약은 제외");
   }
 
-  function renderBizGroup(bizState, year, month) {
+  // ctx: { editing, onToggleEdit, onSaved } — 편집 상태는 loadCalSection이 달별 화면과 함께 관리.
+  function renderBizGroup(bizState, year, month, ctx) {
     if (!bizState) return issueGroup("사업", [], "구글 캘린더 사업 일정 불러오는 중…");
     if (bizState.error) return issueGroup("사업", [], "구글 캘린더 사업 일정을 불러오지 못했어요: " + bizState.error);
+    const monthEvents = eventsInMonth(bizState.events, year, month);
     const today = startOfToday();
-    const cards = bizIssuesInMonth(bizState.events, year, month).map(b => {
+    const cards = monthEvents.filter(b => bizEventStatus(b.ev).isBiz).map(b => {
+      const st = bizEventStatus(b.ev);
       const dateText = `${fmtEventDateSpan(b)} (${CAL_DOW[b.startDate.getDay()]})`;
       const tag = (b.title.match(/^\[([^\]]+)\]/) || [])[1] || null; // 제목 앞 [광고]·[IP] 표기를 배지로
       const title = tag ? b.title.replace(/^\[[^\]]+\]\s*/, "") : b.title;
-      return issueCard("biz2", dateText, tag, title, b.time || "종일", b.endDate < today);
+      const meta = (b.time || "종일") + (st.manual && !st.auto ? " · 직접 추가" : "");
+      return issueCard("biz2", dateText, tag, title, meta, b.endDate < today);
     });
-    return issueGroup("사업", cards, "이번 달 사업 일정이 없어요.", `${TEAM_CAL_LABEL} 중 ${BIZ_EVENT_MARK} 표시 또는 키워드(${BIZ_EVENT_KEYWORDS.join("·")})가 있는 일정`);
+    const editBtn = el("button", "teamcal-insight-edit2 issue-edit-btn2", EDIT_PENCIL_ICON2);
+    editBtn.type = "button";
+    editBtn.appendChild(document.createTextNode(ctx.editing ? "편집 닫기" : "편집"));
+    editBtn.addEventListener("click", ctx.onToggleEdit);
+    const group = issueGroup("사업", cards, "이번 달 사업 일정이 없어요.",
+      `${TEAM_CAL_LABEL} 중 ${BIZ_EVENT_MARK} 표시 또는 키워드(${BIZ_EVENT_KEYWORDS.join("·")})가 있는 일정 자동 반영 + [편집]에서 직접 추가·제외`, editBtn);
+    if (ctx.editing) group.insertBefore(renderBizEditPanel(monthEvents, ctx.onSaved), group.children[1]);
+    return group;
+  }
+
+  // 이 달의 팀 캘린더 일정 전체를 체크 목록으로 — 체크 = 사업 일정. 저장 시 바뀐 것만 서버로 보낸다.
+  function renderBizEditPanel(monthEvents, onSaved) {
+    const panel = el("div", "teamcal-insight-panel2 issue-edit-panel2");
+    panel.appendChild(elText("span", "insight-edit-label2", "사업 일정으로 보여줄 일정 선택 (체크 = 사업 일정)"));
+    const list = el("div", "teamcal-insight-checklist2");
+    const rows = [];
+    if (!monthEvents.length) {
+      list.appendChild(elText("p", "state-msg2", "이번 달 팀 캘린더 일정이 없어요."));
+    }
+    monthEvents.forEach(b => {
+      const st = bizEventStatus(b.ev);
+      const label = el("label", "teamcal-insight-check-row2");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = st.isBiz;
+      label.appendChild(cb);
+      label.appendChild(elText("span", null, `${fmtEventDateSpan(b)} ${b.title}`));
+      if (st.auto) label.appendChild(elText("span", "issue-auto-tag2", "자동"));
+      list.appendChild(label);
+      rows.push({ ev: b.ev, cb });
+    });
+    panel.appendChild(list);
+
+    const actions = el("div", "insight-edit-actions2");
+    const saveBtn = elText("button", "insight-save-btn2", "저장");
+    const cancelBtn = elText("button", "insight-cancel-btn2", "취소");
+    const msg = elText("span", "issue-edit-msg2", "");
+    saveBtn.type = "button"; cancelBtn.type = "button";
+    saveBtn.addEventListener("click", async () => {
+      const changes = { include: [], exclude: [], clear: [] };
+      rows.forEach(({ ev, cb }) => {
+        const st = bizEventStatus(ev);
+        if (cb.checked === st.isBiz) return; // 바뀐 것 없음
+        const key = bizEventKey(ev);
+        if (cb.checked === st.auto) changes.clear.push(key); // 자동 기준과 같아짐 → 직접 선택 기록 삭제
+        else (cb.checked ? changes.include : changes.exclude).push(key);
+      });
+      if (!changes.include.length && !changes.exclude.length && !changes.clear.length) { onSaved(); return; }
+      saveBtn.disabled = true; saveBtn.textContent = "저장 중…"; msg.textContent = "";
+      try {
+        const res = await callBackend("saveBizEventOverrides", {
+          include: JSON.stringify(changes.include), exclude: JSON.stringify(changes.exclude), clear: JSON.stringify(changes.clear),
+        });
+        if (!res.ok) {
+          throw new Error(res.error === "unknown_section"
+            ? "저장 기능이 아직 서버에 배포되지 않았어요(Apps Script 재배포 필요)."
+            : (res.message || res.error || "알 수 없는 오류"));
+        }
+        setBizOverrides(res.overrides);
+        onSaved();
+      } catch (err) {
+        saveBtn.disabled = false; saveBtn.textContent = "저장";
+        msg.textContent = "저장에 실패했어요: " + err.message;
+      }
+    });
+    cancelBtn.addEventListener("click", () => onSaved(true));
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+    actions.appendChild(msg);
+    panel.appendChild(actions);
+    return panel;
   }
 
   async function loadCalSection(slotEl) {
     slotEl.innerHTML = "";
     slotEl.appendChild(renderCalPlaceholder());
-    // 사업 일정은 팀 구글 캘린더를 달 단위로 받아와 isBusinessEvent로 거른 뒤 달마다 한 번만 보관.
+    bizOverridesPromise = null; // 새로고침 때마다 직접 선택 최신본을 다시 받음(06 섹션도 같은 요청을 공유)
+    const overridesReady = loadBizOverrides();
+    // 사업 일정은 팀 구글 캘린더를 달 단위로 받아 달마다 한 번만 보관하고(편집 목록에 전체 일정이 필요해 거르지
+    // 않고 보관), 화면에 그릴 때 bizEventStatus(자동 기준 + 직접 선택)로 거른다.
     // 구글 캘린더 쪽이 실패해도 계약 카드는 그대로 보이게, 오류는 따로 담아 안내 문구로만 표시.
     const bizEventState = {}; // "연-월" -> { events, error }
     const bizEventPending = {};
@@ -1483,7 +1601,7 @@
         bizEventPending[key] = callBackend("teamCalendar", { year: y, month: m })
           .then(r => {
             if (!r.ok) throw new Error(r.message || r.error || "알 수 없는 오류");
-            bizEventState[key] = { events: (r.events || []).filter(ev => isBusinessEvent(ev.summary)), error: null };
+            bizEventState[key] = { events: r.events || [], error: null };
           })
           .catch(err => { bizEventState[key] = { events: [], error: err.message }; });
       }
@@ -1492,7 +1610,7 @@
     try {
       const today = new Date();
       let navYear = today.getFullYear(), navMonth = today.getMonth() + 1;
-      const [data] = await Promise.all([callBackend("businessCalendar"), loadBizEvents(navYear, navMonth)]);
+      const [data] = await Promise.all([callBackend("businessCalendar"), loadBizEvents(navYear, navMonth), overridesReady]);
       if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
       const currentItems = (data.items || []).map(normalizeContractItem).filter(Boolean);
       const card = calCard(null);
@@ -1505,6 +1623,7 @@
       const navLabel = el("div", "nav-month-label2", "");
       nav.appendChild(prevBtn); nav.appendChild(navLabel); nav.appendChild(nextBtn);
       const bodySlot = el("div", null);
+      let bizEditing = false;
 
       function renderMonthView() {
         navLabel.textContent = `${navYear}년 ${navMonth}월`;
@@ -1515,10 +1634,18 @@
         }
         bodySlot.innerHTML = "";
         bodySlot.appendChild(renderContractGroup(currentItems, navYear, navMonth));
-        bodySlot.appendChild(renderBizGroup(biz, navYear, navMonth));
+        bodySlot.appendChild(renderBizGroup(biz, navYear, navMonth, {
+          editing: bizEditing,
+          onToggleEdit: () => { bizEditing = !bizEditing; renderMonthView(); },
+          onSaved: (cancelled) => {
+            bizEditing = false;
+            renderMonthView();
+            if (!cancelled && teamCalRerender) teamCalRerender();
+          },
+        }));
       }
-      prevBtn.onclick = () => { navMonth--; if (navMonth < 1) { navMonth = 12; navYear--; } renderMonthView(); };
-      nextBtn.onclick = () => { navMonth++; if (navMonth > 12) { navMonth = 1; navYear++; } renderMonthView(); };
+      prevBtn.onclick = () => { navMonth--; if (navMonth < 1) { navMonth = 12; navYear--; } bizEditing = false; renderMonthView(); };
+      nextBtn.onclick = () => { navMonth++; if (navMonth > 12) { navMonth = 1; navYear++; } bizEditing = false; renderMonthView(); };
 
       card.appendChild(nav);
       card.appendChild(bodySlot);
@@ -1934,12 +2061,12 @@
       gridSlot.innerHTML = "";
       gridSlot.appendChild(elText("p", "state-msg2", "불러오는 중…"));
       try {
-        const data = await callBackend("teamCalendar", { year, month });
+        const [data] = await Promise.all([callBackend("teamCalendar", { year, month }), loadBizOverrides()]);
         if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
-        const events = (data.events || []).filter(ev => !isBusinessEvent(ev.summary));
+        const events = (data.events || []).filter(ev => !bizEventStatus(ev).isBiz);
         gridSlot.innerHTML = "";
         gridSlot.appendChild(renderTeamCalGrid(buildTeamCalWeeks(year, month, events)));
-        gridSlot.appendChild(elText("p", "teamcal-caption2", "칸에 마우스를 올리면 그날 전체 일정이 펼쳐집니다. 사업 일정(◈ 표시·촬영·전시·SNS 게시일·시딩일·서비스 운영종료 등)은 04 사업 캘린더에 표시됩니다."));
+        gridSlot.appendChild(elText("p", "teamcal-caption2", "칸에 마우스를 올리면 그날 전체 일정이 펼쳐집니다. 사업 일정(◈ 표시·촬영·전시·SNS 게시일·시딩일·서비스 운영종료 등, 04에서 직접 추가·제외한 일정 반영)은 04 사업 캘린더에 표시됩니다."));
       } catch (err) {
         gridSlot.innerHTML = "";
         gridSlot.appendChild(elText("p", "state-msg2 err2", "불러오지 못했어요: " + err.message));
@@ -1947,6 +2074,7 @@
     }
     prevBtn.onclick = () => { month--; if (month < 1) { month = 12; year--; } render(); };
     nextBtn.onclick = () => { month++; if (month > 12) { month = 1; year++; } render(); };
+    teamCalRerender = render;
 
     slotEl.innerHTML = "";
     slotEl.appendChild(card);
