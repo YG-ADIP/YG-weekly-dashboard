@@ -655,11 +655,12 @@ function getCalendarData_() {
 // ---- ③-2 사업 캘린더 리뉴얼(개발 서버 preview.html 전용, 2026-09) ----
 //
 // 목적이 "재계약 검토 여부"에서 "기간별 액션 알림"으로 바뀜(엘라 지시) — 이제 "사업 캘린더(main)"
-// 시트 하나만 쓴다. 이 시트는 이미 오늘 날짜(TODAY()) 기준으로 D-DAY·3개월/2개월/1개월 전 알림
-// 날짜·ACTION 알림 문구를 수식으로 계산해두고 있어서, 서버는 그 계산 결과를 그대로 옮기기만 한다
-// (재계산 안 함 — Apps Script가 시트를 열 때마다 그 수식들이 최신 오늘 날짜로 재평가됨).
+// 시트 하나만 쓴다. 2026-11 시트 개편으로 3개월/2개월 전 알림과 ACTION 알림 열이 없어지고
+// "1개월" 알림 날짜만 남았다(엘라 지시 — ACTION 알림은 더 이상 쓰지 않음). 1개월 알림 날짜는
+// 시트 수식 결과를 그대로 옮기고, D-DAY 열은 이제 남은 일수가 아니라 종료 "날짜"로 들어오므로
+// 날짜면 오늘 기준 남은 일수로 바꿔서 내려준다(숫자면 그대로).
 //
-// 탭 이름이 아니라 헤더 셀 내용("프로젝트"+"D-DAY"+"ACTION 알림")으로 표를 찾는다 — 같은
+// 탭 이름이 아니라 헤더 셀 내용("프로젝트"+"계약 종료일"+"D-DAY")으로 표를 찾는다 — 같은
 // 스프레드시트 안에 참고용 표(Next Plan 시나리오, 계약별 검토 Tracker 등)가 여러 개 있어서
 // 탭 이름에 의존하면 헷갈리기 쉽다(사업 캘린더(구버전) 05_검토 Tracker에서도 같은 이유로 헤더
 // 내용 매칭 방식을 씀 — findReviewTrackerRows_ 참고).
@@ -667,6 +668,24 @@ function getCalendarData_() {
 // 탭마다 전체 데이터를 다 읽어 헤더를 찾으면 안 맞는 탭들 것까지 통째로 읽어오게 됨(로딩 속도
 // 민원 대응 차원에서 줄임). 먼저 위쪽 10행만 얕게 읽어 헤더가 있는지 확인하고, 맞는 탭 하나만
 // 전체를 읽는다.
+function isBusinessCalendarHeader_(trimmedRow) {
+  return trimmedRow.indexOf('프로젝트') >= 0 && trimmedRow.indexOf('계약 종료일') >= 0 && trimmedRow.indexOf('D-DAY') >= 0;
+}
+
+// D-DAY 셀: 날짜면 오늘(스크립트 시간대) 기준 남은 일수, 숫자면 그대로, 그 외(빈 칸·"(TBD)")는 null.
+function parseDDay_(raw) {
+  var d = parseTrackerDate_(raw);
+  if (d) {
+    var tz = Session.getScriptTimeZone();
+    var t = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd').split('-');
+    var today = Date.UTC(+t[0], +t[1] - 1, +t[2]);
+    return Math.round((Date.UTC(d.year, d.month - 1, d.day) - today) / 86400000);
+  }
+  if (raw === '' || raw === null || raw === undefined) return null;
+  var n = Number(raw);
+  return isNaN(n) ? null : n;
+}
+
 function findBusinessCalendarRows_(ss) {
   var sheets = ss.getSheets();
   for (var i = 0; i < sheets.length; i++) {
@@ -676,7 +695,7 @@ function findBusinessCalendarRows_(ss) {
     var probe = sh.getRange(1, 1, Math.min(lastRow, 10), lastCol).getValues();
     var isMatch = probe.some(function (row) {
       var trimmed = row.map(function (c) { return String(c).trim(); });
-      return trimmed.indexOf('프로젝트') >= 0 && trimmed.indexOf('D-DAY') >= 0 && trimmed.indexOf('ACTION 알림') >= 0;
+      return isBusinessCalendarHeader_(trimmed);
     });
     if (isMatch) return sh.getDataRange().getValues();
   }
@@ -690,7 +709,7 @@ function getBusinessCalendarData_() {
   var headerRowIdx = -1;
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i].map(function (c) { return String(c).trim(); });
-    if (row.indexOf('프로젝트') >= 0 && row.indexOf('D-DAY') >= 0 && row.indexOf('ACTION 알림') >= 0) { headerRowIdx = i; break; }
+    if (isBusinessCalendarHeader_(row)) { headerRowIdx = i; break; }
   }
   if (headerRowIdx < 0) return { ok: true, items: [] };
   var header = rows[headerRowIdx].map(function (h) { return String(h).trim(); });
@@ -698,18 +717,14 @@ function getBusinessCalendarData_() {
   var col = {
     project: colIdx('프로젝트'), category: colIdx('구분'),
     start: colIdx('계약 시작일'), end: colIdx('계약 종료일'), months: colIdx('계약기간(개월)'),
-    dday: colIdx('D-DAY'), m3: colIdx('3개월'), m2: colIdx('2개월'), m1: colIdx('1개월'),
-    action: colIdx('ACTION 알림'),
+    dday: colIdx('D-DAY'), m1: colIdx('1개월'),
   };
   var items = [];
   for (var j = headerRowIdx + 1; j < rows.length; j++) {
     var r = rows[j];
     var rawProject = String(r[col.project] || '').trim();
     if (!rawProject) continue;
-    var dday = Number(r[col.dday]);
     var markers = [];
-    var m3 = parseTrackerDate_(r[col.m3]); if (m3) markers.push({ kind: 'early', date: m3 });
-    var m2 = parseTrackerDate_(r[col.m2]); if (m2) markers.push({ kind: 'mid', date: m2 });
     var m1 = parseTrackerDate_(r[col.m1]); if (m1) markers.push({ kind: 'urgent', date: m1 });
     items.push({
       project: abbreviateArtists_(rawProject),
@@ -717,8 +732,7 @@ function getBusinessCalendarData_() {
       startDate: parseTrackerDate_(r[col.start]),
       endDate: parseTrackerDate_(r[col.end]),
       months: Number(r[col.months]) || null,
-      dDay: isNaN(dday) ? null : dday,
-      actionAlert: String(r[col.action] || '').trim(),
+      dDay: parseDDay_(r[col.dday]),
       markers: markers,
     });
   }

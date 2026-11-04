@@ -271,7 +271,6 @@
   .cal-entry2 { flex-shrink: 0; cursor: pointer; padding: 2px 4px; transition: opacity .12s; border-left: 3px solid; }
   .cal-entry2 .proj2line { font-size: 11px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cal-entry2 .detail2line { font-size: 11px; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .action-badge2 { display: block; margin-top: 2px; width: fit-content; max-width: 100%; padding: 1px 5px; font-size: 10px; font-weight: 700; color: #fff; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cal-entry2.dimmed2 { opacity: 0.25; }
   .cal-entry2.kind-biz2 { border-left-color: var(--accent); background: rgba(89,128,166,0.08); color: var(--accent-900); }
   .cal-entry2.kind-m12 { border-left-color: var(--warn); background: rgba(138,100,32,0.07); color: #6b4d18; }
@@ -1310,10 +1309,10 @@
   const CAL_DOW = ["일", "월", "화", "수", "목", "금", "토"];
 
   // 2026-10 개편: 계약은 "1개월 전 알림"과 "계약 종료일" 두 시점만 표기하고(3·2개월 전 알림 제외),
-  // 팀 구글 캘린더 일정 중 사업 관련 일정(운영종료·행사·촬영·SNS 업로드 등)만 골라 함께 보여준다.
+  // 팀 구글 캘린더 일정 중 사업 관련 일정(촬영·전시·SNS 게시일·시딩일·서비스 운영종료 등)만 골라 함께 보여준다.
   // 선별 기준: 제목에 아래 키워드가 있거나 [사업] 태그가 붙은 일정 — 기준은 여기 한 곳에서만 관리.
   // 같은 기준으로 06 팀 일정 캘린더에서는 사업 일정을 빼서 두 캘린더에 중복 표기되지 않게 한다.
-  const BIZ_EVENT_KEYWORDS = ["운영종료", "서비스종료", "행사", "촬영", "업로드", "SNS"];
+  const BIZ_EVENT_KEYWORDS = ["운영종료", "서비스종료", "행사", "전시", "촬영", "업로드", "게시", "시딩", "SNS"];
   const BIZ_EVENT_TAG = "[사업]";
   function isBusinessEvent(title) {
     const t = (title || "").replace(/\s+/g, "").toUpperCase(); // "운영 종료"·"sns"처럼 띄어쓰기/대소문자가 달라도 잡음
@@ -1357,7 +1356,6 @@
     openPopover(anchorEl, item.project, [
       ["계약 종료일", fmtDateYMD(item.endDate)],
       ["D- 값", fmtDDay(item.dDay)],
-      ["ACTION 알림", item.actionAlert],
     ]);
   }
   function showBizEventPopover(anchorEl, biz) {
@@ -1388,21 +1386,38 @@
     pop.style.top = Math.max(8, top) + "px";
   }
 
-  // ACTION 알림 문구별 배지 색 — 캘린더 칸만 봐도 어떤 조치 단계인지 바로 구분되게.
-  // 시트가 만들어내는 문구가 늘어날 수 있어 키워드 매칭으로 넓게 잡고, 못 맞으면 기본색(--accent)으로.
-  function actionAlertColor(label) {
-    const l = (label || "").toLowerCase();
-    if (l.includes("close") || l.includes("renew")) return "#a2453c";
-    if (l.includes("decision")) return "#8a6420";
-    if (l.includes("tapping") || l.includes("negotiation")) return "#6b4d9e";
-    if (l.includes("review")) return "#5980a6";
-    if (l.includes("active")) return "#7a7a7d";
-    return "#5980a6";
-  }
-
   // 서버 markers 중 "urgent"가 시트의 "1개월" 알림 날짜(3·2개월 전은 2026-10 개편으로 표기 안 함).
   function oneMonthMarker(item) {
     return (item.markers || []).find(m => m.kind === "urgent") || null;
+  }
+
+  // {year, month, day}에 개월 수를 더함 — 시트 EDATE와 같이 말일을 넘으면 그 달 말일로 맞춤(3/31 - 1개월 = 2/28).
+  function addMonthsYMD(d, n) {
+    const base = new Date(d.year, d.month - 1 + n, 1);
+    const lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+    return { year: base.getFullYear(), month: base.getMonth() + 1, day: Math.min(d.day, lastDay) };
+  }
+
+  // 계약 종료일이 미정(빈 칸·"미정" 등 날짜가 아닌 값)인 계약은 종료일·1개월 전·D-DAY 모두 표기하지
+  // 않으므로 null을 돌려 목록에서 뺀다(엘라 지시, 2026-11).
+  // 종료일이 있으면 빈 칸만 보완: 1개월 전이 비면 종료일 - 1개월, D-DAY가 비면 오늘 기준으로 계산.
+  // 시트에 값이 있으면 항상 시트 값을 그대로 씀.
+  function normalizeContractItem(item) {
+    const endDate = item.endDate || null;
+    if (!endDate) return null;
+    const m1Marker = oneMonthMarker(item);
+    let m1Date = m1Marker ? m1Marker.date : null;
+    if (!m1Date) m1Date = addMonthsYMD(endDate, -1);
+    let dDay = item.dDay;
+    if (dDay === null || dDay === undefined || isNaN(dDay)) {
+      const t = new Date();
+      const today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+      dDay = Math.round((new Date(endDate.year, endDate.month - 1, endDate.day) - today) / 86400000);
+    }
+    return Object.assign({}, item, {
+      endDate, dDay,
+      markers: [{ kind: "urgent", date: m1Date }],
+    });
   }
 
   // 이 달에 걸치는 사업 일정만 {day, biz} 목록으로 — 여러 날짜에 걸친 일정은 날짜마다 한 칸씩.
@@ -1477,14 +1492,8 @@
         tag.addEventListener("click", (ev) => { ev.stopPropagation(); showBizEventPopover(tag, e.biz); });
         return tag;
       }
-      if (e.kind === "end") {
-        tag.appendChild(elText("div", "detail2line", "계약 종료"));
-      } else if (e.item.actionAlert) {
-        const badge = elText("span", "action-badge2", e.item.actionAlert);
-        badge.style.background = actionAlertColor(e.item.actionAlert);
-        tag.appendChild(badge);
-      }
-      tag.title = `${e.project} / ${CAL_KIND_META[e.kind].label}` + (e.kind === "m1" && e.item.actionAlert ? ` / ${e.item.actionAlert}` : "");
+      tag.appendChild(elText("div", "detail2line", e.kind === "end" ? "계약 종료" : `${fmtDDay(e.item.dDay)} · 종료 ${e.item.endDate.month}/${e.item.endDate.day}`));
+      tag.title = `${e.project} / ${CAL_KIND_META[e.kind].label} / 계약 종료 ${fmtDateYMD(e.item.endDate)}`;
       tag.addEventListener("click", (ev) => { ev.stopPropagation(); showActionPopover(tag, e.item); });
       return tag;
     };
@@ -1556,7 +1565,7 @@
     table.className = "summary-table2";
     const thead = document.createElement("thead");
     const theadRow = document.createElement("tr");
-    ["프로젝트 / 일정", "구분", "일자", "계약 종료일", "D-", "ACTION 알림"].forEach(h => theadRow.appendChild(elText("th", null, h)));
+    ["프로젝트 / 일정", "구분", "일자", "계약 종료일", "D-"].forEach(h => theadRow.appendChild(elText("th", null, h)));
     thead.appendChild(theadRow);
     table.appendChild(thead);
     const tbody = document.createElement("tbody");
@@ -1570,12 +1579,10 @@
         tr.appendChild(elText("td", null, fmtEventDateSpan(row.biz) + (row.biz.time ? " " + row.biz.time : "")));
         tr.appendChild(elText("td", null, "-"));
         tr.appendChild(elText("td", null, "-"));
-        tr.appendChild(elText("td", null, "-"));
       } else {
         tr.appendChild(elText("td", null, `${month}/${row.day}`));
         tr.appendChild(elText("td", null, fmtDateYMD(row.item.endDate)));
         tr.appendChild(elText("td", null, fmtDDay(row.item.dDay)));
-        tr.appendChild(elText("td", null, row.item.actionAlert || "-"));
       }
       tbody.appendChild(tr);
     });
@@ -1608,7 +1615,7 @@
       let navYear = today.getFullYear(), navMonth = today.getMonth() + 1;
       const [data] = await Promise.all([callBackend("businessCalendar"), loadBizEvents(navYear, navMonth)]);
       if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
-      const currentItems = data.items || [];
+      const currentItems = (data.items || []).map(normalizeContractItem).filter(Boolean);
       const card = calCard(null);
 
       let activeFilter = null;
@@ -2070,7 +2077,7 @@
         const events = (data.events || []).filter(ev => !isBusinessEvent(ev.summary));
         gridSlot.innerHTML = "";
         gridSlot.appendChild(renderTeamCalGrid(buildTeamCalWeeks(year, month, events)));
-        gridSlot.appendChild(elText("p", "teamcal-caption2", "칸에 마우스를 올리면 그날 전체 일정이 펼쳐집니다. 사업 일정(운영종료·행사·촬영·SNS 업로드 등)은 04 사업 캘린더에 표시됩니다."));
+        gridSlot.appendChild(elText("p", "teamcal-caption2", "칸에 마우스를 올리면 그날 전체 일정이 펼쳐집니다. 사업 일정(촬영·전시·SNS 게시일·시딩일·서비스 운영종료 등)은 04 사업 캘린더에 표시됩니다."));
       } catch (err) {
         gridSlot.innerHTML = "";
         gridSlot.appendChild(elText("p", "state-msg2 err2", "불러오지 못했어요: " + err.message));
