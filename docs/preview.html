@@ -1309,10 +1309,10 @@
   const CAL_DOW = ["일", "월", "화", "수", "목", "금", "토"];
 
   // 2026-10 개편: 계약은 "1개월 전 알림"과 "계약 종료일" 두 시점만 표기하고(3·2개월 전 알림 제외),
-  // 팀 구글 캘린더 일정 중 사업 관련 일정(운영종료·행사·촬영·SNS 업로드 등)만 골라 함께 보여준다.
+  // 팀 구글 캘린더 일정 중 사업 관련 일정(촬영·전시·SNS 게시일·시딩일·서비스 운영종료 등)만 골라 함께 보여준다.
   // 선별 기준: 제목에 아래 키워드가 있거나 [사업] 태그가 붙은 일정 — 기준은 여기 한 곳에서만 관리.
   // 같은 기준으로 06 팀 일정 캘린더에서는 사업 일정을 빼서 두 캘린더에 중복 표기되지 않게 한다.
-  const BIZ_EVENT_KEYWORDS = ["운영종료", "서비스종료", "행사", "촬영", "업로드", "SNS"];
+  const BIZ_EVENT_KEYWORDS = ["운영종료", "서비스종료", "행사", "전시", "촬영", "업로드", "게시", "시딩", "SNS"];
   const BIZ_EVENT_TAG = "[사업]";
   function isBusinessEvent(title) {
     const t = (title || "").replace(/\s+/g, "").toUpperCase(); // "운영 종료"·"sns"처럼 띄어쓰기/대소문자가 달라도 잡음
@@ -2077,7 +2077,7 @@
         const events = (data.events || []).filter(ev => !isBusinessEvent(ev.summary));
         gridSlot.innerHTML = "";
         gridSlot.appendChild(renderTeamCalGrid(buildTeamCalWeeks(year, month, events)));
-        gridSlot.appendChild(elText("p", "teamcal-caption2", "칸에 마우스를 올리면 그날 전체 일정이 펼쳐집니다. 사업 일정(운영종료·행사·촬영·SNS 업로드 등)은 04 사업 캘린더에 표시됩니다."));
+        gridSlot.appendChild(elText("p", "teamcal-caption2", "칸에 마우스를 올리면 그날 전체 일정이 펼쳐집니다. 사업 일정(촬영·전시·SNS 게시일·시딩일·서비스 운영종료 등)은 04 사업 캘린더에 표시됩니다."));
       } catch (err) {
         gridSlot.innerHTML = "";
         gridSlot.appendChild(elText("p", "state-msg2 err2", "불러오지 못했어요: " + err.message));
