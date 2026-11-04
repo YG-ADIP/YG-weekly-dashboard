@@ -253,9 +253,9 @@
   .cal-legend2 { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
   .legend-btn2 { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 0; border: 1px solid rgba(29,31,32,0.2); background: transparent; color: var(--soft); cursor: pointer; font-family: inherit; opacity: 1; }
   .legend-btn2 .dot2 { width: 8px; height: 8px; display: inline-block; }
-  .legend-btn2.active-early2 { border-color: var(--accent); background: rgba(89,128,166,0.12); color: var(--accent-900); }
-  .legend-btn2.active-mid2 { border-color: var(--warn); background: rgba(138,100,32,0.1); color: #6b4d18; }
-  .legend-btn2.active-urgent2 { border-color: var(--bad); background: rgba(162,69,60,0.1); color: #8a3a32; }
+  .legend-btn2.active-biz2 { border-color: var(--accent); background: rgba(89,128,166,0.12); color: var(--accent-900); }
+  .legend-btn2.active-m12 { border-color: var(--warn); background: rgba(138,100,32,0.1); color: #6b4d18; }
+  .legend-btn2.active-end2 { border-color: var(--bad); background: rgba(162,69,60,0.1); color: #8a3a32; }
   .legend-btn2.dimmed2 { opacity: 0.45; }
 
   .cal-grid2, .teamcal-grid2 { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: 24px; gap: 1px; background: var(--hairline); border: 1px solid var(--hairline); }
@@ -271,11 +271,10 @@
   .cal-entry2 { flex-shrink: 0; cursor: pointer; padding: 2px 4px; transition: opacity .12s; border-left: 3px solid; }
   .cal-entry2 .proj2line { font-size: 11px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cal-entry2 .detail2line { font-size: 11px; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .action-badge2 { display: block; margin-top: 2px; width: fit-content; max-width: 100%; padding: 1px 5px; font-size: 10px; font-weight: 700; color: #fff; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cal-entry2.dimmed2 { opacity: 0.25; }
-  .cal-entry2.kind-early2 { border-left-color: var(--accent); background: rgba(89,128,166,0.08); color: var(--accent-900); }
-  .cal-entry2.kind-mid2 { border-left-color: var(--warn); background: rgba(138,100,32,0.07); color: #6b4d18; }
-  .cal-entry2.kind-urgent2 { border-left-color: var(--bad); background: rgba(162,69,60,0.07); color: #8a3a32; }
+  .cal-entry2.kind-biz2 { border-left-color: var(--accent); background: rgba(89,128,166,0.08); color: var(--accent-900); }
+  .cal-entry2.kind-m12 { border-left-color: var(--warn); background: rgba(138,100,32,0.07); color: #6b4d18; }
+  .cal-entry2.kind-end2 { border-left-color: var(--bad); background: rgba(162,69,60,0.07); color: #8a3a32; }
   .cal-more2 { flex-shrink: 0; align-self: flex-start; font-size: 11px; line-height: 1.3; font-weight: 700; white-space: nowrap; color: var(--accent-700); background: transparent; border: none; border-bottom: 1px solid #94bce3; padding: 0; cursor: pointer; font-family: inherit; }
   .cal-expand-panel2 { position: absolute; top: 0; left: 0; right: 0; min-height: 100%; background: #ffffff; border: 1px solid #1d1f20; box-shadow: var(--shadow-pop); padding: 5px 5px 6px; display: flex; flex-direction: column; gap: 3px; z-index: 50; }
 
@@ -290,6 +289,26 @@
   .summary-table2 td:last-child, .summary-table2 th:last-child { border-right: none; }
   .summary-table2 td.proj-cell2 { font-weight: 700; width: 22%; color: var(--ink); }
   .stage-badge2 { display: inline-block; font-size: 11px; font-weight: 700; color: var(--accent-700); border: 1px solid #94bce3; padding: 1px 7px; white-space: nowrap; }
+
+  /* ---- 사업 캘린더 이슈 카드(계약 / 사업) ---- */
+  .issue-group2 { margin-top: 18px; }
+  .issue-group2:first-child { margin-top: 4px; }
+  .issue-group-head2 { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--hairline); }
+  .issue-group-title2 { margin: 0; font-size: 13px; font-weight: 800; color: var(--ink); }
+  .issue-count2 { font-size: 11px; font-weight: 700; color: var(--faint); }
+  .issue-grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+  .issue-card2 { min-width: 0; padding: 10px 12px; border: 1px solid var(--hairline); border-left: 4px solid var(--accent); background: rgba(89,128,166,0.06); }
+  .issue-card2.contract2.m12 { border-left-color: var(--bad); background: rgba(162,69,60,0.06); }
+  .issue-card2.contract2.m32 { border-left-color: var(--warn); background: rgba(138,100,32,0.06); }
+  .issue-card2.past2 { opacity: 0.5; }
+  .issue-top2 { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
+  .issue-date2 { font-family: 'Barlow Condensed', 'Noto Sans KR', sans-serif; font-size: 14px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .issue-badge2 { font-size: 10px; font-weight: 700; padding: 1px 6px; color: #fff; background: var(--accent); white-space: nowrap; }
+  .contract2.m12 .issue-badge2 { background: var(--bad); }
+  .contract2.m32 .issue-badge2 { background: var(--warn); }
+  .issue-title2 { margin: 0; font-size: 13px; font-weight: 700; line-height: 1.4; color: var(--ink); word-break: keep-all; overflow-wrap: anywhere; }
+  .issue-meta2 { margin: 4px 0 0; font-size: 11px; color: var(--soft); }
+  .issue-hint2 { margin: 8px 0 0; font-size: 11px; color: var(--faint); }
 
   /* ---- 팀 일정 캘린더 이벤트 + 호버 패널 ---- */
   .teamcal-event2 { flex-shrink: 0; font-size: 11px; line-height: 1.4; padding: 2px 5px; border-left: 2px solid var(--accent); background: rgba(238,246,255,0.9); color: var(--accent-900); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
@@ -1288,7 +1307,7 @@
   }
 
   // ============================================================
-  // ③ 사업 캘린더 (검토 Tracker)
+  // ③ 사업 캘린더 (계약 / 사업 이슈 카드)
   // ============================================================
   function calCard(badgeText) {
     const card = sectionShell(false);
@@ -1303,221 +1322,174 @@
 
   const CAL_DOW = ["일", "월", "화", "수", "목", "금", "토"];
 
-  function isDateInMonth(d, year, month) {
-    return !!d && d.year === year && d.month === month;
+  // 2026-11 개편: 캘린더 격자 대신 "계약" / "사업" 두 묶음으로 나눠, 그 달의 이슈를 날짜순 카드로 보여준다.
+  // - 계약: 계약 종료일 기준 3개월 전·1개월 전 알림만 카드로 표기(종료일 미정 계약은 표기 안 함).
+  //   1개월 전은 시트 "1개월" 열 값을 우선 쓰고, 비어 있으면 종료일에서 계산. 시트에 3개월 열은 없어 종료일에서 계산.
+  // - 사업: 팀 구글 캘린더 일정 중 제목에 ◈ 표시(팀의 사업 일정 표기 관례)나 아래 키워드가 있는 일정.
+  //   피팅 같은 사업 준비 일정이 함께 잡혀도 괜찮다는 방침(엘라, 2026-11) — 기준은 여기 한 곳에서만 관리.
+  // 같은 기준으로 06 팀 일정 캘린더에서는 사업 일정을 빼서 두 곳에 중복 표기되지 않게 한다.
+  const BIZ_EVENT_MARK = "◈";
+  const BIZ_EVENT_KEYWORDS = ["운영종료", "서비스종료", "행사", "전시", "촬영", "업로드", "게시", "시딩", "SNS"];
+  function isBusinessEvent(title) {
+    const t = (title || "").replace(/\s+/g, "").toUpperCase(); // "운영 종료"·"sns"처럼 띄어쓰기/대소문자가 달라도 잡음
+    return t.includes(BIZ_EVENT_MARK) || BIZ_EVENT_KEYWORDS.some(k => t.includes(k.toUpperCase()));
   }
 
-  function closeActionPopover() {
-    const existing = document.querySelector(".popover2");
-    if (existing) existing.remove();
-  }
-  document.addEventListener("click", (ev) => {
-    if (!ev.target.closest(".popover2")) closeActionPopover();
-  });
-  function popRow(k, v) {
-    const row = el("div", "pop-row2");
-    row.appendChild(elText("span", "pop-k2", k));
-    row.appendChild(elText("span", "pop-v2", v || "-"));
-    return row;
+  const CONTRACT_ALERT_LABEL = { m3: "3개월 전", m1: "1개월 전" };
+
+  function isDateInMonth(d, year, month) {
+    return !!d && d.year === year && d.month === month;
   }
   function fmtDateYMD(d) {
     if (!d) return "-";
     const pad = n => String(n).padStart(2, "0");
     return `${d.year}-${pad(d.month)}-${pad(d.day)}`;
   }
-  function fmtContractPeriod(item) {
-    const period = `${fmtDateYMD(item.startDate)} ~ ${fmtDateYMD(item.endDate)}`;
-    return item.months ? `${period} (${item.months}개월)` : period;
-  }
   function fmtDDay(n) {
     if (n === null || n === undefined || isNaN(n)) return "-";
     return n >= 0 ? `D-${n}` : `D+${-n}`;
   }
-
-  function showActionPopover(anchorEl, item) {
-    closeActionPopover();
-    const pop = el("div", "popover2");
-    const closeBtn = document.createElement("button");
-    closeBtn.className = "pop-close2";
-    closeBtn.textContent = "×";
-    closeBtn.addEventListener("click", (ev) => { ev.stopPropagation(); closeActionPopover(); });
-    pop.appendChild(closeBtn);
-    pop.appendChild(elText("p", "pop-title2", item.project));
-    pop.appendChild(popRow("계약기간", fmtContractPeriod(item)));
-    pop.appendChild(popRow("D- 값", fmtDDay(item.dDay)));
-    pop.appendChild(popRow("ACTION 알림", item.actionAlert));
-    document.body.appendChild(pop);
-    const rect = anchorEl.getBoundingClientRect();
-    const popRect = pop.getBoundingClientRect();
-    let left = rect.left;
-    let top = rect.bottom + 6;
-    if (left + popRect.width > window.innerWidth - 8) left = window.innerWidth - popRect.width - 8;
-    if (top + popRect.height > window.innerHeight - 8) top = rect.top - popRect.height - 6;
-    pop.style.left = Math.max(8, left) + "px";
-    pop.style.top = Math.max(8, top) + "px";
+  function fmtMonthDayDow(date) {
+    return `${date.getMonth() + 1}/${date.getDate()} (${CAL_DOW[date.getDay()]})`;
+  }
+  function ymdToDate(d) {
+    return new Date(d.year, d.month - 1, d.day);
+  }
+  function startOfToday() {
+    const t = new Date();
+    return new Date(t.getFullYear(), t.getMonth(), t.getDate());
   }
 
-  const MARKER_LABEL = { early: "3개월 전", mid: "2개월 전", urgent: "1개월 전" };
-
-  // ACTION 알림 문구별 배지 색 — 캘린더 칸만 봐도 어떤 조치 단계인지 바로 구분되게.
-  // 시트가 만들어내는 문구가 늘어날 수 있어 키워드 매칭으로 넓게 잡고, 못 맞으면 기본색(--accent)으로.
-  function actionAlertColor(label) {
-    const l = (label || "").toLowerCase();
-    if (l.includes("close") || l.includes("renew")) return "#a2453c";
-    if (l.includes("decision")) return "#8a6420";
-    if (l.includes("tapping") || l.includes("negotiation")) return "#6b4d9e";
-    if (l.includes("review")) return "#5980a6";
-    if (l.includes("active")) return "#7a7a7d";
-    return "#5980a6";
+  // {year, month, day}에 개월 수를 더함 — 시트 EDATE와 같이 말일을 넘으면 그 달 말일로 맞춤(3/31 - 1개월 = 2/28).
+  function addMonthsYMD(d, n) {
+    const base = new Date(d.year, d.month - 1 + n, 1);
+    const lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0).getDate();
+    return { year: base.getFullYear(), month: base.getMonth() + 1, day: Math.min(d.day, lastDay) };
   }
 
-  function buildTrackerCalendarWeeks(year, month, items) {
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const firstDow = new Date(year, month - 1, 1).getDay();
-    const byDay = {};
-    const push = (day, entry) => { (byDay[day] = byDay[day] || []).push(entry); };
-    items.forEach(it => {
-      (it.markers || []).forEach(m => {
-        if (isDateInMonth(m.date, year, month)) {
-          push(m.date.day, { kind: m.kind, project: it.project, item: it });
-        }
-      });
-    });
-    const cells = [];
-    for (let i = 0; i < firstDow; i++) cells.push(null);
-    for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, dow: (firstDow + d - 1) % 7, entries: byDay[d] || [] });
-    while (cells.length % 7 !== 0) cells.push(null);
-    const weeks = [];
-    for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-    return weeks;
-  }
-
-  const CAL_MAX_VISIBLE = 2;
-
-  function renderTrackerCalendarGrid(weeks, activeFilter, onFilterChange) {
-    const wrap = document.createElement("div");
-    const legend = el("div", "cal-legend2");
-    [["early", "#5980a6", "3개월 전", "active-early2"], ["mid", "#8a6420", "2개월 전", "active-mid2"], ["urgent", "#a2453c", "1개월 전", "active-urgent2"]].forEach(([kind, dot, label, activeCls]) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "legend-btn2" + (activeFilter === kind ? " " + activeCls : "") + (activeFilter && activeFilter !== kind ? " dimmed2" : "");
-      const dotEl = el("i", "dot2"); dotEl.style.background = dot;
-      btn.appendChild(dotEl);
-      btn.appendChild(document.createTextNode(label));
-      btn.addEventListener("click", () => onFilterChange(kind));
-      legend.appendChild(btn);
-    });
-    wrap.appendChild(legend);
-
-    const grid = el("div", "cal-grid2");
-    CAL_DOW.forEach(d => grid.appendChild(elText("div", "cal-dow2", d)));
-    const makeEntry = (e) => {
-      const tag = el("div", "cal-entry2 kind-" + e.kind + "2" + (activeFilter && activeFilter !== e.kind ? " dimmed2" : ""));
-      tag.appendChild(elText("div", "proj2line", e.project));
-      if (e.item.actionAlert) {
-        const badge = elText("span", "action-badge2", e.item.actionAlert);
-        badge.style.background = actionAlertColor(e.item.actionAlert);
-        tag.appendChild(badge);
-      }
-      tag.title = e.item.actionAlert ? `${e.project} / ${MARKER_LABEL[e.kind]} / ${e.item.actionAlert}` : e.project;
-      tag.addEventListener("click", (ev) => { ev.stopPropagation(); showActionPopover(tag, e.item); });
-      return tag;
-    };
-    weeks.forEach(week => {
-      week.forEach(cellData => {
-        if (!cellData) { grid.appendChild(el("div", "cal-cell2 empty2")); return; }
-        const cell = el("div", "cal-cell2");
-        const inner = el("div", "cal-cell-inner2");
-        const dayEl = elText("div", "cal-daynum2", String(cellData.day));
-        dayEl.style.color = cellData.dow === 0 ? "#a2453c" : cellData.dow === 6 ? "#416180" : "#5d5d60";
-        inner.appendChild(dayEl);
-        const shown = cellData.entries.slice(0, CAL_MAX_VISIBLE);
-        const hidden = cellData.entries.length - CAL_MAX_VISIBLE;
-        shown.forEach(e => inner.appendChild(makeEntry(e)));
-        const expanded = cellData.expandedRef.value;
-        if (hidden > 0 && !expanded) {
-          const moreBtn = document.createElement("button");
-          moreBtn.type = "button"; moreBtn.className = "cal-more2";
-          moreBtn.textContent = "+" + hidden + "건";
-          moreBtn.addEventListener("click", (ev) => { ev.stopPropagation(); cellData.expandedRef.value = true; cellData.onExpandChange(); });
-          inner.appendChild(moreBtn);
-        }
-        cell.appendChild(inner);
-        if (expanded) {
-          const panel = el("div", "cal-expand-panel2");
-          const dayEl2 = elText("div", "cal-daynum2", String(cellData.day));
-          dayEl2.style.color = dayEl.style.color;
-          panel.appendChild(dayEl2);
-          cellData.entries.forEach(e => panel.appendChild(makeEntry(e)));
-          const foldBtn = document.createElement("button");
-          foldBtn.type = "button"; foldBtn.className = "cal-more2";
-          foldBtn.textContent = "접기";
-          foldBtn.addEventListener("click", (ev) => { ev.stopPropagation(); cellData.expandedRef.value = false; cellData.onExpandChange(); });
-          panel.appendChild(foldBtn);
-          cell.appendChild(panel);
-          cell.style.zIndex = "50";
-        }
-        grid.appendChild(cell);
-      });
-    });
-    wrap.appendChild(grid);
-    return wrap;
-  }
-
-  function renderTrackerSummary(items, year, month) {
-    // 프로젝트 하나가 이번 달에 마커(3/2/1개월 전)를 여러 개 가질 수 있어 마커 단위로 펼쳐서 보여줌.
-    const rows = [];
-    items.forEach(it => {
-      (it.markers || []).forEach(m => {
-        if (isDateInMonth(m.date, year, month)) rows.push({ item: it, marker: m });
-      });
-    });
-    rows.sort((a, b) => a.marker.date.day - b.marker.date.day);
-
-    const wrap = el("div", "cal-summary2");
-    wrap.appendChild(elText("p", "summary-title2", month + "월 요약"));
-    if (!rows.length) {
-      wrap.appendChild(elText("p", "summary-empty2", "이번 달 알림 예정 프로젝트가 없어요."));
-      return wrap;
+  // 종료일 미정(빈 칸·"(TBD)" 등)이면 null을 돌려 목록에서 뺀다. 서버 markers의 "urgent"가 시트 "1개월" 값.
+  function normalizeContractItem(item) {
+    const endDate = item.endDate || null;
+    if (!endDate) return null;
+    const sheetM1 = (item.markers || []).find(m => m.kind === "urgent");
+    let dDay = item.dDay;
+    if (dDay === null || dDay === undefined || isNaN(dDay)) {
+      dDay = Math.round((ymdToDate(endDate) - startOfToday()) / 86400000);
     }
-    const table = document.createElement("table");
-    table.className = "summary-table2";
-    const thead = document.createElement("thead");
-    const theadRow = document.createElement("tr");
-    ["프로젝트", "알림 구분", "일자", "계약기간", "D-", "ACTION 알림"].forEach(h => theadRow.appendChild(elText("th", null, h)));
-    thead.appendChild(theadRow);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    rows.forEach(({ item, marker }) => {
-      const tr = document.createElement("tr");
-      tr.appendChild(elText("td", "proj-cell2", item.project));
-      const kindTd = document.createElement("td");
-      kindTd.appendChild(elText("span", "stage-badge2", MARKER_LABEL[marker.kind]));
-      tr.appendChild(kindTd);
-      tr.appendChild(elText("td", null, `${marker.date.month}/${marker.date.day}`));
-      tr.appendChild(elText("td", null, fmtContractPeriod(item)));
-      tr.appendChild(elText("td", null, fmtDDay(item.dDay)));
-      tr.appendChild(elText("td", null, item.actionAlert || "-"));
-      tbody.appendChild(tr);
+    return Object.assign({}, item, {
+      endDate, dDay,
+      alerts: [
+        { kind: "m3", date: addMonthsYMD(endDate, -3) },
+        { kind: "m1", date: sheetM1 ? sheetM1.date : addMonthsYMD(endDate, -1) },
+      ],
     });
-    table.appendChild(tbody);
-    wrap.appendChild(table);
-    return wrap;
+  }
+
+  function contractIssuesInMonth(items, year, month) {
+    const out = [];
+    items.forEach(it => it.alerts.forEach(a => {
+      if (isDateInMonth(a.date, year, month)) out.push({ item: it, alert: a, date: ymdToDate(a.date) });
+    }));
+    return out.sort((a, b) => a.date - b.date);
+  }
+
+  // 이 달에 걸치는 사업 일정 — 여러 날에 걸친 일정도 카드 한 장(이 달 안의 첫 날 기준 정렬).
+  function bizIssuesInMonth(events, year, month) {
+    const monthStart = new Date(year, month - 1, 1), monthEnd = new Date(year, month, 0);
+    const out = [];
+    events.forEach(ev => {
+      const r = eventDateRange(ev);
+      if (!r) return;
+      const startDate = new Date(r.start.getFullYear(), r.start.getMonth(), r.start.getDate());
+      const endDate = new Date(r.end.getFullYear(), r.end.getMonth(), r.end.getDate());
+      if (endDate < monthStart || startDate > monthEnd) return;
+      out.push({
+        title: (ev.summary || "(제목 없음)").replace(BIZ_EVENT_MARK, "").trim(),
+        time: r.isAllDay ? null : r.start.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Seoul" }),
+        startDate, endDate,
+        sortKey: startDate < monthStart ? monthStart : startDate,
+      });
+    });
+    return out.sort((a, b) => a.sortKey - b.sortKey);
+  }
+
+  function issueCard(cls, dateText, badgeText, title, metaText, isPast) {
+    const card = el("div", "issue-card2 " + cls + (isPast ? " past2" : ""));
+    const top = el("div", "issue-top2");
+    top.appendChild(elText("span", "issue-date2", dateText));
+    if (badgeText) top.appendChild(elText("span", "issue-badge2", badgeText));
+    card.appendChild(top);
+    card.appendChild(elText("p", "issue-title2", title));
+    if (metaText) card.appendChild(elText("p", "issue-meta2", metaText));
+    card.title = metaText ? `${title} / ${metaText}` : title;
+    return card;
+  }
+
+  function issueGroup(title, cards, emptyText, hintText) {
+    const group = el("div", "issue-group2");
+    const head = el("div", "issue-group-head2");
+    head.appendChild(elText("p", "issue-group-title2", title));
+    head.appendChild(elText("span", "issue-count2", cards.length + "건"));
+    group.appendChild(head);
+    if (cards.length) {
+      const grid = el("div", "issue-grid2");
+      cards.forEach(c => grid.appendChild(c));
+      group.appendChild(grid);
+    } else {
+      group.appendChild(elText("p", "summary-empty2", emptyText));
+    }
+    if (hintText) group.appendChild(elText("p", "issue-hint2", hintText));
+    return group;
+  }
+
+  function renderContractGroup(items, year, month) {
+    const today = startOfToday();
+    const cards = contractIssuesInMonth(items, year, month).map(({ item, alert, date }) => {
+      const meta = [item.category, `계약 종료 ${fmtDateYMD(item.endDate)}`, fmtDDay(item.dDay)].filter(Boolean).join(" · ");
+      return issueCard("contract2 " + alert.kind + "2", fmtMonthDayDow(date), CONTRACT_ALERT_LABEL[alert.kind], item.project, meta, date < today);
+    });
+    return issueGroup("계약", cards, "이번 달 계약 알림(3개월 전·1개월 전)이 없어요.", "계약 종료일 기준 3개월 전·1개월 전 알림 / 종료일 미정 계약은 제외");
+  }
+
+  function renderBizGroup(bizState, year, month) {
+    if (!bizState) return issueGroup("사업", [], "구글 캘린더 사업 일정 불러오는 중…");
+    if (bizState.error) return issueGroup("사업", [], "구글 캘린더 사업 일정을 불러오지 못했어요: " + bizState.error);
+    const today = startOfToday();
+    const cards = bizIssuesInMonth(bizState.events, year, month).map(b => {
+      const dateText = `${fmtEventDateSpan(b)} (${CAL_DOW[b.startDate.getDay()]})`;
+      const tag = (b.title.match(/^\[([^\]]+)\]/) || [])[1] || null; // 제목 앞 [광고]·[IP] 표기를 배지로
+      const title = tag ? b.title.replace(/^\[[^\]]+\]\s*/, "") : b.title;
+      return issueCard("biz2", dateText, tag, title, b.time || "종일", b.endDate < today);
+    });
+    return issueGroup("사업", cards, "이번 달 사업 일정이 없어요.", `${TEAM_CAL_LABEL} 중 ${BIZ_EVENT_MARK} 표시 또는 키워드(${BIZ_EVENT_KEYWORDS.join("·")})가 있는 일정`);
   }
 
   async function loadCalSection(slotEl) {
     slotEl.innerHTML = "";
     slotEl.appendChild(renderCalPlaceholder());
+    // 사업 일정은 팀 구글 캘린더를 달 단위로 받아와 isBusinessEvent로 거른 뒤 달마다 한 번만 보관.
+    // 구글 캘린더 쪽이 실패해도 계약 카드는 그대로 보이게, 오류는 따로 담아 안내 문구로만 표시.
+    const bizEventState = {}; // "연-월" -> { events, error }
+    const bizEventPending = {};
+    function loadBizEvents(y, m) {
+      const key = `${y}-${m}`;
+      if (!bizEventPending[key]) {
+        bizEventPending[key] = callBackend("teamCalendar", { year: y, month: m })
+          .then(r => {
+            if (!r.ok) throw new Error(r.message || r.error || "알 수 없는 오류");
+            bizEventState[key] = { events: (r.events || []).filter(ev => isBusinessEvent(ev.summary)), error: null };
+          })
+          .catch(err => { bizEventState[key] = { events: [], error: err.message }; });
+      }
+      return bizEventPending[key];
+    }
     try {
-      const data = await callBackend("businessCalendar");
-      if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
-      const currentItems = data.items || [];
-      const card = calCard(null);
-
       const today = new Date();
       let navYear = today.getFullYear(), navMonth = today.getMonth() + 1;
-      let activeFilter = null;
-      const expandState = {}; // day -> {value:bool}
+      const [data] = await Promise.all([callBackend("businessCalendar"), loadBizEvents(navYear, navMonth)]);
+      if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
+      const currentItems = (data.items || []).map(normalizeContractItem).filter(Boolean);
+      const card = calCard(null);
 
       const nav = el("div", "cal-nav-row2");
       const prevBtn = document.createElement("button");
@@ -1526,29 +1498,24 @@
       nextBtn.type = "button"; nextBtn.className = "nav-btn2"; nextBtn.textContent = "▶";
       const navLabel = el("div", "nav-month-label2", "");
       nav.appendChild(prevBtn); nav.appendChild(navLabel); nav.appendChild(nextBtn);
-      const gridSlot = el("div", null);
+      const bodySlot = el("div", null);
 
       function renderMonthView() {
         navLabel.textContent = `${navYear}년 ${navMonth}월`;
-        const weeks = buildTrackerCalendarWeeks(navYear, navMonth, currentItems);
-        weeks.forEach(week => week.forEach(cellData => {
-          if (!cellData) return;
-          if (!expandState[cellData.day]) expandState[cellData.day] = { value: false };
-          cellData.expandedRef = expandState[cellData.day];
-          cellData.onExpandChange = renderMonthView;
-        }));
-        gridSlot.innerHTML = "";
-        gridSlot.appendChild(renderTrackerCalendarGrid(weeks, activeFilter, (kind) => {
-          activeFilter = activeFilter === kind ? null : kind;
-          renderMonthView();
-        }));
-        gridSlot.appendChild(renderTrackerSummary(currentItems, navYear, navMonth));
+        const biz = bizEventState[`${navYear}-${navMonth}`];
+        if (!biz) {
+          const y = navYear, m = navMonth;
+          loadBizEvents(y, m).then(() => { if (navYear === y && navMonth === m) renderMonthView(); });
+        }
+        bodySlot.innerHTML = "";
+        bodySlot.appendChild(renderContractGroup(currentItems, navYear, navMonth));
+        bodySlot.appendChild(renderBizGroup(biz, navYear, navMonth));
       }
-      prevBtn.onclick = () => { navMonth--; if (navMonth < 1) { navMonth = 12; navYear--; } for (const k in expandState) delete expandState[k]; closeActionPopover(); renderMonthView(); };
-      nextBtn.onclick = () => { navMonth++; if (navMonth > 12) { navMonth = 1; navYear++; } for (const k in expandState) delete expandState[k]; closeActionPopover(); renderMonthView(); };
+      prevBtn.onclick = () => { navMonth--; if (navMonth < 1) { navMonth = 12; navYear--; } renderMonthView(); };
+      nextBtn.onclick = () => { navMonth++; if (navMonth > 12) { navMonth = 1; navYear++; } renderMonthView(); };
 
       card.appendChild(nav);
-      card.appendChild(gridSlot);
+      card.appendChild(bodySlot);
       renderMonthView();
       slotEl.innerHTML = "";
       slotEl.appendChild(card);
@@ -1963,10 +1930,10 @@
       try {
         const data = await callBackend("teamCalendar", { year, month });
         if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
-        const events = data.events || [];
+        const events = (data.events || []).filter(ev => !isBusinessEvent(ev.summary));
         gridSlot.innerHTML = "";
         gridSlot.appendChild(renderTeamCalGrid(buildTeamCalWeeks(year, month, events)));
-        gridSlot.appendChild(elText("p", "teamcal-caption2", "칸에 마우스를 올리면 그날 전체 일정이 펼쳐집니다."));
+        gridSlot.appendChild(elText("p", "teamcal-caption2", "칸에 마우스를 올리면 그날 전체 일정이 펼쳐집니다. 사업 일정(◈ 표시·촬영·전시·SNS 게시일·시딩일·서비스 운영종료 등)은 04 사업 캘린더에 표시됩니다."));
       } catch (err) {
         gridSlot.innerHTML = "";
         gridSlot.appendChild(elText("p", "state-msg2 err2", "불러오지 못했어요: " + err.message));
