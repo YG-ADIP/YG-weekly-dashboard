@@ -778,11 +778,14 @@ function extractTrendNewFormat_(rows, headerIdx) {
     var artist = String(r[1] || '').trim();
     var brand = String(r[2] || '').trim();
     var content = String(r[3] || '').trim();
-    var voc = String(r[4] || '').trim();
     if (!cat) continue;
     if (!artist && !content) continue; // 아직 안 채워진 템플릿 행
     if (!byCat[cat]) byCat[cat] = [];
-    byCat[cat].push({ label: brand ? (artist + ' · ' + brand) : artist, content: content, voc: voc });
+    // 2026-11: VOC 열은 더 이상 읽지 않음(시트에서도 제외). 아티스트·브랜드/파트너는 화면에서 칩으로
+    // 따로 보여주므로 합치지 않고 각각 내려준다("-"는 브랜드 없음 표기 → 빈 값). label은 재배포 전
+    // 화면과의 호환용으로 함께 유지.
+    if (brand === '-') brand = '';
+    byCat[cat].push({ artist: artist, brand: brand, label: brand ? (artist + ' · ' + brand) : artist, content: content });
   }
   var sections = [];
   order.forEach(function (cat) {
@@ -804,7 +807,6 @@ function extractTrendOldFormat_(rows, headerIdx) {
     if (!catRaw) continue;
     var label = String(r[1] || '').trim();
     var content = String(r[2] || '').trim();
-    var voc = String(r[3] || '').trim();
     if (!label && !content) continue;
     var cat = catRaw.toUpperCase();
     if (!byCat[cat]) {
@@ -814,7 +816,7 @@ function extractTrendOldFormat_(rows, headerIdx) {
       byCat[cat] = { cls: cls, title: title, items: [] };
       sections.push(byCat[cat]);
     }
-    byCat[cat].items.push({ label: label, content: content, voc: voc });
+    byCat[cat].items.push({ label: label, content: content });
   }
   return sections;
 }
