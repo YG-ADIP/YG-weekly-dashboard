@@ -345,30 +345,29 @@
   .teamcal-cell2.has-events2:hover .teamcal-hover-panel2 { opacity: 1; visibility: visible; pointer-events: auto; }
 
   /* ---- 트렌드 리포트 ---- */
-  .trend-block2 { padding: 12px 14px 4px; margin-bottom: 14px; border-left: 3px solid; }
+  /* 2026-11 개편: 항목마다 흰 카드 — 아티스트(채운 칩)·브랜드/파트너(테두리 칩) + 첫 줄 헤드라인(굵게) +
+     나머지 줄 글머리 목록(구글시트 셀 줄바꿈 1줄 = 1항목). 구분(내부/외부 등)별 색은 --tc 하나로 관리. */
+  .trend-block2 { --tc: var(--accent-900); padding: 12px 14px; margin-bottom: 14px; border-left: 3px solid var(--tc); }
   .trend-block2:last-child { margin-bottom: 0; }
-  .trend-title2 { font-family: 'Barlow Condensed', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; margin: 0 0 10px; }
-  .trend-item2 { padding: 0 0 11px; margin-bottom: 11px; border-bottom: 1px solid rgba(29,31,32,0.1); }
-  .trend-item2:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
-  .trend-label2 { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; margin-bottom: 4px; }
-  /* 트렌드 리포트만 예외: 위 공통 규칙(75% 폭 제한)을 적용하지 않고 카드 폭 전체를 씀 —
-     줄바꿈 트리거만 뺀 것이라 어절 단위 줄바꿈/구글시트 줄바꿈 보존은 그대로 유지 */
-  .trend-line2 { display: block; font-size: 13px; line-height: 1.5; font-weight: 500; color: var(--ink); max-width: 100%; word-break: keep-all; overflow-wrap: break-word; white-space: pre-wrap; }
-  .trend-voc2 { margin-top: 8px; padding: 8px 10px; border-left: 2px solid rgba(29,31,32,0.2); background: rgba(29,31,32,0.035); }
-  .voc-line2 { display: block; font-size: 12px; font-style: italic; line-height: 1.5; color: var(--soft); }
+  .trend-title2 { display: flex; align-items: baseline; gap: 8px; font-family: 'Barlow Condensed', 'Noto Sans KR', sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; margin: 0 0 10px; color: var(--tc); }
+  .trend-count2 { font-size: 11px; font-weight: 700; letter-spacing: 0; color: var(--faint); }
+  .trend-item2 { background: #ffffff; border: 1px solid rgba(29,31,32,0.1); padding: 11px 13px 12px; margin-bottom: 8px; }
+  .trend-item2:last-child { margin-bottom: 0; }
+  .trend-chips2 { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 7px; }
+  .trend-chip2 { font-size: 11px; font-weight: 700; line-height: 1.5; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--tc); white-space: nowrap; }
+  .trend-chip2.artist2 { background: var(--tc); color: #ffffff; }
+  .trend-chip2.brand2 { background: #ffffff; color: var(--tc); }
+  .trend-head2 { margin: 0; font-size: 13.5px; font-weight: 700; line-height: 1.5; color: var(--ink); word-break: keep-all; overflow-wrap: anywhere; }
+  .trend-points2 { margin: 5px 0 0; padding-left: 17px; }
+  .trend-points2 li { margin-top: 3px; font-size: 12.5px; line-height: 1.55; color: #424244; word-break: keep-all; overflow-wrap: anywhere; }
+  .trend-points2 li::marker { color: var(--tc); }
 
-  .trend-block2.tclr-chance { border-left-color: #416180; background: rgba(238,246,255,0.6); }
-  .trend-block2.tclr-chance .trend-title2, .trend-block2.tclr-chance .trend-label2 { color: #416180; }
-  .trend-block2.tclr-risk { border-left-color: var(--bad); background: rgba(162,69,60,0.05); }
-  .trend-block2.tclr-risk .trend-title2, .trend-block2.tclr-risk .trend-label2 { color: var(--bad); }
-  .trend-block2.tclr-extra1 { border-left-color: var(--warn); background: rgba(138,100,32,0.05); }
-  .trend-block2.tclr-extra1 .trend-title2, .trend-block2.tclr-extra1 .trend-label2 { color: var(--warn); }
-  .trend-block2.tclr-extra2 { border-left-color: var(--good); background: rgba(47,107,82,0.05); }
-  .trend-block2.tclr-extra2 .trend-title2, .trend-block2.tclr-extra2 .trend-label2 { color: var(--good); }
-  .trend-block2.tclr-extra3 { border-left-color: var(--accent-900); background: rgba(44,69,93,0.05); }
-  .trend-block2.tclr-extra3 .trend-title2, .trend-block2.tclr-extra3 .trend-label2 { color: var(--accent-900); }
-  .trend-block2.tclr-extra4 { border-left-color: #627d98; background: rgba(98,125,152,0.06); }
-  .trend-block2.tclr-extra4 .trend-title2, .trend-block2.tclr-extra4 .trend-label2 { color: #627d98; }
+  .trend-block2.tclr-chance { --tc: #416180; background: rgba(238,246,255,0.6); }
+  .trend-block2.tclr-risk { --tc: var(--bad); background: rgba(162,69,60,0.05); }
+  .trend-block2.tclr-extra1 { --tc: var(--warn); background: rgba(138,100,32,0.05); }
+  .trend-block2.tclr-extra2 { --tc: var(--good); background: rgba(47,107,82,0.05); }
+  .trend-block2.tclr-extra3 { --tc: var(--accent-900); background: rgba(44,69,93,0.05); }
+  .trend-block2.tclr-extra4 { --tc: #627d98; background: rgba(98,125,152,0.06); }
 
   /* ---- 오류 카드 ---- */
   .error-card2 { border-color: var(--bad) !important; }
@@ -1674,28 +1673,47 @@
     card.appendChild(head);
     return card;
   }
+  // 2026-11 개편: VOC 미표기, 아티스트·브랜드/파트너는 둥근 칩, 내용은 구글시트 셀 줄바꿈(과 예전 "//" 구분자)
+  // 기준으로 나눠 첫 줄은 헤드라인(굵게), 나머지는 글머리 목록으로 보여준다.
+  // 재배포 전 백엔드는 artist/brand 대신 "아티스트 · 브랜드" 한 줄(label)만 주므로 나눠서 호환.
+  // 8월 이전 형식(CHANCE/RISK)은 label이 "항목"이라 칩 하나로 보인다.
+  function trendChipsOf(item) {
+    let artist = item.artist, brand = item.brand;
+    if (artist === undefined && item.label) {
+      const parts = item.label.split(" · ");
+      artist = parts[0];
+      brand = parts.slice(1).join(" · ");
+    }
+    const clean = v => { const t = (v || "").trim(); return t === "-" ? "" : t; };
+    return { artist: clean(artist), brand: clean(brand) };
+  }
   function trendHeadline(item, isPlaceholder) {
-    const div = el("div", "trend-item2");
+    const card = el("div", "trend-item2");
     if (isPlaceholder) {
-      div.appendChild(elText("span", "trend-line2", item.content || ""));
-      return div;
+      card.appendChild(elText("p", "trend-head2", item.content || ""));
+      return card;
     }
-    if (item.label) div.appendChild(elText("span", "trend-label2", item.label));
-    (item.content || "").split(/\s*\/\/\s*/).filter(Boolean).forEach(line => {
-      div.appendChild(elText("span", "trend-line2", line));
-    });
-    if (item.voc) {
-      const vocParts = item.voc.split(/\s*\/\/\s*/).filter(Boolean);
-      const lines = vocParts.length ? vocParts : [item.voc.trim()];
-      const vocBox = el("div", "trend-voc2");
-      lines.forEach(v => vocBox.appendChild(elText("span", "voc-line2", "“" + v + "”")));
-      div.appendChild(vocBox);
+    const { artist, brand } = trendChipsOf(item);
+    if (artist || brand) {
+      const chips = el("div", "trend-chips2");
+      if (artist) chips.appendChild(elText("span", "trend-chip2 artist2", artist));
+      if (brand) chips.appendChild(elText("span", "trend-chip2 brand2", brand));
+      card.appendChild(chips);
     }
-    return div;
+    const lines = (item.content || "").split(/\r?\n|\/\//).map(l => l.trim()).filter(Boolean);
+    if (lines.length) card.appendChild(elText("p", "trend-head2", lines[0]));
+    if (lines.length > 1) {
+      const list = el("ul", "trend-points2");
+      lines.slice(1).forEach(l => list.appendChild(elText("li", null, l)));
+      card.appendChild(list);
+    }
+    return card;
   }
   function trendSectionBox(cls, title, items, placeholderText) {
     const box = el("div", "trend-block2 tclr-" + cls);
-    box.appendChild(elText("p", "trend-title2", title));
+    const titleEl = elText("p", "trend-title2", title);
+    if (items.length) titleEl.appendChild(elText("span", "trend-count2", items.length + "건"));
+    box.appendChild(titleEl);
     if (items.length) items.forEach(it => box.appendChild(trendHeadline(it)));
     else box.appendChild(trendHeadline({ content: placeholderText }, true));
     return box;
