@@ -198,7 +198,14 @@
   }
 
   /* ---- KPI 히어로 + 스파크라인 ---- */
-  .kpi-hero2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 32px; align-items: start; }
+  /* 2026-11: 좌(연간·상하반기 표)·우(주별 추이) 높이 대칭 — 두 칸을 같은 높이로 늘리고, 오른쪽 그래프 상자가
+     남는 높이를 채워 위(제목)·아래(상·하반기 표 끝) 선이 맞게 한다. 한 줄로 쌓이는 좁은 화면에선 최소 높이 유지. */
+  .kpi-hero2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 32px; align-items: stretch; }
+  .kpi-hero2 > div > :last-child { margin-bottom: 0; }
+  .kpi-hero-right2 { display: flex; flex-direction: column; min-width: 0; }
+  .kpi-hero-right2 .spark-box2 { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 220px; }
+  .kpi-hero-right2 .spark-box2 > svg { flex: 1 1 0; min-height: 0; height: auto; }
+  .kpi-hero-legend2 { margin: 16px 0 0; }
   .spark-head2 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
   .spark-legend2 { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #b9b9bc; }
   .spark-legend2 .dot3 { width: 8px; height: 8px; background: #94bce3; display: inline-block; }
@@ -361,6 +368,21 @@
   .trend-points2 { margin: 5px 0 0; padding-left: 17px; }
   .trend-points2 li { margin-top: 3px; font-size: 12.5px; line-height: 1.55; color: #424244; word-break: keep-all; overflow-wrap: anywhere; }
   .trend-points2 li::marker { color: var(--tc); }
+
+  /* 펼치기: 옆 사업 캘린더 칸을 벗어나 한 줄 전체 폭으로, 팀 AGENDA처럼 구분별 열 + 큰 글씨로 보여줌. */
+  .trend-sections2 { display: flex; flex-direction: column; gap: 14px; }
+  .trend-sections2 .trend-block2 { margin-bottom: 0; }
+  .trend-expand-btn2 { font-family: inherit; }
+  #trendSlot.trend-expanded2 { grid-column: 1 / -1; }
+  .split-row2:has(#trendSlot.trend-expanded2) #calSlot { grid-column: 1 / -1; } /* 옆 칸이 비지 않게 사업 캘린더도 전체 폭 */
+  .trend-expanded2 .trend-sections2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 18px; align-items: start; }
+  .trend-expanded2 .trend-title2 { font-size: 15px; margin-bottom: 12px; }
+  .trend-expanded2 .trend-count2 { font-size: 13px; }
+  .trend-expanded2 .trend-item2 { padding: 14px 16px 15px; margin-bottom: 10px; }
+  .trend-expanded2 .trend-chip2 { font-size: 13px; padding: 3px 12px; }
+  .trend-expanded2 .trend-head2 { font-size: 16px; }
+  .trend-expanded2 .trend-points2 li { font-size: 14px; margin-top: 4px; }
+  @media (max-width: 560px) { .trend-expanded2 .trend-sections2 { grid-template-columns: minmax(0, 1fr); } }
 
   .trend-block2.tclr-chance { --tc: #416180; background: rgba(238,246,255,0.6); }
   .trend-block2.tclr-risk { --tc: var(--bad); background: rgba(162,69,60,0.05); }
@@ -710,9 +732,11 @@
     const gridYs = [padTop, (padTop + baseY) / 2, baseY];
     const gid = "sparkFade" + (sparkChartUid++);
     const gridLines = gridYs.map(y => `<line x1="24" y1="${y}" x2="496" y2="${y}" stroke="rgba(255,255,255,0.16)" stroke-width="1"/>`).join("");
-    const dotsOf = (cs, color) => cs.map(c => `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="3" fill="${color}"/>`).join("");
+    // 세로로 늘려도 점이 타원으로 찌그러지지 않게, 원 대신 길이 0인 선 + 둥근 끝(화면 픽셀 기준 두께)으로 그림.
+    const dotsOf = (cs, color) => cs.map(c => `<path d="M${c[0].toFixed(1)},${c[1].toFixed(1)} l0,0" stroke="${color}" stroke-width="6" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`).join("");
     const lineOf = (d, color) => `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
-    const svgHtml = `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none" style="display:block;aspect-ratio:${W}/${H};">` +
+    // 높이는 KPI 왼쪽 표 높이에 맞춰 늘어나므로(.kpi-hero-right2) 비율 고정 없이 상자를 채운다.
+    const svgHtml = `<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none" style="display:block;">` +
       `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">` +
       `<stop offset="0%" stop-color="${SPARK_S_COLOR}" stop-opacity="0.26"/>` +
       `<stop offset="100%" stop-color="${SPARK_S_COLOR}" stop-opacity="0"/>` +
@@ -847,14 +871,14 @@
   }
 
   function kpiHeroBody(annualBlock, halvesBlock, chartPoints, showLegend) {
+    const outer = el("div", null);
     const body = el("div", "kpi-hero2");
     const left = el("div", null);
     left.appendChild(annualBlock);
     if (halvesBlock) left.appendChild(halvesBlock);
-    if (showLegend) left.appendChild(kpiLegend());
     body.appendChild(left);
 
-    const right = el("div", null);
+    const right = el("div", "kpi-hero-right2");
     const sh = el("div", "spark-head2");
     sh.appendChild(elText("p", "kpi-block-kicker2", "주별 달성률 추이"));
     const legend = el("span", "spark-legend2");
@@ -872,7 +896,14 @@
       right.appendChild(elText("p", "state-msg2", "데이터가 쌓이는 중입니다 — 매주 새 파일을 올리면 추이가 표시됩니다 (현재 " + (chartPoints ? chartPoints.length : 0) + "건)."));
     }
     body.appendChild(right);
-    return body;
+    outer.appendChild(body);
+    // 범례는 좌우 대칭을 위해 두 칸 아래 전체 폭으로.
+    if (showLegend) {
+      const legend = kpiLegend();
+      legend.classList.add("kpi-hero-legend2");
+      outer.appendChild(legend);
+    }
+    return outer;
   }
 
   function renderKpiPlaceholder() {
@@ -1662,6 +1693,17 @@
   // ============================================================
   // ④ 트렌드 리포트
   // ============================================================
+  // 펼치기 상태는 보는 사람 브라우저에만 기억(다음 접속 때 그대로) — 저장 실패해도 기본(접힘)으로 동작.
+  let trendExpanded = false;
+  try { trendExpanded = localStorage.getItem("trendExpanded") === "1"; } catch (e) {}
+  function applyTrendExpanded() {
+    const slot = document.getElementById("trendSlot");
+    if (slot) slot.classList.toggle("trend-expanded2", trendExpanded);
+    document.querySelectorAll(".trend-expand-btn2").forEach(b => {
+      b.innerHTML = EDIT_PENCIL_ICON2.replace(/<path[^>]*\/>/, trendExpanded ? '<path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/>' : '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>');
+      b.appendChild(document.createTextNode(trendExpanded ? "접기" : "펼쳐 보기"));
+    });
+  }
   function newsCard(badgeText) {
     const card = sectionShell(false);
     const head = el("div", "dashsec-head");
@@ -1671,11 +1713,17 @@
     kickerWrap.appendChild(elText("h2", null, "트렌드 리포트"));
     left.appendChild(kickerWrap);
     head.appendChild(left);
-    if (badgeText) {
-      const right = el("div", "dashsec-head-right");
-      right.appendChild(elText("span", "badge-outline2", badgeText));
-      head.appendChild(right);
-    }
+    const right = el("div", "dashsec-head-right");
+    const expandBtn = el("button", "teamcal-insight-edit2 trend-expand-btn2");
+    expandBtn.type = "button";
+    expandBtn.addEventListener("click", () => {
+      trendExpanded = !trendExpanded;
+      try { localStorage.setItem("trendExpanded", trendExpanded ? "1" : "0"); } catch (e) {}
+      applyTrendExpanded();
+    });
+    right.appendChild(expandBtn);
+    if (badgeText) right.appendChild(elText("span", "badge-outline2", badgeText));
+    head.appendChild(right);
     card.appendChild(head);
     return card;
   }
@@ -1727,8 +1775,10 @@
 
   function renderTrendPlaceholder() {
     const news = newsCard("예시");
-    news.appendChild(trendSectionBox("chance", "CHANCE (기회 요인)", [], "예시: BM: 로라 비주얼 및 베몬 가대 라이브 무대 화제"));
-    news.appendChild(trendSectionBox("risk", "RISK (위기 요인)", [], "예시: 역조공 논란: 베몬 팬 대상 역조공 품목 갑론을박"));
+    const secWrap = el("div", "trend-sections2");
+    secWrap.appendChild(trendSectionBox("chance", "CHANCE (기회 요인)", [], "예시: BM: 로라 비주얼 및 베몬 가대 라이브 무대 화제"));
+    secWrap.appendChild(trendSectionBox("risk", "RISK (위기 요인)", [], "예시: 역조공 논란: 베몬 팬 대상 역조공 품목 갑론을박"));
+    news.appendChild(secWrap);
     return news;
   }
 
@@ -1743,10 +1793,13 @@
     } else if (!sections.length) {
       news.appendChild(elText("p", "state-msg2", "작성된 내용이 없습니다."));
     } else {
-      sections.forEach(sec => news.appendChild(trendSectionBox(sec.cls, sec.title, sec.items, "")));
+      const secWrap = el("div", "trend-sections2");
+      sections.forEach(sec => secWrap.appendChild(trendSectionBox(sec.cls, sec.title, sec.items, "")));
+      news.appendChild(secWrap);
     }
     newsSlotEl.innerHTML = "";
     newsSlotEl.appendChild(news);
+    applyTrendExpanded();
   }
 
   // ============================================================
@@ -2345,6 +2398,7 @@
     agendaSlot.appendChild(renderAgendaPlaceholder());
     calSlot.appendChild(renderCalPlaceholder());
     trendSlot.appendChild(renderTrendPlaceholder());
+    applyTrendExpanded();
   }
 
   // ============================================================
