@@ -118,6 +118,16 @@
   .dark-section .dashsec-num { color: #9a9a9e; }
   .dashsec-head h2 { font-size: 20px; }
   .dashsec-head-right { display: flex; align-items: center; gap: 10px; }
+  /* 섹션 접기/펼치기(2026-11): 보는 동안만 일시적으로 숨김 — 상태는 저장하지 않아 새로고침하면 다시 펼쳐짐.
+     접힘 표시는 섹션을 담는 슬롯(div#…Slot)에 붙여서, 주차 변경 등으로 섹션을 새로 그려도 그대로 유지. */
+  .sec-toggle2 { display: inline-flex; align-items: center; gap: 4px; font-family: inherit; font-size: 11px; font-weight: 700; padding: 3px 9px; border: 1px solid rgba(29,31,32,0.2); background: transparent; color: var(--soft); cursor: pointer; white-space: nowrap; }
+  .sec-toggle2:hover { border-color: var(--accent); color: var(--accent-700); }
+  .dark-section .sec-toggle2 { border-color: rgba(255,255,255,0.3); color: #b9b9bc; }
+  .dark-section .sec-toggle2:hover { border-color: #ffffff; color: #ffffff; }
+  .sec-toggle2 .when-closed2, .sec-collapsed2 .sec-toggle2 .when-open2 { display: none; }
+  .sec-collapsed2 .sec-toggle2 .when-closed2 { display: inline; }
+  .sec-collapsed2 > .dashsec > :not(.dashsec-head):not(.corner) { display: none !important; }
+  .sec-collapsed2 > .dashsec .dashsec-head { padding-bottom: 0; border-bottom: none; margin-bottom: 0; }
   .badge-outline2 { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--soft); border: 1px solid rgba(29,31,32,0.2); padding: 2px 9px; white-space: nowrap; }
   .dark-section .badge-outline2 { color: #b9b9bc; border-color: rgba(255,255,255,0.3); }
   .link-detail2 { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-decoration: none; }
@@ -648,8 +658,20 @@
     const right = el("div", "dashsec-head-right");
     if (badgeText != null) right.appendChild(elText("span", "badge-outline2", badgeText));
     if (rightExtra) right.appendChild(rightExtra);
+    right.appendChild(sectionToggleBtn());
     head.appendChild(right);
     return head;
+  }
+  // 섹션 제목줄 오른쪽 끝 [접기]/[펼치기] — 글자 전환은 CSS(.sec-collapsed2)가 처리.
+  function sectionToggleBtn() {
+    const btn = el("button", "sec-toggle2", '<span class="when-open2">▾ 접기</span><span class="when-closed2">▸ 펼치기</span>');
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      const section = btn.closest(".dashsec");
+      const slot = section && section.parentElement;
+      if (slot) slot.classList.toggle("sec-collapsed2");
+    });
+    return btn;
   }
   function sectionShell(dark, extraCls) {
     const section = el("section", "blueprint dashsec" + (dark ? " dark-section" : "") + (extraCls ? " " + extraCls : ""));
@@ -1717,6 +1739,7 @@
     });
     right.appendChild(expandBtn);
     if (badgeText) right.appendChild(elText("span", "badge-outline2", badgeText));
+    right.appendChild(sectionToggleBtn());
     head.appendChild(right);
     card.appendChild(head);
     return card;
