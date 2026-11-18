@@ -536,7 +536,8 @@
 
   <div id="insightSlot"></div>
   <div id="kpiSlot"></div>
-  <div id="monthlyTrackSlot"></div>
+  <!-- 월별 트래킹: 2026-11 화면에서 숨김(코드는 남겨 둠) — 다시 보이려면 hidden 제거 + SHOW_MONTHLY_TRACKING = true -->
+  <div id="monthlyTrackSlot" hidden></div>
   <div id="agendaSlot"></div>
   <div class="split-row2">
     <div id="calSlot"></div>
@@ -1254,7 +1255,7 @@
   // ============================================================
   function agendaCard(badgeText) {
     const card = sectionShell(false);
-    card.appendChild(sectionHead("03", "팀 AGENDA", false, badgeText));
+    card.appendChild(sectionHead("02", "팀 AGENDA", false, badgeText));
     return card;
   }
 
@@ -1328,7 +1329,7 @@
     function render() {
       container.innerHTML = "";
       const card = sectionShell(false);
-      card.appendChild(sectionHead("03", "팀 AGENDA", false, "예시", agendaFilterChips(render)));
+      card.appendChild(sectionHead("02", "팀 AGENDA", false, "예시", agendaFilterChips(render)));
       card.appendChild(buildAgendaGrid(dataByKey));
       container.appendChild(card);
     }
@@ -1355,7 +1356,7 @@
     });
     function render() {
       const card = sectionShell(false);
-      card.appendChild(sectionHead("03", "팀 AGENDA", false, label, agendaFilterChips(render)));
+      card.appendChild(sectionHead("02", "팀 AGENDA", false, label, agendaFilterChips(render)));
       card.appendChild(buildAgendaGrid(dataByKey));
       slotEl.innerHTML = "";
       slotEl.appendChild(card);
@@ -1368,7 +1369,7 @@
   // ============================================================
   function calCard(badgeText) {
     const card = sectionShell(false);
-    card.appendChild(sectionHead("04", "사업 캘린더", false, badgeText));
+    card.appendChild(sectionHead("03", "사업 캘린더", false, badgeText));
     return card;
   }
   function renderCalPlaceholder() {
@@ -1725,7 +1726,7 @@
     const head = el("div", "dashsec-head");
     const left = el("div", "kicker-left");
     const kickerWrap = el("div", null);
-    kickerWrap.appendChild(elText("p", "dashsec-num", "05 · TREND REPORT"));
+    kickerWrap.appendChild(elText("p", "dashsec-num", "04 · TREND REPORT"));
     kickerWrap.appendChild(elText("h2", null, "트렌드 리포트"));
     left.appendChild(kickerWrap);
     head.appendChild(left);
@@ -2040,7 +2041,7 @@
 
   function teamCalCard() {
     const card = sectionShell(false);
-    card.appendChild(sectionHead("06", "팀 일정 캘린더", false, TEAM_CAL_LABEL));
+    card.appendChild(sectionHead("05", "팀 일정 캘린더", false, TEAM_CAL_LABEL));
     // 헤더 옆 좁은 칸에 끼워 넣으면 텍스트가 길 때 잘려서, 헤더 아래 별도 줄로 뺌(자연스럽게 줄바꿈).
     const area = el("div", null);
     area.id = "teamcalInsightArea";
@@ -2425,7 +2426,8 @@
   // 채우므로 그 작업 하나가 끝나면 체크리스트 4칸이 동시에 켜진다(실제로 그 넷이 같은 순간에
   // 준비되는 게 맞아서 오해 소지 없음).
   // ============================================================
-  const LOADING_SECTIONS2 = ["인사이트", "KPI 실적", "월별 트래킹", "팀 AGENDA", "사업 캘린더", "트렌드 리포트", "팀 일정 캘린더"];
+  const SHOW_MONTHLY_TRACKING = false; // 2026-11: 월별 트래킹 섹션 화면에서 숨김(불러오기도 생략)
+  const LOADING_SECTIONS2 = ["인사이트", "KPI 실적"].concat(SHOW_MONTHLY_TRACKING ? ["월별 트래킹"] : [], ["팀 AGENDA", "사업 캘린더", "트렌드 리포트", "팀 일정 캘린더"]);
   const CHECK_SVG2 = '<svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg>';
   let loadingOverlayEl2 = null;
   let loadingDoneSet2 = new Set();
@@ -2513,7 +2515,7 @@
       }
     })());
     tasks.push(loadCalSection(document.getElementById("calSlot")).then(() => markSectionsDone2(["사업 캘린더"])));
-    tasks.push(loadMonthlyTracking().then(() => markSectionsDone2(["월별 트래킹"])));
+    if (SHOW_MONTHLY_TRACKING) tasks.push(loadMonthlyTracking().then(() => markSectionsDone2(["월별 트래킹"])));
     tasks.push(loadTeamCalSection(document.getElementById("teamCalSlot")).then(() => markSectionsDone2(["팀 일정 캘린더"])));
     await Promise.all(tasks);
     document.getElementById("connState").textContent = "";

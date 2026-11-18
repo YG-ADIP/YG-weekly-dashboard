@@ -114,7 +114,7 @@
     <h2>2. 데이터 연결</h2>
     <p class="desc">구글 시트·폴더·캘린더의 <b>주소(URL)를 그대로 붙여 넣으면</b> ID는 자동으로 추출됩니다. 바꾼 뒤에는 아래 [연결 테스트]로 먼저 확인하세요.</p>
     <div class="grid">
-      <label class="field wide">실적현황 시트 (KPI·월별 트래킹·인사이트)<span class="hint">주차 탭(예: NOV_2)마다 "1. {연도} KPI 현황" 표가 있는 시트</span><input type="text" data-path="sources.kpiFile" data-id="1"><span class="idpreview"></span></label>
+      <label class="field wide">실적현황 시트 (KPI·인사이트)<span class="hint">주차 탭(예: NOV_2)마다 "1. {연도} KPI 현황" 표가 있는 시트</span><input type="text" data-path="sources.kpiFile" data-id="1"><span class="idpreview"></span></label>
       <label class="field wide">팀 AGENDA 폴더<span class="hint">폴더 안에서 가장 최근에 수정된 구글 시트를 사용</span><input type="text" data-path="sources.agendaFolder" data-id="1"><span class="idpreview"></span></label>
       <label class="field wide">트렌드 리포트 폴더<span class="hint">폴더 안에서 가장 최근에 수정된 구글 시트를 사용</span><input type="text" data-path="sources.trendFolder" data-id="1"><span class="idpreview"></span></label>
       <label class="field wide">사업 캘린더 시트<span class="hint">"프로젝트 · 계약 종료일 · D-DAY" 머리글 표가 있는 시트</span><input type="text" data-path="sources.bizCalSheet" data-id="1"><span class="idpreview"></span></label>
@@ -204,7 +204,7 @@
 </div>
 
 <script>
-  const SECTION_LABEL = { kpi: "KPI 현황", monthly: "월별 트래킹", agenda: "팀 AGENDA", bizcal: "사업 캘린더", trend: "트렌드 리포트", teamcal: "팀 일정 캘린더" };
+  const SECTION_LABEL = { kpi: "KPI 현황", agenda: "팀 AGENDA", bizcal: "사업 캘린더", trend: "트렌드 리포트", teamcal: "팀 일정 캘린더" };
   let adminPw = "";
   let config = null;    // 화면에서 편집 중인 설정
   let savedJson = "";   // 마지막으로 저장(또는 불러온)된 설정 — 미저장 변경 표시용

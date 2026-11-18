@@ -36,7 +36,7 @@
      그 자체로 너무 길 때(URL 등)의 최후 안전장치. white-space: pre-wrap은 구글시트에서
      팀원이 셀 안에 직접 입력한 줄바꿈(\n)이 그대로 살아서 보이게 함 — 기본값(normal)은
      줄바꿈을 공백으로 뭉개버려서 여러 줄로 쓴 내용이 한 줄로 붙어 보이는 문제가 있었음. */
-  .insight-body2, .mt-detail-proj2, .agenda-item2 .content2, .agenda-item2 .proj2,
+  .insight-body2, .agenda-item2 .content2, .agenda-item2 .proj2,
   .agenda-empty2, .voc-line2, .err-sub2, .state-msg2, footer.note2,
   .teamcal-caption2, .summary-empty2, .popover2 .pop-v2, .summary-table2 td {
     max-width: 75%;
@@ -227,23 +227,6 @@
   .spark-overlay2 { position: absolute; inset: 8px 6px 4px; pointer-events: none; }
   .spark-badge2 { position: absolute; background: #94bce3; color: #1d1f20; font-size: 11px; font-weight: 700; line-height: 1; padding: 3px 6px; white-space: nowrap; }
   .spark-label2 { position: absolute; bottom: 0; color: #9a9a9e; font-size: 11px; letter-spacing: 0.06em; white-space: nowrap; }
-
-  /* ---- 월별 트래킹 ---- */
-  .mt-headline2 { font-family: 'Barlow Condensed', 'Noto Sans KR', sans-serif; font-weight: 600; font-size: 20px; margin: 0 0 16px; }
-  .mt-overview2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 32px; align-items: end; }
-  .mt-big-row2 { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-  .mt-big-num2 { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 44px; line-height: 1; }
-  .mt-big-goal2 { font-size: 13px; color: #b9b9bc; }
-  .mt-big-rate2 { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 20px; }
-  .mt-bar-track3 { position: relative; height: 10px; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.22); }
-  .mt-bar-fill3 { position: absolute; left: 0; top: 0; bottom: 0; transition: width .3s; }
-  .mt-bar-caption2 { display: flex; justify-content: space-between; font-size: 11px; color: #9a9a9e; margin-top: 5px; }
-  .mt-detail-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
-  .mt-detail-card2 { border: 1px solid rgba(255,255,255,0.22); padding: 13px 14px 14px; }
-  .mt-detail-top2 { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
-  .mt-detail-cat2 { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: #94bce3; border: 1px solid #94bce3; padding: 1px 7px; }
-  .mt-detail-week2 { font-size: 11px; color: #9a9a9e; }
-  .mt-detail-proj2 { font-size: 13px; font-weight: 500; line-height: 1.45; margin-bottom: 11px; min-height: 38px; }
 
   /* ---- 팀 AGENDA ---- */
   .agenda-chips2 { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -541,7 +524,6 @@
   <!-- 섹션 순서·표시 여부·이름은 관리자 설정값대로 applySectionLayout()이 다시 배치 -->
   <div id="sectionsRoot">
     <div id="kpiSlot"></div>
-    <div id="monthlyTrackSlot"></div>
     <div id="agendaSlot"></div>
     <div id="calSlot"></div>
     <div id="trendSlot"></div>
@@ -561,7 +543,7 @@
   const KPI_RAW_URL = PLATFORM_UI.sources.kpiSourceUrl;
 
   // 섹션 구성 — 설정의 순서대로 번호(01, 02…)를 매기고, 숨긴 섹션은 번호에서 빠짐.
-  const SECTION_SLOT = { kpi: "kpiSlot", monthly: "monthlyTrackSlot", agenda: "agendaSlot", bizcal: "calSlot", trend: "trendSlot", teamcal: "teamCalSlot" };
+  const SECTION_SLOT = { kpi: "kpiSlot", agenda: "agendaSlot", bizcal: "calSlot", trend: "trendSlot", teamcal: "teamCalSlot" };
   const VISIBLE_SECTIONS = PLATFORM_UI.sections.filter(sec => sec.visible);
   function secVisible(key) { return VISIBLE_SECTIONS.some(sec => sec.key === key); }
   function secNum(key) { return String(VISIBLE_SECTIONS.findIndex(sec => sec.key === key) + 1).padStart(2, "0"); }
@@ -1172,127 +1154,6 @@
     }
     slotEl.innerHTML = "";
     slotEl.appendChild(card);
-  }
-
-  // ============================================================
-  // ①-2 월별 트래킹
-  // ============================================================
-  let monthlyTrackExpanded = false;
-
-  function monthlyTrackHeader(badgeText, onToggleClick, toggleLabel) {
-    const card = sectionShell(true);
-    let toggleBtn = null;
-    if (onToggleClick) {
-      toggleBtn = document.createElement("button");
-      toggleBtn.type = "button";
-      toggleBtn.className = "btn-outline-toggle2";
-      toggleBtn.textContent = toggleLabel;
-      toggleBtn.addEventListener("click", onToggleClick);
-    }
-    card.appendChild(sectionHead(secNum("monthly"), secTitle("monthly"), true, badgeText, toggleBtn));
-    return card;
-  }
-
-  function mtFillColor(rateNum) {
-    return rateNum >= 100 ? "#94bce3" : "#d9ab5a";
-  }
-
-  // 이번 달 KPI 전체(목표/실적/달성률)를 보여주는 기본 뷰.
-  // 값이 비어있으면 0으로 표기 — null/대시(-) 대신 0을 보여달라는 요청.
-  function monthlyOverallBody(data, isPlaceholder) {
-    const goalNum = isPlaceholder ? 0 : fmtAmt(data.goal);
-    const actualNum = isPlaceholder ? 0 : fmtAmt(data.actual);
-    const adNum = isPlaceholder ? 0 : fmtAmt(data.adActual);
-    const ipNum = isPlaceholder ? 0 : fmtAmt(data.ipActual);
-    const rateNum = goalNum > 0 ? (actualNum / goalNum) * 100 : 0;
-    const colorVar = mtFillColor(rateNum);
-    const fillPct = Math.max(0, Math.min(100, rateNum));
-
-    const wrap = el("div", "mt-overview2");
-    const left = el("div", null);
-    const top = el("div", "mt-big-row2");
-    const numEl = elText("span", "mt-big-num2", isPlaceholder ? "00억" : `${actualNum}억`);
-    numEl.style.color = isPlaceholder ? "#b9b9bc" : colorVar;
-    top.appendChild(numEl);
-    top.appendChild(elText("span", "mt-big-goal2", `/ 목표 ${isPlaceholder ? "00" : goalNum}억`));
-    const rateEl = elText("span", "mt-big-rate2", `${fmtPct(rateNum)}%`);
-    rateEl.style.color = isPlaceholder ? "#b9b9bc" : colorVar;
-    top.appendChild(rateEl);
-    left.appendChild(top);
-
-    const track = el("div", "mt-bar-track3");
-    const fill = el("div", "mt-bar-fill3");
-    fill.style.cssText = `width:${fillPct}%; background:${isPlaceholder ? "#5d5d60" : colorVar};`;
-    track.appendChild(fill);
-    left.appendChild(track);
-    const caption = el("div", "mt-bar-caption2");
-    caption.appendChild(document.createTextNode("0"));
-    caption.appendChild(document.createTextNode(`목표 ${isPlaceholder ? "00" : goalNum}억`));
-    left.appendChild(caption);
-    wrap.appendChild(left);
-
-    wrap.appendChild(tileGrid("tile-grid-2", [
-      { label: "광고", num: isPlaceholder ? "00억" : `${adNum}억`, unit: "", color: isPlaceholder ? "#b9b9bc" : "#ffffff" },
-      { label: "IP", num: isPlaceholder ? "00억" : `${ipNum}억`, unit: "", color: isPlaceholder ? "#b9b9bc" : "#ffffff" },
-    ]));
-    return wrap;
-  }
-
-  // "더보기" 클릭 시 전환되는, 이번 달 실적을 구성하는 프로젝트별 카드 리스트.
-  function monthlyBreakdownBody(data) {
-    const wrap = el("div", "mt-detail-grid2");
-    if (!data.breakdown || !data.breakdown.length) {
-      wrap.appendChild(elText("p", "state-msg2", "이번 달 실적 구성 내역이 아직 없어요."));
-      return wrap;
-    }
-    data.breakdown.forEach(item => {
-      const card = el("div", "mt-detail-card2");
-      const top = el("div", "mt-detail-top2");
-      top.appendChild(elText("span", "mt-detail-cat2", item.category || "-"));
-      if (item.weekLabel) top.appendChild(elText("span", "mt-detail-week2", item.weekLabel));
-      card.appendChild(top);
-      card.appendChild(elText("div", "mt-detail-proj2", item.project || "-"));
-      card.appendChild(tileGrid("tile-grid-2", [
-        { label: "실적", num: `${fmtAmt(item.actual)}억`, unit: "", color: "#ffffff" },
-        { label: "목표 기여율", num: `${fmtPct(item.contribPct)}%`, unit: "", color: "#ffffff" },
-      ], true));
-      wrap.appendChild(card);
-    });
-    return wrap;
-  }
-
-  function buildMonthlyTrackCard(data, badgeText, isPlaceholder) {
-    const toggleLabel = monthlyTrackExpanded ? "전체" : "더보기";
-    const card = monthlyTrackHeader(badgeText, () => {
-      monthlyTrackExpanded = !monthlyTrackExpanded;
-      const slotEl = document.getElementById("monthlyTrackSlot");
-      slotEl.innerHTML = "";
-      slotEl.appendChild(buildMonthlyTrackCard(data, badgeText, isPlaceholder));
-    }, toggleLabel);
-    const monthLabel = isPlaceholder ? "9" : (data.monthNum || "-");
-    const goalTxt = isPlaceholder ? "00" : fmtAmt(data.goal);
-    card.appendChild(elText("p", "mt-headline2", `${monthLabel}월 KPI : ${goalTxt}억`));
-    card.appendChild(monthlyTrackExpanded ? monthlyBreakdownBody(data) : monthlyOverallBody(data, isPlaceholder));
-    return card;
-  }
-
-  function renderMonthlyTrackPlaceholder() {
-    return buildMonthlyTrackCard({ monthNum: 9, goal: 0, adActual: NaN, ipActual: NaN, actual: 0, breakdown: [] }, "예시", true);
-  }
-
-  async function loadMonthlyTracking() {
-    const slotEl = document.getElementById("monthlyTrackSlot");
-    try {
-      const data = await callBackend("monthlyTracking");
-      if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
-      slotEl.innerHTML = "";
-      slotEl.appendChild(buildMonthlyTrackCard(data, `${data.monthNum || "-"}월`, false));
-    } catch (err) {
-      slotEl.innerHTML = "";
-      const errCard = monthlyTrackHeader("오류");
-      errCard.appendChild(elText("p", "state-msg2 err2", "불러오지 못했어요: " + err.message));
-      slotEl.appendChild(errCard);
-    }
   }
 
   // ============================================================
@@ -2454,15 +2315,13 @@
   function renderAllPlaceholders() {
     renderInsightBar();
     const kpiSlot = document.getElementById("kpiSlot");
-    const monthlyTrackSlot = document.getElementById("monthlyTrackSlot");
     const agendaSlot = document.getElementById("agendaSlot");
     const calSlot = document.getElementById("calSlot");
     const trendSlot = document.getElementById("trendSlot");
     const teamCalSlot = document.getElementById("teamCalSlot");
-    kpiSlot.innerHTML = ""; monthlyTrackSlot.innerHTML = ""; agendaSlot.innerHTML = ""; calSlot.innerHTML = "";
+    kpiSlot.innerHTML = ""; agendaSlot.innerHTML = ""; calSlot.innerHTML = "";
     trendSlot.innerHTML = ""; teamCalSlot.innerHTML = "";
     kpiSlot.appendChild(renderKpiPlaceholder());
-    monthlyTrackSlot.appendChild(renderMonthlyTrackPlaceholder());
     agendaSlot.appendChild(renderAgendaPlaceholder());
     calSlot.appendChild(renderCalPlaceholder());
     trendSlot.appendChild(renderTrendPlaceholder());
@@ -2476,7 +2335,7 @@
   // 채우므로 그 작업 하나가 끝나면 체크리스트 4칸이 동시에 켜진다(실제로 그 넷이 같은 순간에
   // 준비되는 게 맞아서 오해 소지 없음).
   // ============================================================
-  const LOADING_NAME_BY_KEY = { kpi: "KPI 실적", monthly: "월별 트래킹", agenda: "팀 AGENDA", bizcal: "사업 캘린더", trend: "트렌드 리포트", teamcal: "팀 일정 캘린더" };
+  const LOADING_NAME_BY_KEY = { kpi: "KPI 실적", agenda: "팀 AGENDA", bizcal: "사업 캘린더", trend: "트렌드 리포트", teamcal: "팀 일정 캘린더" };
   const LOADING_SECTIONS2 = ["인사이트"].concat(VISIBLE_SECTIONS.map(sec => LOADING_NAME_BY_KEY[sec.key]));
   const CHECK_SVG2 = '<svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg>';
   let loadingOverlayEl2 = null;
@@ -2566,7 +2425,6 @@
       }
     })());
     if (secVisible("bizcal")) tasks.push(loadCalSection(document.getElementById("calSlot")).then(() => markSectionsDone2(["사업 캘린더"])));
-    if (secVisible("monthly")) tasks.push(loadMonthlyTracking().then(() => markSectionsDone2(["월별 트래킹"])));
     if (secVisible("teamcal")) tasks.push(loadTeamCalSection(document.getElementById("teamCalSlot")).then(() => markSectionsDone2(["팀 일정 캘린더"])));
     await Promise.all(tasks);
     document.getElementById("connState").textContent = "";

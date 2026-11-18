@@ -26,11 +26,11 @@ var MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP',
 // ============================================================
 // 플랫폼 설정 — 관리자 설정 화면에서 바꾸는 값들의 기본값(2026 운영값)
 // ============================================================
-var PLATFORM_SECTION_KEYS = ['kpi', 'monthly', 'agenda', 'bizcal', 'trend', 'teamcal'];
+var PLATFORM_SECTION_KEYS = ['kpi', 'agenda', 'bizcal', 'trend', 'teamcal']; // 월별 트래킹은 2026-11 삭제
 var DEFAULT_CONFIG = {
   general: { title: '주간회의 대시보드', teamName: '광고IP사업팀', teamNameEn: 'AD/IP BUSINESS', year: 2026 },
   sources: {
-    kpiFile: '1Ej7edr36XJFFC_JQPwidWY_ikaet867hT6gD--BomlU',       // 실적현황(KPI 현황 + 월별 트래킹 + 인사이트)
+    kpiFile: '1Ej7edr36XJFFC_JQPwidWY_ikaet867hT6gD--BomlU',       // 실적현황(KPI 현황 + 인사이트)
     kpiSourceUrl: 'https://docs.google.com/spreadsheets/d/1HlGmNBPK69IWX3OqfVV6Q-MezsXQAG6rC6tdi7cgJmA/edit?usp=sharing', // KPI 카드 "원본 시트" 링크
     agendaFolder: '1Au_nUt3pQ7nVStq-oITUGTAgwZkprWiP',               // 팀 AGENDA 폴더(가장 최근 수정 시트 사용)
     trendFolder: '1Yqn8wrnsTePtN9OMIaEgBgBIqr1QEmc6',                // 트렌드 리포트 폴더(가장 최근 수정 시트 사용)
@@ -48,7 +48,6 @@ var DEFAULT_CONFIG = {
   teamCal: { upcomingKeywords: ['출장', '촬영', '업로드'], upcomingDays: 10 }, // "차주엔~" 배지
   sections: [
     { key: 'kpi', title: '{year} KPI 현황', visible: true },
-    { key: 'monthly', title: '월별 트래킹', visible: true },
     { key: 'agenda', title: '팀 AGENDA', visible: true },
     { key: 'bizcal', title: '사업 캘린더', visible: true },
     { key: 'trend', title: '트렌드 리포트', visible: true },
@@ -227,7 +226,6 @@ function handleApi_(params) {
   try {
     switch (params.section) {
       case 'kpi': return getKpiData_();
-      case 'monthlyTracking': return getMonthlyTrackingData_();
       case 'insight': return getInsightData_();
       case 'saveInsight':
         saveInsightOverride_(resolveInsightWeekKey_(params), String(params.text || '').trim());
@@ -325,7 +323,7 @@ function restoreConfig_(key, by) {
 
 // 연결 대상이 바뀌면 60초 캐시에 남은 예전 시트 데이터가 보이지 않게 비움.
 function clearDataCaches_(config) {
-  var keys = ['kpiByWeek', 'kpiLatestSheetRows', 'insightByWeek'];
+  var keys = ['kpiByWeek', 'insightByWeek'];
   var y = config.general.year;
   [y - 1, y, y + 1].forEach(function (yy) { for (var m = 1; m <= 12; m++) keys.push('teamCal_' + yy + '_' + m); });
   try { CacheService.getScriptCache().removeAll(keys); } catch (e) {}
@@ -360,7 +358,7 @@ function testConnections_(config) {
   };
   CFG_OVERRIDE_ = config;
   try {
-    add('실적현황 시트 (KPI·월별 트래킹·인사이트)', function () {
+    add('실적현황 시트 (KPI·인사이트)', function () {
       var ss = SpreadsheetApp.openById(config.sources.kpiFile);
       var sheets = weekSheets(ss);
       if (!sheets.length) return { ok: false, detail: ss.getName() + ' — 주차 시트(예: NOV_2)가 없습니다.' };
@@ -622,29 +620,6 @@ function getKpiByWeekCached_() {
   return base;
 }
 
-// getInsightData_/getMonthlyTrackingData_가 공통으로 필요로 하는 "가장 최근 주차 시트의 원본
-// 행"만 따로 캐시. 두 함수가 이 결과를 그대로 나눠 쓴다.
-function getLatestKpiSheetRowsCached_() {
-  var cache = CacheService.getScriptCache();
-  var cacheKey = 'kpiLatestSheetRows';
-  var cached = cache.get(cacheKey);
-  if (cached) return JSON.parse(cached);
-
-  var ss = SpreadsheetApp.openById(cfg_().sources.kpiFile);
-  var latestSheet = null, latestOrder = -1, latestMw = null;
-  ss.getSheets().forEach(function (sh) {
-    var mw = monthWeekFromSheetName_(sh.getName());
-    if (!mw) return;
-    var order = weekOrder_(mw.monthAbbr, mw.weekNum);
-    if (order > latestOrder) { latestOrder = order; latestSheet = sh; latestMw = mw; }
-  });
-  var result = latestSheet
-    ? { monthAbbr: latestMw.monthAbbr, weekNum: latestMw.weekNum, rows: latestSheet.getDataRange().getValues() }
-    : null;
-  try { cache.put(cacheKey, JSON.stringify(result), 60); } catch (e) {}
-  return result;
-}
-
 function getKpiData_() {
   var base = getKpiByWeekCached_();
 
@@ -811,75 +786,6 @@ function saveInsightOverride_(weekKey, text) {
     overrides[weekKey] = { text: text, editedAt: new Date().toISOString() };
   }
   props.setProperty('INSIGHT_OVERRIDES_JSON', JSON.stringify(overrides));
-}
-
-// ---- ①-2 월별 트래킹 섹션 ----
-
-// 실적현황 파일(설정 sources.kpiFile) 파일(= perf 폴더의 최신 파일과 동일 파일)의 주차 시트 중 "가장 최근(월+주차 기준)"
-// 시트를 읽음. 최신 판별을 weekOrder_(월×100+주차)로 하기 때문에, 예를 들어 SEP_1이 새로 생기면
-// AUG_4(주차 숫자만 보면 더 큼)보다 SEP_1을 올바르게 더 최근으로 인식한다.
-//
-// 2026-09월부터 시트 양식이 바뀜(엘라가 직접 재설계) — 기존엔 "2. 월별 팀 KPI PLAN" 아래 주차별
-// (목표/실적/합계/달성률 × 광고/IP) 그리드가 있었는데, 이제 그 그리드는 없어지고 대신 ①월별 요약
-// (월/목표/실적(광고,IP)/매출 한 줄씩) + ②"3. 월별 KPI 실적 구성 상세"(이번 달 실적을 만든 개별
-// 프로젝트 리스트) 두 표만 남음. 주차별 그리드 대신 "이번 달 전체 실적"과 "그 실적을 구성하는
-// 프로젝트별 상세"만 보여주면 되도록 대시보드 쪽 요구사항도 이에 맞춰 변경됨.
-function getMonthlyTrackingData_() {
-  var latest = getLatestKpiSheetRowsCached_();
-  if (!latest) return { ok: true, monthNum: null, goal: 0, adActual: NaN, ipActual: NaN, actual: 0, breakdown: [] };
-  var rows = latest.rows;
-  var monthNum = MONTH_ABBR.indexOf(latest.monthAbbr) + 1;
-
-  // "월 | 목표(억원) | 실적(억원/한화)[광고|IP] | 매출(억원)" 표에서 이번 달 행을 찾는다.
-  var planHeaderIdx = -1;
-  for (var i = 0; i < rows.length; i++) {
-    if (String(rows[i][0] || '').trim() === '월' && String(rows[i][1] || '').indexOf('목표') >= 0) { planHeaderIdx = i; break; }
-  }
-  var goal = 0, adActual = NaN, ipActual = NaN;
-  if (planHeaderIdx >= 0) {
-    for (var j = planHeaderIdx + 2; j < rows.length; j++) { // +2: "광고|IP" 서브헤더 행 건너뜀
-      var label = rows[j][0];
-      if (String(label).indexOf('총계') >= 0) break;
-      if (Number(label) === monthNum) {
-        goal = stripUnit_(rows[j][1]);
-        adActual = stripUnit_(rows[j][2]);
-        ipActual = stripUnit_(rows[j][3]);
-        break;
-      }
-    }
-  }
-
-  // "3. 월별 KPI 실적 구성 상세" 표: 구분 | 월/주차 | 프로젝트명 | 실적 | 월별 목표 기여분
-  var detailHeaderIdx = -1;
-  for (var k = 0; k < rows.length; k++) {
-    if (String(rows[k][0] || '').trim() === '구분' && String(rows[k][1] || '').indexOf('월/주차') >= 0) { detailHeaderIdx = k; break; }
-  }
-  var breakdown = [];
-  if (detailHeaderIdx >= 0) {
-    for (var m = detailHeaderIdx + 1; m < rows.length; m++) {
-      var r = rows[m];
-      var col0 = String(r[0] || '').trim();
-      var restEmpty = !r[1] && !r[2] && !r[3] && !r[4];
-      if (col0 && restEmpty) break; // 다음 섹션 제목 행("실적 인정 사업 리스트..." 등) 도달
-      var proj = String(r[2] || '').trim();
-      if (!proj) continue; // 빈 행은 건너뜀
-      breakdown.push({
-        category: col0,
-        weekLabel: String(r[1] || '').trim(),
-        project: proj,
-        actual: stripUnit_(r[3]),
-        contribPct: percentCellToPct_(r[4]),
-      });
-    }
-  }
-
-  var adNum = isNaN(adActual) ? 0 : adActual;
-  var ipNum = isNaN(ipActual) ? 0 : ipActual;
-  return {
-    ok: true, monthNum: monthNum, goal: goal,
-    adActual: adActual, ipActual: ipActual, actual: adNum + ipNum,
-    breakdown: breakdown,
-  };
 }
 
 // ---- ② 팀 AGENDA 섹션 ----
