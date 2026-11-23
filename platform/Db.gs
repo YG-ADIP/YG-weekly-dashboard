@@ -483,6 +483,9 @@ function summaryOf_(key, r) {
   if (key === 'deals') return [r.part, r.group, r.brand, r.name, r.stage, r.cur + ' ' + r.amount].filter(Boolean).join(' · ');
   if (key === 'agenda') return [r.week, r.kind, r.project].join(' · ');
   if (key === 'trend') return [r.week, r.kind, r.artist, r.brand].join(' · ');
+  if (key === 'members') return [r.name, r.part, r.role, r.active].filter(Boolean).join(' · ');
+  if (key === 'kpiGoals') return [r.year, r.part, r.period, 'S ' + r.goalS + '억', r.goalB !== '' ? 'B ' + r.goalB + '억' : ''].filter(Boolean).join(' · ');
+  if (key === 'fx') return [r.year, r.cur, (r.unit || 1) + '단위 = ' + r.rate + '원'].join(' · ');
   return JSON.stringify(stripRow_(r));
 }
 function stripRow_(r) { var o = {}; Object.keys(r).forEach(function (k) { if (k !== '_row') o[k] = r[k]; }); return o; }
@@ -540,15 +543,49 @@ var DEAL_ALIASES = {
 var BIS_STAGE_MAP = { '진행확정': '05 진행 확정', '진행불발': '06 진행 불발', '진행중': '02 협의 중', '최종압축': '03 최종 압축' };
 
 // rows: [{머리글: 값}] (화면에서 SheetJS로 읽은 것)
-function mapImportRow_(key, raw) {
-  var t = DB_TABLES[key], out = {};
-  var byLabel = {};
-  t.cols.forEach(function (c) { byLabel[c.label.replace(/\s/g, '')] = c.key; });
+// 팀원·AGENDA·트렌드 엑셀에서 흔히 쓰는 다른 머리글
+var OTHER_ALIASES = {
+  members: { '성명': 'name', '이름(성명)': 'name', 'name': 'name', '부서': 'part', '팀': 'part', '소속': 'part', '권한': 'role', '상태': 'active', '사용': 'active' },
+  agenda: { '프로젝트명': 'project', '안건': 'project', '내용(설명)': 'content', '팀': 'team', '파트': 'team' },
+  trend: { '브랜드': 'brand', '파트너': 'brand', '내용 ': 'content' },
+};
+// 엑셀 머리글 하나 → 항목 키(없으면 null). 공백 차이는 무시.
+function importKeyOf_(key, header) {
+  var hk = String(header).trim(), nospace = hk.replace(/\s/g, '');
+  var t = DB_TABLES[key];
+  for (var i = 0; i < t.cols.length; i++) if (t.cols[i].label.replace(/\s/g, '') === nospace && t.cols[i].type !== 'auto' || (t.cols[i].key === 'id' && t.cols[i].label.replace(/\s/g, '') === nospace)) return t.cols[i].key;
+  if (key === 'deals' && DEAL_ALIASES[hk]) return DEAL_ALIASES[hk];
+  var a = OTHER_ALIASES[key] || {};
+  return a[hk] || a[nospace] || null;
+}
+
+// 업로드 미리보기용: 인식한 열 / 인식 못 한 열
+function importColumns_(key, rawRows) {
+  var seen = {}, matched = [], unknown = [];
+  (rawRows || []).slice(0, 5).forEach(function (raw) {
+    Object.keys(raw).forEach(function (h) {
+      if (seen[h]) return;
+      seen[h] = true;
+      var k = importKeyOf_(key, h);
+      var col = k ? DB_TABLES[key].cols.filter(function (c) { return c.key === k; })[0] : null;
+      var isAuto = !k && DB_TABLES[key].cols.some(function (c) { return c.type === 'auto' && c.label.replace(/\s/g, '') === String(h).replace(/\s/g, ''); });
+      if (k) matched.push(String(h).trim() + (col && col.label.replace(/\s/g, '') !== String(h).replace(/\s/g, '') ? '→' + col.label : ''));
+      else if (!isAuto) unknown.push(String(h).trim()); // 자동 계산 열(내려받은 파일에 있는 것)은 조용히 무시
+    });
+  });
+  return { matched: matched, unknown: unknown };
+}
+
+function mapImportRow_(key, raw, defaultsUsed) {
+  var out = {};
   Object.keys(raw).forEach(function (h) {
-    var hk = String(h).trim();
-    var k = byLabel[hk.replace(/\s/g, '')] || (key === 'deals' ? DEAL_ALIASES[hk] : null);
+    var k = importKeyOf_(key, h);
     if (k) out[k] = raw[h];
   });
+  var fill = function (k, v, label) { if (out[k] === undefined || out[k] === '') { out[k] = v; if (defaultsUsed) defaultsUsed[label] = true; } };
+  if (key === 'members') { fill('role', '팀원', '역할=팀원'); fill('active', '사용', '사용여부=사용'); }
+  if (key === 'agenda' || key === 'trend' || key === 'kpiGoals' || key === 'fx') fill('year', cfg_().general.year, '연도=' + cfg_().general.year);
+  if (key === 'fx') fill('unit', 1, '기준 단위=1');
   if (key === 'deals') {
     if (out.year !== undefined) out.year = String(out.year).replace(/[^\d]/g, '');
     if (!out.year) out.year = cfg_().general.year; // BIS 진행현황처럼 연도 칸이 없으면 현재 기준연도
@@ -589,15 +626,17 @@ function dbImport_(key, rawRows, user, commit) {
       (byFp2[dealFingerprint2_(r)] = byFp2[dealFingerprint2_(r)] || []).push(r);
     });
     var fxRows = key === 'deals' ? readTable_('fx') : [];
-    var result = { added: 0, updated: 0, unchanged: 0, errors: 0, rows: [] };
+    var defaultsUsed = {};
+    var result = { added: 0, updated: 0, unchanged: 0, errors: 0, rows: [], columns: importColumns_(key, rawRows) };
     var toAppend = [], toUpdate = [], logs = [];
     var seq = existing.slice();
     rawRows.forEach(function (raw, i) {
-      var mapped = mapImportRow_(key, raw);
+      var mapped = mapImportRow_(key, raw, defaultsUsed);
       var errors = [];
       var rec = cleanRecord_(key, mapped, errors);
       var match = null;
       if (mapped.id && byId[mapped.id]) match = byId[mapped.id];
+      else if (key === 'members' && rec.name) match = existing.filter(function (m) { return m.name === rec.name; })[0] || null;
       else if (key === 'deals') {
         var c = byFp[dealFingerprint_(rec)];
         if (c && c.length === 1) match = c[0];
@@ -641,6 +680,7 @@ function dbImport_(key, rawRows, user, commit) {
         changes.forEach(function (ch) { logs.push({ user: user, table: key, recordId: match.id, action: '엑셀 업로드-수정', field: ch.field, before: ch.before, after: ch.after }); });
       }
     });
+    result.columns.defaults = Object.keys(defaultsUsed);
     if (commit) {
       var sh = dbSpreadsheet_().getSheetByName(t.sheet);
       toUpdate.forEach(function (u) { var row = recordToRow_(key, u.rec); sh.getRange(u.row, 1, 1, row.length).setValues([row]); });

@@ -547,6 +547,14 @@
   .import-table2 tr.st-error2 td { background: rgba(162,69,60,0.06); }
   .import-table2 tr.st-new2 td:nth-child(2) { color: var(--good); font-weight: 700; }
   .import-table2 tr.st-update2 td:nth-child(2) { color: var(--accent-700); font-weight: 700; }
+  .import-colmap2 { display: flex; flex-direction: column; gap: 3px; font-size: 12px; margin-bottom: 10px; padding: 8px 10px; background: var(--header-strip); }
+  .import-colmap2 .ok2 { color: var(--good); font-weight: 700; }
+  .import-colmap2 .warn2 { color: var(--warn); font-weight: 700; }
+  .import-help2 { margin: 10px 0; padding: 10px 12px; border: 1px dashed var(--accent-300); background: var(--accent-tint); font-size: 12px; }
+  .import-help2 p { margin: 0 0 6px; }
+  .import-cols2 { font-weight: 700; color: var(--accent-900); }
+  .import-done2 { padding: 8px 0; }
+  .ok-big2 { margin: 0 0 6px; font-size: 16px; font-weight: 700; color: var(--good); }
   .kpi-pipe2 { margin-top: 16px; padding: 10px 14px; border: 1px solid rgba(255,255,255,0.22); font-size: 12px; color: #b9b9bc; display: flex; flex-wrap: wrap; gap: 6px 18px; }
   .kpi-pipe2 b { color: #ffffff; font-size: 14px; }
   @media (max-width: 560px) { .app-tab2 { padding: 8px 9px; font-size: 12px; } .data-search2 { width: 100%; } }
@@ -3217,6 +3225,7 @@
           return;
         }
         COLLAB.dashDirty = true;
+        if (table === "members") refreshMeta();
         m.close();
         if (res.approvalReset) alert("KPI 관련 내용(금액·연도·단계 등)이 바뀌어 KPI 승인이 해제됐습니다. 관리자의 재승인이 필요합니다.");
         onDone && onDone();
@@ -3270,12 +3279,18 @@
   }
   function downloadAllDb() { downloadExcel(COLLAB.meta.tables.map(t => t.key)); }
 
+  // 엑셀 업로드(관리자): 파일 선택 즉시 진행 창을 띄워 "읽는 중 → 서버 확인 중 → 미리보기 → 반영 결과"를 단계별로 보여줌.
+  // 어느 단계에서 실패해도 창 안에 원인을 표시(멈춘 듯 보이지 않게).
   function pickExcel(table, onDone) {
     const input = document.createElement("input");
     input.type = "file"; input.accept = ".xlsx,.xls,.csv";
     input.addEventListener("change", async () => {
       const file = input.files && input.files[0];
       if (!file) return;
+      if (!COLLAB.user) { openUserPicker(false); return; }
+      const m = openModal("엑셀 업로드 — " + file.name, true, true);
+      const step = text => { m.body.innerHTML = ""; m.body.appendChild(elText("p", "state-msg2", text)); };
+      step("① 엑셀 파일 읽는 중…");
       try {
         const XLSX = await loadXlsx();
         const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
@@ -3285,41 +3300,79 @@
         // 머리글 행 찾기: 처음 10행 중 글자 칸이 가장 많은 행(BIS 엑셀처럼 위에 제목이 있어도 됨)
         let hIdx = 0, best = -1;
         aoa.slice(0, 10).forEach((r, i) => { const n = r.filter(v => typeof v === "string" && v.trim()).length; if (n > best) { best = n; hIdx = i; } });
+        if (!aoa.length) throw new Error("빈 파일이에요.");
         const header = aoa[hIdx].map(h => String(h).trim());
         const pad = n => String(n).padStart(2, "0");
         const toCell = v => (v instanceof Date ? `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}` : v);
         const rows = aoa.slice(hIdx + 1).filter(r => r.some(v => v !== "" && v != null))
           .map(r => { const o = {}; header.forEach((h, j) => { if (h) o[h] = toCell(r[j]); }); return o; });
-        if (!rows.length) throw new Error("데이터 행이 없어요.");
-        previewImport(table, rows, file.name, onDone);
-      } catch (err) { alert("엑셀을 읽지 못했어요: " + err.message); }
+        if (!rows.length) throw new Error("머리글 아래에 데이터 행이 없어요.");
+        await previewImport(table, rows, m, onDone, hIdx + 1);
+      } catch (err) {
+        showUploadError(m, table, err.message);
+      }
     });
     input.click();
   }
 
-  async function previewImport(table, rows, fileName, onDone) {
-    if (!COLLAB.user) { openUserPicker(false); return; }
-    const m = openModal("엑셀 업로드 미리보기 — " + fileName, true, true);
-    m.body.appendChild(elText("p", "state-msg2", `${rows.length}행 확인 중…`));
-    const res = await callDb("importPreview", { table, rows });
+  function showUploadError(m, table, message) {
     m.body.innerHTML = "";
-    if (!res.ok) { m.body.appendChild(elText("p", "err2", res.message || res.error)); return; }
+    m.body.appendChild(elText("p", "err2", "업로드하지 못했어요: " + message));
+    m.body.appendChild(templateHelp(table));
+    const actions = el("div", "form-actions2");
+    const close = elText("button", "btn-line2", "닫기"); close.type = "button"; close.addEventListener("click", m.close);
+    actions.appendChild(close);
+    m.body.appendChild(actions);
+  }
+
+  // 필요한 머리글 안내 + 빈 양식 내려받기
+  function templateHelp(table) {
+    const cols = tableDef(table).cols.filter(c => c.type !== "auto");
+    const box = el("div", "import-help2");
+    box.appendChild(elText("p", null, "엑셀 첫 줄(머리글)에 아래 이름을 써 주세요. * 는 필수 · 순서는 상관없음"));
+    box.appendChild(elText("p", "import-cols2", cols.map(c => c.label + (c.required ? " *" : "")).join(" · ")));
+    const dl = elText("button", "btn-line2", "빈 양식 내려받기"); dl.type = "button";
+    dl.addEventListener("click", () => downloadExcel([table], []));
+    box.appendChild(dl);
+    return box;
+  }
+
+  async function previewImport(table, rows, m, onDone, headerLine) {
+    m.body.innerHTML = "";
+    m.body.appendChild(elText("p", "state-msg2", `② ${rows.length}행을 서버에서 확인하는 중… (행이 많으면 수십 초 걸릴 수 있어요)`));
+    let res;
+    try { res = await callDb("importPreview", { table, rows }); }
+    catch (err) { showUploadError(m, table, "서버 확인 중 오류 — " + err.message); return; }
+    if (!res.ok) { showUploadError(m, table, res.message || res.error); return; }
     const r = res.result;
+    m.body.innerHTML = "";
+    m.body.appendChild(elText("p", "modal-desc2", `③ 미리보기 — 아직 반영 전입니다. 머리글: ${headerLine}번째 줄`));
+    const cols = el("div", "import-colmap2");
+    cols.appendChild(elText("span", "ok2", "인식한 열: " + (r.columns.matched.join(", ") || "없음")));
+    if (r.columns.unknown.length) cols.appendChild(elText("span", "warn2", "인식 못 한 열(무시됨): " + r.columns.unknown.join(", ")));
+    if (r.columns.defaults.length) cols.appendChild(elText("span", null, "자동으로 채운 칸: " + r.columns.defaults.join(", ")));
+    m.body.appendChild(cols);
     const sum = el("div", "import-sum2");
     [["신규", r.added, "new2"], ["변경", r.updated, "upd2"], ["변경 없음", r.unchanged, "same2"], ["오류", r.errors, "err2"]].forEach(([k, n, c]) => {
       const b = el("span", "import-pill2 " + c); b.appendChild(elText("b", null, String(n))); b.appendChild(document.createTextNode(" " + k)); sum.appendChild(b);
     });
     m.body.appendChild(sum);
-    m.body.appendChild(elText("p", "modal-desc2", "같은 사업 판단: 사업ID가 있으면 ID로, 없으면 '브랜드 + 아티스트 그룹 + 계약구분 + 시작 월'로 찾습니다. 엑셀의 빈 칸은 기존 값을 유지합니다. 오류 행은 반영되지 않습니다."));
+    if (r.errors && r.errors === r.rows.length) {
+      m.body.appendChild(elText("p", "err2", "모든 행에 오류가 있어 반영할 수 없어요. 아래 오류 내용과 필요한 머리글을 확인해 주세요."));
+      m.body.appendChild(templateHelp(table));
+    } else if (!(r.added + r.updated)) {
+      m.body.appendChild(elText("p", "modal-desc2", "새로 들어가거나 바뀌는 내용이 없어요(이미 같은 내용이 저장되어 있음)."));
+    }
+    if (table === "deals") m.body.appendChild(elText("p", "modal-desc2", "같은 사업 판단: 사업ID가 있으면 ID로, 없으면 '브랜드 + 아티스트 그룹 + 계약구분 + 시작 월'로 찾습니다. 엑셀의 빈 칸은 기존 값을 유지합니다."));
     const t = el("table", "data-table2 import-table2");
     const hr = el("tr", null);
-    ["행", "결과", "내용", "변경·오류"].forEach(h => hr.appendChild(elText("th", null, h)));
+    ["엑셀 행", "결과", "내용", "변경·오류"].forEach(h => hr.appendChild(elText("th", null, h)));
     const thead = el("thead", null); thead.appendChild(hr); t.appendChild(thead);
     const tbody = el("tbody", null);
     const label = { new: "신규", update: "변경", same: "변경 없음", error: "오류" };
     r.rows.slice(0, 300).forEach(x => {
       const tr = el("tr", "st-" + x.status + "2");
-      tr.appendChild(elText("td", null, String(x.line)));
+      tr.appendChild(elText("td", null, String(x.line - 1 + headerLine)));
       tr.appendChild(elText("td", null, label[x.status] + (x.id ? ` (${x.id})` : "")));
       tr.appendChild(elText("td", "long2", x.summary));
       const detail = x.errors.length ? x.errors.join(" / ") : x.changes.map(c => `${c.field}: ${c.before || "(빈칸)"} → ${c.after}`).join(" / ") + (x.changeCount > x.changes.length ? ` 외 ${x.changeCount - x.changes.length}건` : "");
@@ -3334,16 +3387,33 @@
     go.disabled = !(r.added + r.updated);
     const cancel = elText("button", "btn-line2", "취소"); cancel.type = "button"; cancel.addEventListener("click", m.close);
     go.addEventListener("click", async () => {
-      go.disabled = true; go.textContent = "반영 중…";
-      const done = await callDb("importCommit", { table, rows });
-      if (!done.ok) { alert("반영 실패: " + (done.message || done.error)); go.disabled = false; return; }
+      go.disabled = true; cancel.disabled = true; go.textContent = "④ 반영 중… (창을 닫지 마세요)";
+      let done;
+      try { done = await callDb("importCommit", { table, rows }); }
+      catch (err) { done = { ok: false, message: err.message }; }
+      if (!done.ok) { go.disabled = false; cancel.disabled = false; go.textContent = "다시 반영하기"; m.body.appendChild(elText("p", "err2", "반영 실패: " + (done.message || done.error))); return; }
       COLLAB.dashDirty = true;
-      m.close();
-      alert(`반영했습니다: 신규 ${done.result.added}건 · 변경 ${done.result.updated}건${done.result.errors ? ` · 오류 ${done.result.errors}건 제외` : ""}`);
+      if (table === "members") await refreshMeta();
+      m.body.innerHTML = "";
+      const box = el("div", "import-done2");
+      box.appendChild(elText("p", "ok-big2", `✅ 반영 완료 — 신규 ${done.result.added}건 · 변경 ${done.result.updated}건`));
+      if (done.result.errors) box.appendChild(elText("p", "err2", `오류 ${done.result.errors}건은 반영하지 않았어요.`));
+      box.appendChild(elText("p", "modal-desc2", "변경 이력 탭에 '엑셀 업로드' 기록으로 남았습니다." + (table === "members" ? " 이름 선택 목록에도 바로 반영됐어요." : "")));
+      m.body.appendChild(box);
+      const a2 = el("div", "form-actions2");
+      const ok = elText("button", "btn-primary2", "확인"); ok.type = "button";
+      ok.addEventListener("click", () => { m.close(); onDone && onDone(); });
+      a2.appendChild(ok);
+      m.body.appendChild(a2);
       onDone && onDone();
     });
     actions.append(go, cancel);
     m.body.appendChild(actions);
+  }
+
+  // 팀원 명단 등이 바뀌면 이름 선택 목록·연도 목록을 다시 받아 옴
+  async function refreshMeta() {
+    try { const meta = await callDb("meta"); if (meta.ok) { COLLAB.meta = meta; renderYearOptions(); } } catch (e) {}
   }
 </script>
 </body>
