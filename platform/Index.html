@@ -472,7 +472,19 @@
   .app-tab2 { font-family: inherit; font-size: 13px; font-weight: 700; padding: 9px 14px; border: none; border-bottom: 3px solid transparent; background: transparent; color: var(--soft); cursor: pointer; }
   .app-tab2:hover { color: var(--ink); }
   .app-tab2.active2 { color: var(--ink); border-bottom-color: var(--accent); }
-  .user-chip2 { margin-left: auto; font-family: inherit; font-size: 12px; font-weight: 700; padding: 5px 12px; border: 1px solid var(--accent-300); background: var(--accent-tint); color: var(--accent-900); border-radius: 999px; cursor: pointer; }
+  .year-select2 { margin-left: auto; font: inherit; font-size: 12px; font-weight: 700; padding: 5px 8px; border: 1px solid var(--hairline); background: #fff; color: var(--ink); }
+  .admin-chip2 { font-family: inherit; font-size: 12px; font-weight: 700; padding: 5px 12px; border: 1px solid var(--hairline); background: #fff; color: var(--soft); border-radius: 999px; cursor: pointer; }
+  .admin-chip2.on2 { border-color: var(--warn); background: rgba(138,100,32,0.1); color: #6b4d18; }
+  .btn-approve2 { font-family: inherit; font-size: 12px; font-weight: 700; padding: 6px 12px; border: 1px solid var(--good); background: var(--good); color: #fff; cursor: pointer; white-space: nowrap; }
+  .stage-chip2.pending2 { border-color: var(--warn); color: #6b4d18; }
+  .data-table2 td.appr-ok2 { color: var(--good); font-weight: 700; }
+  .data-table2 td.appr-wait2 { color: var(--warn); font-weight: 700; }
+  .start-box2 { border: 1px dashed var(--accent-300); padding: 18px 20px; background: var(--accent-tint); }
+  .start-box2 h3 { margin: 0 0 6px; font-size: 16px; }
+  .start-box2 p { margin: 0 0 12px; font-size: 13px; }
+  .settings-block2 + .settings-block2 { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--hairline); }
+  .form-field2 textarea:disabled { background: var(--header-strip); color: var(--soft); }
+  .user-chip2 { font-family: inherit; font-size: 12px; font-weight: 700; padding: 5px 12px; border: 1px solid var(--accent-300); background: var(--accent-tint); color: var(--accent-900); border-radius: 999px; cursor: pointer; }
   .data-desc2 { margin: -6px 0 14px; font-size: 12px; color: var(--faint); }
   .data-table-block2 { margin-top: 10px; }
   .data-table-block2 + .data-table-block2 { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--hairline); }
@@ -607,7 +619,7 @@
   // 플랫폼(Apps Script 단독 운영판, 2026-11): 코드에 고정돼 있던 값은 모두 관리자 설정(?page=admin)에서
   // 입력·저장하고, 서버가 이 페이지를 만들 때 표시용 설정만 심어준다(시트·캘린더 ID는 내려오지 않음).
   const PLATFORM_UI = <?!= uiConfigJson ?>;
-  const CFG_YEAR = PLATFORM_UI.general.year;
+  let CFG_YEAR = PLATFORM_UI.general.year; // 보고 있는 연도(상단 연도 선택). 운영 연도 전환은 관리자 모드 → 기준 정보
   const KPI_RAW_URL = PLATFORM_UI.sources.kpiSourceUrl;
 
   // 섹션 구성 — 설정의 순서대로 번호(01, 02…)를 매기고, 숨긴 섹션은 번호에서 빠짐.
@@ -687,7 +699,7 @@
       google.script.run
         .withSuccessHandler(text => { try { resolve(JSON.parse(text)); } catch (e) { reject(e); } })
         .withFailureHandler(err => reject(err instanceof Error ? err : new Error(String((err && err.message) || err))))
-        .api(section, storedPw(), JSON.stringify(extraParams || {}));
+        .api(section, storedPw(), JSON.stringify(Object.assign({ viewYear: CFG_YEAR }, extraParams || {})));
     });
   }
 
@@ -1225,7 +1237,8 @@
         const box = el("div", "kpi-pipe2");
         const forecast = annual.actual + pipe.weighted;
         const add = (label, value) => { const sp = el("span", null); sp.appendChild(document.createTextNode(label + " ")); sp.appendChild(elText("b", null, value)); box.appendChild(sp); };
-        add("확정", `${pipe.confirmedCount}건`);
+        add("승인 실적", `${pipe.confirmedCount}건`);
+        if (pipe.pendingCount) add("KPI 승인 대기", `${pipe.pendingCount}건 · ${fmtAmt(pipe.pending)}억`);
         add("진행 중 파이프라인", `${pipe.activeCount}건 · ${fmtAmt(pipe.active)}억`);
         add("가중 예상", `${fmtAmt(pipe.weighted)}억`);
         add("연간 전망(확정+가중)", `${fmtAmt(forecast)}억` + (annual.goal ? ` · 목표 대비 ${fmtAch(forecast / annual.goal * 100)}%` : ""));
@@ -2549,18 +2562,22 @@
   // 저장소는 서버의 협업 DB(구글 시트). 여기서 저장한 내용은 [대시보드] 탭의 KPI·AGENDA·트렌드·
   // 사업 캘린더(계약 알림)·인사이트에 그대로 반영된다(서버가 화면이 원래 받던 모양으로 계산해 줌).
   // ============================================================
-  const COLLAB = { meta: null, user: "", view: "dashboard", rows: {}, dashDirty: false, filters: {} };
+  const COLLAB = { meta: null, user: "", view: "dashboard", rows: {}, dashDirty: false, filters: {}, adminPw: "" };
+  function isAdminMode() { return !!COLLAB.adminPw; }
+  // 탭별 수정 권한: KPI 목표·환율·팀원은 관리자 모드에서만
+  function canEdit(table) { const d = tableDef(table); return d.editable && (!d.adminOnly || isAdminMode()); }
   const DATA_VIEWS = [
-    { key: "deals", title: "사업 원장", tables: ["deals"], desc: "광고·IP 사업을 제안부터 확정·불발까지 한 줄로 관리합니다. 확정 건의 KPI 추산금액이 KPI 현황에, 계약 종료일이 사업 캘린더 알림에 반영됩니다." },
-    { key: "kpi", title: "KPI 목표·환율", tables: ["kpiGoals", "fx", "snapshots"], desc: "KPI 목표(Stretch/Base)와 KPI 고정환율을 관리합니다. KPI 금액은 계약금액 × KPI 고정환율로 자동 추산됩니다. 주간기록은 매주 자동 저장됩니다." },
+    { key: "deals", title: "사업 원장", tables: ["deals"], desc: "광고·IP 사업을 제안부터 확정·불발까지 한 줄로 관리합니다. '진행 확정' 건은 관리자가 KPI 승인을 해야 그 연도 KPI 실적에 집계됩니다. 계약 종료일은 사업 캘린더 알림에 반영됩니다." },
+    { key: "kpi", title: "KPI 목표·환율", tables: ["kpiGoals", "fx", "snapshots"], desc: "KPI 목표(Stretch/Base)와 KPI 고정환율 — 관리자 모드에서 입력합니다. KPI 금액은 계약금액 × KPI 고정환율로 자동 추산됩니다. 주간기록은 매주 자동 저장됩니다." },
     { key: "agenda", title: "팀 AGENDA", tables: ["agenda"], desc: "주차별 WIN / SHARE / CHALLENGE 안건을 작성합니다. 지난 주차 내용도 그대로 보관됩니다." },
     { key: "trend", title: "트렌드 리포트", tables: ["trend"], desc: "주차별 업계 트렌드를 작성합니다. 내용 칸의 줄바꿈 1줄이 대시보드 카드의 글머리 1줄이 됩니다." },
-    { key: "members", title: "팀원", tables: ["members"], desc: "입장할 때 고르는 이름 목록입니다. 저장 기록의 작성자로 표시됩니다." },
+    { key: "members", title: "팀원", tables: ["members"], desc: "입장할 때 고르는 이름 목록입니다(관리자 모드에서 등록). 저장 기록의 작성자로 표시됩니다." },
     { key: "log", title: "변경 이력", tables: ["log"], desc: "누가·언제·무엇을 바꿨는지 자동으로 기록됩니다. 삭제된 항목은 [복원]으로 되살릴 수 있습니다." },
+    { key: "settings", title: "기준 정보", tables: [], desc: "운영 연도와 진행 단계·드롭다운 목록입니다. 관리자 모드에서 바꿀 수 있습니다." },
   ];
   // 표에 보이는 열(나머지는 입력 양식에서 확인)
   const LIST_COLS = {
-    deals: ["id", "part", "group", "artist", "brand", "name", "stage", "startDate", "endDate", "cur", "amount", "kpiKrw", "kpiHalf", "paidKrw", "updatedBy"],
+    deals: ["id", "part", "group", "artist", "brand", "name", "stage", "approval", "startDate", "endDate", "cur", "amount", "kpiKrw", "kpiHalf", "paidKrw", "updatedBy"],
     kpiGoals: ["year", "part", "period", "goalS", "goalB", "note", "updatedBy"],
     fx: ["year", "cur", "unit", "rate", "note", "updatedBy"],
     snapshots: ["week", "part", "period", "goalS", "goalB", "actual", "pipeline", "weighted", "source", "recordedAt"],
@@ -2574,7 +2591,7 @@
     ["기본", ["part", "year", "group", "artist", "brand", "name", "ctype", "ckind", "item", "country", "cond"]],
     ["진행", ["stage", "stageDate", "shortDate", "decidedDate", "reason"]],
     ["계약 기간", ["startDate", "startStatus", "endDate", "endStatus", "months"]],
-    ["금액 · KPI", ["cur", "amount", "kpiHalfManual", "kpiHalf", "kpiKrw", "weight", "weighted"]],
+    ["금액 · KPI", ["cur", "amount", "kpiHalfManual", "kpiHalf", "kpiKrw", "weight", "weighted", "approval", "approvedBy", "approvedAt"]],
     ["입금(회계 확인 후 입력)", ["paidKrw", "paidDate"]],
     ["관리", ["owner", "note", "source", "id", "updatedBy", "updatedAt"]],
   ];
@@ -2585,7 +2602,7 @@
       google.script.run
         .withSuccessHandler(text => { try { resolve(JSON.parse(text)); } catch (e) { reject(e); } })
         .withFailureHandler(err => reject(err instanceof Error ? err : new Error(String((err && err.message) || err))))
-        .dbApi(action, storedPw(), COLLAB.user, JSON.stringify(payload || {}));
+        .dbApi(action, storedPw(), COLLAB.user, JSON.stringify(Object.assign({}, payload || {}, COLLAB.adminPw ? { adminPw: COLLAB.adminPw } : {})));
     });
   }
   function tableDef(key) { return COLLAB.meta.tables.find(t => t.key === key); }
@@ -2615,6 +2632,14 @@
     const userBtn = el("button", "user-chip2");
     userBtn.type = "button"; userBtn.id = "userChip";
     userBtn.addEventListener("click", () => openUserPicker(true));
+    const yearSel = document.createElement("select");
+    yearSel.className = "year-select2"; yearSel.id = "yearSelect"; yearSel.title = "보는 연도";
+    yearSel.addEventListener("change", () => changeViewYear(parseInt(yearSel.value, 10)));
+    bar.appendChild(yearSel);
+    const adminBtn = el("button", "admin-chip2");
+    adminBtn.type = "button"; adminBtn.id = "adminChip";
+    adminBtn.addEventListener("click", () => (isAdminMode() ? exitAdminMode() : openAdminLogin()));
+    bar.appendChild(adminBtn);
     bar.appendChild(userBtn);
     header.after(bar);
     const dash = el("div", null); dash.id = "dashView";
@@ -2626,6 +2651,58 @@
     dash.after(data);
     updateUserChip();
   }
+  function updateAdminChip() {
+    const chip = document.getElementById("adminChip");
+    if (!chip) return;
+    chip.textContent = isAdminMode() ? "🔓 관리자 모드 (끄기)" : "🔒 관리자 모드";
+    chip.classList.toggle("on2", isAdminMode());
+    document.body.classList.toggle("admin-mode2", isAdminMode());
+  }
+  function renderYearOptions() {
+    const sel = document.getElementById("yearSelect");
+    if (!sel || !COLLAB.meta) return;
+    const years = (COLLAB.meta.years && COLLAB.meta.years.length ? COLLAB.meta.years : [PLATFORM_UI.general.year]).slice();
+    if (!years.includes(CFG_YEAR)) years.push(CFG_YEAR);
+    sel.innerHTML = "";
+    years.sort((a, b) => b - a).forEach(y => sel.appendChild(new Option(y + "년" + (y === COLLAB.meta.operatingYear ? " (운영)" : " (조회)"), y)));
+    sel.value = String(CFG_YEAR);
+  }
+  // 지난 연도는 조회용: 대시보드·입력 탭 모두 그 해 데이터로 바뀜(입력은 각 레코드의 연도 칸 기준)
+  function changeViewYear(y) {
+    CFG_YEAR = y;
+    selectedWeekKey = null;
+    Object.keys(COLLAB.filters).forEach(k => { COLLAB.filters[k].year = String(y); COLLAB.filters[k].week = ""; });
+    if (COLLAB.view === "dashboard") loadAll(); else { COLLAB.dashDirty = true; renderDataView(COLLAB.view); }
+  }
+  function openAdminLogin() {
+    const m = openModal("관리자 모드");
+    m.body.appendChild(elText("p", "modal-desc2", "관리자 비밀번호를 입력하면 이 창에서 KPI 목표·환율, KPI 승인, 엑셀 업로드, 팀원, 기준 정보(운영 연도·진행 단계)를 바꿀 수 있습니다. 5회 틀리면 30분 잠깁니다."));
+    const row = el("div", "user-free2");
+    const input = document.createElement("input");
+    input.type = "password"; input.placeholder = "관리자 비밀번호"; input.autocomplete = "current-password";
+    const ok = elText("button", "btn-primary2", "확인"); ok.type = "button";
+    const msg = el("p", "err2");
+    ok.addEventListener("click", async () => {
+      msg.textContent = "확인 중…";
+      COLLAB.adminPw = input.value;
+      const res = await callDb("adminCheck");
+      if (!res.ok) { COLLAB.adminPw = ""; msg.textContent = res.message || "관리자 비밀번호가 틀렸습니다."; return; }
+      try { sessionStorage.setItem("dashAdminPw", COLLAB.adminPw); } catch (e) {}
+      m.close();
+      updateAdminChip();
+      if (COLLAB.view !== "dashboard") renderDataView(COLLAB.view);
+    });
+    input.addEventListener("keydown", e => { if (e.key === "Enter") ok.click(); });
+    row.append(input, ok);
+    m.body.append(row, msg);
+    setTimeout(() => input.focus(), 50);
+  }
+  function exitAdminMode() {
+    COLLAB.adminPw = "";
+    try { sessionStorage.removeItem("dashAdminPw"); } catch (e) {}
+    updateAdminChip();
+    if (COLLAB.view !== "dashboard") renderDataView(COLLAB.view);
+  }
   function updateUserChip() {
     const chip = document.getElementById("userChip");
     if (chip) chip.textContent = "👤 " + (COLLAB.user || "이름 선택");
@@ -2636,7 +2713,7 @@
     const isDash = key === "dashboard";
     document.getElementById("dashView").hidden = !isDash;
     document.getElementById("dataView").hidden = isDash;
-    document.querySelectorAll(".header-actions2 label, #globalWeekSelect").forEach(n => { n.style.visibility = isDash ? "" : "hidden"; });
+    document.querySelectorAll(".header-actions2 label[for=globalWeekSelect], #globalWeekSelect").forEach(n => { n.style.visibility = isDash ? "" : "hidden"; });
     if (isDash) {
       if (COLLAB.dashDirty) { COLLAB.dashDirty = false; loadAll(); }
       return;
@@ -2654,8 +2731,15 @@
       COLLAB.meta = { ready: false, error: err.message };
     }
     try { COLLAB.user = localStorage.getItem("dashUser") || ""; } catch (e) {}
+    // 같은 창에서 새로고침해도 관리자 모드 유지(창을 닫으면 해제)
+    try {
+      const saved = sessionStorage.getItem("dashAdminPw") || "";
+      if (saved) { COLLAB.adminPw = saved; const chk = await callDb("adminCheck"); if (!chk.ok) { COLLAB.adminPw = ""; sessionStorage.removeItem("dashAdminPw"); } }
+    } catch (e) {}
     updateUserChip();
-    if (COLLAB.meta.ready && !COLLAB.user) openUserPicker(false);
+    updateAdminChip();
+    renderYearOptions();
+    if (!COLLAB.meta.error && !COLLAB.user) openUserPicker(false); // 첫 입장: 이름 선택(저장·승인 기록의 작성자)
   }
 
   function openUserPicker(closable) {
@@ -2722,16 +2806,117 @@
     card.appendChild(elText("p", "data-desc2", view.desc));
     host.appendChild(card);
     if (!COLLAB.meta || !COLLAB.meta.ready) {
-      card.appendChild(elText("p", "state-msg2 err2", COLLAB.meta && COLLAB.meta.error
-        ? "협업 DB에 연결하지 못했어요: " + COLLAB.meta.error
-        : "협업 DB가 아직 만들어지지 않았어요. 관리자에게 [협업 DB 만들기]를 요청해 주세요."));
+      if (COLLAB.meta && COLLAB.meta.error) { card.appendChild(elText("p", "state-msg2 err2", "협업 DB에 연결하지 못했어요: " + COLLAB.meta.error)); return; }
+      card.appendChild(renderStartBox());
       return;
     }
+    if (viewKey === "settings") { card.appendChild(renderSettingsView()); return; }
     for (const t of view.tables) {
       const section = el("div", "data-table-block2");
       card.appendChild(section);
       await renderTableBlock(section, t, view.tables.length > 1);
     }
+  }
+
+  // 처음 시작하기: 협업 DB 만들기 + 기존 시트 데이터(AGENDA·트렌드·KPI 기록·목표) 가져오기 — 관리자 모드
+  function renderStartBox() {
+    const box = el("div", "start-box2");
+    box.appendChild(elText("h3", null, "플랫폼 시작하기"));
+    box.appendChild(elText("p", null, "협업 DB(구글 시트)를 만들고, 기존 시트의 팀 AGENDA·트렌드 리포트 지난 주차와 KPI 주차 기록·목표를 한 번에 가져옵니다. 처음 한 번만 하면 됩니다."));
+    if (!isAdminMode()) { box.appendChild(elText("p", "err2", "관리자 모드에서 시작할 수 있어요. 오른쪽 위 [🔒 관리자 모드]를 눌러 주세요.")); return box; }
+    const go = elText("button", "btn-primary2", "플랫폼 시작하기"); go.type = "button";
+    const out = el("div", "form-msg2");
+    go.addEventListener("click", async () => {
+      if (!confirm("협업 DB를 만들고 기존 데이터를 가져올까요? (1분 가까이 걸릴 수 있습니다)")) return;
+      go.disabled = true; go.textContent = "진행 중…";
+      const res = await callDb("start");
+      if (!res.ok) { out.textContent = "실패: " + (res.message || res.error); go.disabled = false; go.textContent = "플랫폼 시작하기"; return; }
+      const meta = await callDb("meta");
+      if (meta.ok) COLLAB.meta = meta;
+      renderYearOptions();
+      COLLAB.dashDirty = true;
+      selectedWeekKey = null; // 시작 전(기존 시트) 화면에서 골라 둔 주차 대신 최신 주차로
+      alert("시작했습니다.\n" + res.report.join("\n"));
+      renderDataView(COLLAB.view);
+    });
+    box.append(go, out);
+    return box;
+  }
+
+  // 기준 정보: 운영 연도 전환 + 진행 단계·가중치 + 드롭다운 목록(관리자 모드에서만 수정)
+  function renderSettingsView() {
+    const wrap = el("div", "settings-wrap2");
+    const admin = isAdminMode();
+    const codes = COLLAB.meta.codes;
+    // 운영 연도
+    const yearBox = el("div", "settings-block2");
+    yearBox.appendChild(elText("h3", "data-table-title2", "운영 연도"));
+    yearBox.appendChild(elText("p", "data-desc2", `지금 운영 연도: ${COLLAB.meta.operatingYear}년 — 모든 팀원의 기본 화면과 새로 입력하는 항목의 기준 연도입니다. 지난 연도는 상단 연도 선택으로 조회할 수 있습니다.`));
+    if (admin) {
+      const row = el("div", "data-toolbar2");
+      const inp = document.createElement("input"); inp.type = "number"; inp.className = "data-search2"; inp.value = COLLAB.meta.operatingYear + 1;
+      const btn = elText("button", "btn-primary2", "운영 연도 전환"); btn.type = "button";
+      btn.addEventListener("click", async () => {
+        const y = parseInt(inp.value, 10);
+        if (!confirm(`운영 연도를 ${COLLAB.meta.operatingYear}년 → ${y}년으로 바꿀까요?\n모든 팀원의 기본 화면이 ${y}년으로 바뀝니다. ${y}년 KPI 목표·환율도 입력해 주세요.`)) return;
+        const res = await callDb("setYear", { year: y });
+        if (!res.ok) { alert("실패: " + (res.message || res.error)); return; }
+        alert(`운영 연도를 ${res.year}년으로 바꿨습니다. 화면을 새로 불러옵니다.`);
+        window.top.location.reload();
+      });
+      row.append(inp, btn);
+      yearBox.appendChild(row);
+    }
+    wrap.appendChild(yearBox);
+    // 진행 단계
+    const stageBox = el("div", "settings-block2");
+    stageBox.appendChild(elText("h3", "data-table-title2", "진행 단계 · 가중치"));
+    stageBox.appendChild(elText("p", "data-desc2", "가중치 100 = 진행 확정(관리자 KPI 승인 후 실적 집계) · 1~99 = 진행 중(가중 예상) · 0 = 불발·보류"));
+    const t = el("table", "data-table2");
+    const hr = el("tr", null); ["단계", "가중치", "설명"].forEach(h => hr.appendChild(elText("th", null, h)));
+    const th = el("thead", null); th.appendChild(hr); t.appendChild(th);
+    const tb = el("tbody", null);
+    codes.stages.forEach(st => { const tr = el("tr", null); tr.append(elText("td", null, st.name), elText("td", null, st.weight + "%"), elText("td", "long2", st.desc || "")); tb.appendChild(tr); });
+    t.appendChild(tb);
+    const tw = el("div", "data-table-wrap2"); tw.appendChild(t); stageBox.appendChild(tw);
+    wrap.appendChild(stageBox);
+    // 드롭다운 목록
+    const lists = [["groups", "아티스트 그룹"], ["ctypes", "계약유형"], ["ckinds", "계약구분"], ["items", "품목"], ["currencies", "계약통화"]];
+    const listBox = el("div", "settings-block2");
+    listBox.appendChild(elText("h3", "data-table-title2", "선택 목록"));
+    const grid = el("div", "form-grid2");
+    const inputs = {};
+    lists.forEach(([k, label]) => {
+      const f = el("label", "form-field2");
+      f.appendChild(elText("span", "form-label2", label));
+      const ta = document.createElement("textarea"); ta.rows = 3; ta.value = (codes[k] || []).join(", "); ta.disabled = !admin;
+      inputs[k] = ta; f.appendChild(ta); grid.appendChild(f);
+    });
+    const stageField = el("label", "form-field2 full2");
+    stageField.appendChild(elText("span", "form-label2", "진행 단계 (한 줄에 이름|가중치|설명)"));
+    const stageTa = document.createElement("textarea"); stageTa.rows = 8; stageTa.disabled = !admin;
+    stageTa.value = codes.stages.map(st => `${st.name}|${st.weight}|${st.desc || ""}`).join("\n");
+    stageField.appendChild(stageTa);
+    if (admin) grid.appendChild(stageField);
+    listBox.appendChild(grid);
+    if (admin) {
+      const save = elText("button", "btn-primary2", "기준 정보 저장"); save.type = "button";
+      save.addEventListener("click", async () => {
+        if (!confirm("기준 정보를 저장할까요? 진행 단계 가중치가 바뀌면 사업 원장의 가중 예상금액이 다시 계산됩니다.")) return;
+        const payload = { stages: stageTa.value.split("\n").map(x => x.trim()).filter(Boolean) };
+        lists.forEach(([k]) => { payload[k] = inputs[k].value.split(/[,\n]/).map(x => x.trim()).filter(Boolean); });
+        const res = await callDb("saveCodes", { codes: payload });
+        if (!res.ok) { alert("실패: " + (res.message || res.error)); return; }
+        COLLAB.meta.codes = res.codes; COLLAB.dashDirty = true;
+        alert("저장했습니다.");
+        renderDataView("settings");
+      });
+      const actions = el("div", "form-actions2"); actions.appendChild(save); listBox.appendChild(actions);
+    } else {
+      listBox.appendChild(elText("p", "data-desc2", "수정은 관리자 모드에서 할 수 있어요."));
+    }
+    wrap.appendChild(listBox);
+    return wrap;
   }
 
   async function loadRows(table, force) {
@@ -2743,7 +2928,7 @@
   }
 
   function defaultFilters(table) {
-    const f = COLLAB.filters[table] || (COLLAB.filters[table] = { q: "", year: String(COLLAB.meta.year), week: "", part: "", stage: "" });
+    const f = COLLAB.filters[table] || (COLLAB.filters[table] = { q: "", year: String(CFG_YEAR), week: "", part: "", stage: "" });
     if ((table === "agenda" || table === "trend") && !f.week) f.week = COLLAB.meta.currentWeek;
     return f;
   }
@@ -2756,6 +2941,7 @@
       if (f.week && r.week !== undefined && r.week !== f.week) return false;
       if (f.part && r.part !== f.part) return false;
       if (f.stage && r.stage !== f.stage) return false;
+      if (f.approval && r.approval !== f.approval) return false;
       if (q && !Object.values(r).some(v => String(v).toLowerCase().includes(q))) return false;
       return true;
     });
@@ -2795,7 +2981,7 @@
       toolbar.appendChild(s);
     };
     if (def.cols.some(c => c.key === "year")) {
-      const years = Array.from(new Set(rows.map(r => String(r.year)).filter(Boolean).concat(String(COLLAB.meta.year)))).sort().reverse();
+      const years = Array.from(new Set(rows.map(r => String(r.year)).filter(Boolean).concat(String(COLLAB.meta.year), String(CFG_YEAR)))).sort().reverse();
       addSelect("연도", years, f.year, v => { f.year = v; });
     }
     if (def.cols.some(c => c.key === "week")) {
@@ -2806,16 +2992,33 @@
     if (table === "deals") {
       addSelect("파트", codeNames("parts"), f.part, v => { f.part = v; });
       addSelect("단계", codeNames("stages"), f.stage, v => { f.stage = v; });
+      addSelect("KPI 승인", ["승인 대기", "승인"], f.approval || "", v => { f.approval = v; });
     }
     const spacer = el("span", "data-spacer2");
     toolbar.appendChild(spacer);
-    if (def.editable) {
+    if (canEdit(table)) {
       const add = elText("button", "btn-primary2", "＋ 새로 추가"); add.type = "button";
       add.addEventListener("click", () => openRecordForm(table, null, rerender));
       toolbar.appendChild(add);
+    }
+    if (def.editable && isAdminMode()) {
       const up = elText("button", "btn-line2", "엑셀 업로드"); up.type = "button";
       up.addEventListener("click", () => pickExcel(table, rerender));
       toolbar.appendChild(up);
+    }
+    if (table === "deals" && isAdminMode()) {
+      const appr = elText("button", "btn-approve2", "승인 대기 일괄 승인"); appr.type = "button";
+      appr.addEventListener("click", async () => {
+        const targets = filteredRows(table, rows).filter(r => r.approval === "승인 대기");
+        if (!targets.length) { alert("지금 목록에 승인 대기 건이 없어요."); return; }
+        const sum = targets.reduce((a, r) => a + (typeof r.kpiKrw === "number" ? r.kpiKrw : 0), 0);
+        if (!confirm(`지금 목록의 승인 대기 ${targets.length}건(KPI ${(sum / 1e8).toFixed(2)}억)을 승인할까요?\n승인하면 각 건의 KPI 기준연도·인정 반기 실적으로 집계됩니다.`)) return;
+        const res = await callDb("approve", { ids: targets.map(r => r.id), approve: true });
+        if (!res.ok) { alert("실패: " + (res.message || res.error)); return; }
+        alert(`${res.done}건 승인했습니다.` + (res.skipped.length ? `\n제외 ${res.skipped.length}건:\n` + res.skipped.slice(0, 10).join("\n") : ""));
+        COLLAB.dashDirty = true; rerender();
+      });
+      toolbar.appendChild(appr);
     }
     const down = elText("button", "btn-line2", "엑셀 다운로드"); down.type = "button";
     down.addEventListener("click", () => downloadExcel([table], filteredRows(table, rows)));
@@ -2845,6 +3048,17 @@
         summary.appendChild(chip);
       });
     }
+    if (table === "deals") {
+      const pending = list.filter(r => r.approval === "승인 대기");
+      if (pending.length) {
+        const chip = el("button", "stage-chip2 pending2" + (defaultFilters(table).approval === "승인 대기" ? " on2" : ""));
+        chip.type = "button";
+        chip.appendChild(elText("b", null, "KPI 승인 대기"));
+        chip.appendChild(document.createTextNode(` ${pending.length}건`));
+        chip.addEventListener("click", () => { const f = defaultFilters(table); f.approval = f.approval === "승인 대기" ? "" : "승인 대기"; drawTable(wrap, summary, table, rows); });
+        summary.appendChild(chip);
+      }
+    }
     summary.appendChild(elText("span", "data-count2", `${list.length}건${list.length !== rows.length ? ` / 전체 ${rows.length}건` : ""}`));
     wrap.innerHTML = "";
     if (!list.length) { wrap.appendChild(elText("p", "state-msg2", "조건에 맞는 항목이 없어요." + (def.editable ? " [＋ 새로 추가]로 입력하세요." : ""))); return; }
@@ -2856,9 +3070,10 @@
     const tbody = el("tbody", null);
     const sorted = list.slice().sort((a, b) => String(b.updatedAt || b.at || b.recordedAt || "").localeCompare(String(a.updatedAt || a.at || a.recordedAt || "")));
     sorted.slice(0, 500).forEach(r => {
-      const tr = el("tr", def.editable ? "clickable2" : null);
+      const tr = el("tr", canEdit(table) ? "clickable2" : null);
       LIST_COLS[table].forEach(k => {
         const td = elText("td", ["content", "before", "after", "name"].includes(k) ? "long2" : null, cellText(table, k, r[k]));
+        if (k === "approval" && r.approval) td.classList.add(r.approval === "승인" ? "appr-ok2" : "appr-wait2");
         if (k === "stage" && r.stage) td.dataset.weight = String(((COLLAB.meta.codes.stages.find(s => s.name === r.stage) || {}).weight) || 0);
         tr.appendChild(td);
       });
@@ -2877,7 +3092,7 @@
         }
         tr.appendChild(td);
       }
-      if (def.editable) tr.addEventListener("click", () => openRecordForm(table, r, () => renderDataView(COLLAB.view)));
+      if (canEdit(table)) tr.addEventListener("click", () => openRecordForm(table, r, () => renderDataView(COLLAB.view)));
       tbody.appendChild(tr);
     });
     t.appendChild(tbody);
@@ -2888,7 +3103,7 @@
   // ---------------- 입력 양식 ----------------
   function newRecordDefaults(table) {
     const f = defaultFilters(table);
-    const year = COLLAB.meta.year;
+    const year = COLLAB.meta.operatingYear || COLLAB.meta.year;
     if (table === "deals") return { part: "광고", year, stage: codeNames("stages")[0], cur: "KRW", ctype: "신규계약" };
     if (table === "agenda") return { year, week: f.week || COLLAB.meta.currentWeek, kind: "WIN" };
     if (table === "trend") return { year, week: f.week || COLLAB.meta.currentWeek, kind: "외부" };
@@ -2960,7 +3175,7 @@
     const cancel = elText("button", "btn-line2", "취소"); cancel.type = "button";
     cancel.addEventListener("click", m.close);
     actions.append(save, cancel);
-    if (!isNew) {
+    if (!isNew && canEdit(table)) {
       const del = elText("button", "btn-danger2", "삭제"); del.type = "button";
       del.addEventListener("click", async () => {
         if (!confirm("삭제할까요? (변경 이력에서 복원할 수 있습니다)")) return;
@@ -2970,7 +3185,19 @@
       });
       actions.appendChild(del);
     }
-    if (!isNew && rec.updatedAt) actions.appendChild(elText("span", "form-meta2", `최종 수정: ${rec.updatedBy || "-"} · ${rec.updatedAt}`));
+    if (table === "deals" && !isNew && isAdminMode() && rec.approval) {
+      const approving = rec.approval !== "승인";
+      const ab = elText("button", approving ? "btn-approve2" : "btn-line2", approving ? "KPI 실적 승인" : "KPI 승인 취소"); ab.type = "button";
+      ab.addEventListener("click", async () => {
+        if (!confirm(approving ? `이 사업을 ${rec.year}년 ${rec.kpiHalf} KPI 실적(${fmtNum(rec.kpiKrw)}원)으로 승인할까요?` : "KPI 승인을 취소할까요? 실적 집계에서 빠집니다.")) return;
+        const res = await callDb("approve", { ids: [rec.id], approve: approving });
+        if (!res.ok) { msg.textContent = res.message || res.error; return; }
+        if (res.skipped.length) { msg.textContent = "승인할 수 없어요: " + res.skipped.join(" / "); return; }
+        COLLAB.dashDirty = true; m.close(); onDone && onDone();
+      });
+      actions.appendChild(ab);
+    }
+    if (!isNew && rec.updatedAt) actions.appendChild(elText("span", "form-meta2", `최종 수정: ${rec.updatedBy || "-"} · ${rec.updatedAt}` + (rec.approvedAt ? ` · KPI 승인: ${rec.approvedBy} ${rec.approvedAt}` : "")));
     m.body.appendChild(actions);
     save.addEventListener("click", async () => {
       if (!COLLAB.user) { openUserPicker(false); return; }
@@ -2991,6 +3218,7 @@
         }
         COLLAB.dashDirty = true;
         m.close();
+        if (res.approvalReset) alert("KPI 관련 내용(금액·연도·단계 등)이 바뀌어 KPI 승인이 해제됐습니다. 관리자의 재승인이 필요합니다.");
         onDone && onDone();
       } catch (err) {
         msg.appendChild(elText("p", "err2", "저장 실패: " + err.message));

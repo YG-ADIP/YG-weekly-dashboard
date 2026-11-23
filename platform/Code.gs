@@ -252,6 +252,17 @@ function api(section, password, paramsJson) {
 function handleApi_(params) {
   var pw = getPassword_();
   if (!pw || params.password !== pw) return { ok: false, error: 'unauthorized' };
+  var viewYear = parseInt(params.viewYear, 10);
+  if (viewYear >= 2000 && viewYear <= 2100 && viewYear !== cfg_().general.year) {
+    var copy = JSON.parse(JSON.stringify(cfg_()));
+    copy.general.year = viewYear;
+    CFG_OVERRIDE_ = copy;
+    try { return handleApiInner_(params); } finally { CFG_OVERRIDE_ = null; }
+  }
+  return handleApiInner_(params);
+}
+
+function handleApiInner_(params) {
   try {
     switch (params.section) {
       case 'kpi': return dbReady_() ? getKpiDataDb_() : getKpiData_();
@@ -283,28 +294,35 @@ function handleApi_(params) {
 // ============================================================
 // 관리자 설정 API (Admin.html → google.script.run.adminApi)
 // ============================================================
-function adminApi(action, adminPassword, payloadJson) {
+// 관리자 비밀번호 확인(관리자 화면·플랫폼 관리자 모드 공용). 통과하면 null, 아니면 오류 객체.
+// 무작위 대입 방지: 연속 5회 틀리면 30분 동안 관리자 기능 차단(맞게 입력하면 횟수 초기화)
+function checkAdminPassword_(adminPassword) {
   var adminPw = getAdminPassword_();
   if (!adminPw) {
-    return JSON.stringify({ ok: false, error: 'admin_not_configured', message: '관리자 비밀번호가 아직 설정되지 않았습니다. Apps Script 프로젝트 설정 → 스크립트 속성에 ADMIN_PASSWORD를 추가해 주세요.' });
+    return { ok: false, error: 'admin_not_configured', message: '관리자 비밀번호가 아직 설정되지 않았습니다. Apps Script 프로젝트 설정 → 스크립트 속성에 ADMIN_PASSWORD를 추가해 주세요.' };
   }
-  // 무작위 대입 방지: 연속 5회 틀리면 30분 동안 관리자 입장 차단(맞게 입력하면 횟수 초기화)
   var cache = CacheService.getScriptCache();
   var lockedUntil = Number(cache.get('adminLockUntil') || 0);
   if (lockedUntil > new Date().getTime()) {
-    return JSON.stringify({ ok: false, error: 'locked', message: '비밀번호를 연속으로 틀려 관리자 화면이 잠겼습니다. ' + Math.ceil((lockedUntil - new Date().getTime()) / 60000) + '분 뒤 다시 시도해 주세요.' });
+    return { ok: false, error: 'locked', message: '비밀번호를 연속으로 틀려 관리자 기능이 잠겼습니다. ' + Math.ceil((lockedUntil - new Date().getTime()) / 60000) + '분 뒤 다시 시도해 주세요.' };
   }
   if (adminPassword !== adminPw) {
     var fails = Number(cache.get('adminFail') || 0) + 1;
     if (fails >= ADMIN_MAX_FAILS) {
       cache.put('adminLockUntil', String(new Date().getTime() + ADMIN_LOCK_MINUTES * 60000), ADMIN_LOCK_MINUTES * 60);
       cache.remove('adminFail');
-      return JSON.stringify({ ok: false, error: 'locked', message: '비밀번호를 ' + ADMIN_MAX_FAILS + '회 틀려 ' + ADMIN_LOCK_MINUTES + '분 동안 관리자 화면이 잠겼습니다.' });
+      return { ok: false, error: 'locked', message: '비밀번호를 ' + ADMIN_MAX_FAILS + '회 틀려 ' + ADMIN_LOCK_MINUTES + '분 동안 관리자 기능이 잠겼습니다.' };
     }
     cache.put('adminFail', String(fails), ADMIN_LOCK_MINUTES * 60);
-    return JSON.stringify({ ok: false, error: 'unauthorized', message: '관리자 비밀번호가 틀렸습니다. (' + fails + '/' + ADMIN_MAX_FAILS + '회, ' + ADMIN_MAX_FAILS + '회 틀리면 ' + ADMIN_LOCK_MINUTES + '분 잠김)' });
+    return { ok: false, error: 'unauthorized', message: '관리자 비밀번호가 틀렸습니다. (' + fails + '/' + ADMIN_MAX_FAILS + '회, ' + ADMIN_MAX_FAILS + '회 틀리면 ' + ADMIN_LOCK_MINUTES + '분 잠김)' };
   }
   cache.remove('adminFail');
+  return null;
+}
+
+function adminApi(action, adminPassword, payloadJson) {
+  var denied = checkAdminPassword_(adminPassword);
+  if (denied) return JSON.stringify(denied);
   var payload = {};
   try { payload = JSON.parse(payloadJson || '{}') || {}; } catch (e) { payload = {}; }
   try {

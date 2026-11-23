@@ -46,6 +46,9 @@ var DB_TABLES = {
       { key: 'kpiHalfManual', label: 'KPI 인정 반기(직접 지정)', type: 'select', codes: 'halves' },
       { key: 'kpiHalf', label: 'KPI 인정 반기', type: 'auto' },
       { key: 'kpiKrw', label: 'KPI 추산금액(KRW)', type: 'auto' },
+      { key: 'approval', label: 'KPI 승인', type: 'auto' },
+      { key: 'approvedBy', label: '승인자', type: 'auto' },
+      { key: 'approvedAt', label: '승인일시', type: 'auto' },
       { key: 'weight', label: '단계 가중치', type: 'auto' },
       { key: 'weighted', label: '가중 예상금액(KRW)', type: 'auto' },
       { key: 'paidKrw', label: '실입금액(KRW)', type: 'number' },
@@ -58,7 +61,7 @@ var DB_TABLES = {
     ],
   },
   kpiGoals: {
-    sheet: 'KPI_목표', idPrefix: 'KG', editable: true,
+    sheet: 'KPI_목표', idPrefix: 'KG', editable: true, adminOnly: true,
     cols: [
       { key: 'id', label: 'ID', type: 'auto' },
       { key: 'year', label: '연도', type: 'number', required: true },
@@ -72,7 +75,7 @@ var DB_TABLES = {
     ],
   },
   fx: {
-    sheet: 'KPI_환율', idPrefix: 'FX', editable: true,
+    sheet: 'KPI_환율', idPrefix: 'FX', editable: true, adminOnly: true,
     cols: [
       { key: 'id', label: 'ID', type: 'auto' },
       { key: 'year', label: '연도', type: 'number', required: true },
@@ -113,7 +116,7 @@ var DB_TABLES = {
     ],
   },
   members: {
-    sheet: '팀원', idPrefix: 'MB', editable: true,
+    sheet: '팀원', idPrefix: 'MB', editable: true, adminOnly: true,
     cols: [
       { key: 'id', label: 'ID', type: 'auto' },
       { key: 'name', label: '이름', type: 'text', required: true },
@@ -206,6 +209,14 @@ function stageInfo_(name) {
   return { name: name, weight: 0 };
 }
 function isConfirmedStage_(name) { return stageInfo_(name).weight >= 100; }
+
+// KPI 실적 승인제: '진행 확정'이어도 관리자가 승인해야 그 연도 KPI 실적에 집계된다.
+// 승인 뒤 아래 칸이 바뀌면(관리자가 아닌 사람이 고친 경우) 승인이 풀리고 다시 승인 대기가 된다.
+var KPI_FIELDS = ['part', 'year', 'stage', 'cur', 'amount', 'kpiHalfManual', 'startDate'];
+function kpiFieldsChanged_(before, after) {
+  return KPI_FIELDS.some(function (k) { return String(before[k] === undefined ? '' : before[k]) !== String(after[k] === undefined ? '' : after[k]); });
+}
+function isApproved_(d) { return d.approval === '승인'; }
 function isActiveStage_(name) { var w = stageInfo_(name).weight; return w > 0 && w < 100; }
 
 // ============================================================
@@ -364,6 +375,8 @@ function computeDeal_(rec, fxRows) {
   }
   if (!rec.startStatus) rec.startStatus = rec.startDate ? (/^\d{4}-\d{2}-\d{2}$/.test(rec.startDate) ? '확정' : '예정') : '미정';
   if (!rec.endStatus) rec.endStatus = rec.endDate ? (/^\d{4}-\d{2}-\d{2}$/.test(rec.endDate) ? '확정' : '예정') : '미정';
+  if (info.weight >= 100) rec.approval = rec.approvedAt ? '승인' : '승인 대기';
+  else { rec.approval = ''; rec.approvedBy = ''; rec.approvedAt = ''; }
   return rec;
 }
 
@@ -417,9 +430,10 @@ function withLock_(fn) {
 }
 
 // 레코드 하나 저장. input.id가 있으면 수정(baseUpdatedAt이 현재 값과 다르면 충돌), 없으면 추가.
-function dbSave_(key, input, user, baseUpdatedAt) {
+function dbSave_(key, input, user, baseUpdatedAt, isAdmin) {
   var t = DB_TABLES[key];
   if (!t || !t.editable) throw new Error('저장할 수 없는 탭입니다.');
+  if (t.adminOnly && !isAdmin) return { ok: false, error: 'forbidden', message: t.sheet + '은(는) 관리자 모드에서만 수정할 수 있습니다.' };
   return withLock_(function () {
     var errors = [];
     var rec = cleanRecord_(key, input, errors);
@@ -432,9 +446,15 @@ function dbSave_(key, input, user, baseUpdatedAt) {
     }
     var fxRows = key === 'deals' ? readTable_('fx') : [];
     rec.id = existing ? existing.id : nextId_(key, rec, rows);
+    var approvalLog = null;
     if (key === 'deals') {
       rec.source = existing ? existing.source : (input.source || '화면 입력');
       rec.stageDate = existing && existing.stage === rec.stage ? existing.stageDate : nowStamp_().slice(0, 10);
+      if (existing && existing.approvedAt) {
+        if (!isAdmin && kpiFieldsChanged_(existing, rec)) {
+          approvalLog = { user: user, table: key, recordId: existing.id, action: '승인 해제', field: 'KPI 승인', before: '승인', after: 'KPI 관련 내용 변경 → 승인 대기' };
+        } else { rec.approvedBy = existing.approvedBy; rec.approvedAt = existing.approvedAt; }
+      }
       computeDeal_(rec, fxRows);
     }
     rec.updatedBy = user || '(이름 없음)';
@@ -452,9 +472,10 @@ function dbSave_(key, input, user, baseUpdatedAt) {
       sh.getRange(sh.getLastRow() + 1, 1, 1, row.length).setValues([row]);
       logs.push({ user: user, table: key, recordId: rec.id, action: '추가', field: '', before: '', after: summaryOf_(key, rec) });
     }
+    if (approvalLog) logs.push(approvalLog);
     appendLogs_(logs);
     if (key === 'fx') recalcDeals_(user);
-    return { ok: true, record: rec };
+    return { ok: true, record: rec, approvalReset: !!approvalLog };
   });
 }
 
@@ -466,9 +487,10 @@ function summaryOf_(key, r) {
 }
 function stripRow_(r) { var o = {}; Object.keys(r).forEach(function (k) { if (k !== '_row') o[k] = r[k]; }); return o; }
 
-function dbDelete_(key, id, user) {
+function dbDelete_(key, id, user, isAdmin) {
   var t = DB_TABLES[key];
   if (!t || !t.editable) throw new Error('삭제할 수 없는 탭입니다.');
+  if (t.adminOnly && !isAdmin) return { ok: false, error: 'forbidden', message: t.sheet + '은(는) 관리자 모드에서만 삭제할 수 있습니다.' };
   return withLock_(function () {
     var row = readTable_(key).filter(function (r) { return r.id === id; })[0];
     if (!row) return { ok: false, error: 'not_found', message: '이미 삭제된 항목입니다.' };
@@ -479,11 +501,12 @@ function dbDelete_(key, id, user) {
   });
 }
 
-function dbRestore_(logId, user) {
+function dbRestore_(logId, user, isAdmin) {
   return withLock_(function () {
     var entry = readTable_('log').filter(function (l) { return l.id === logId; })[0];
     if (!entry || entry.action !== '삭제') throw new Error('복원할 수 있는 삭제 기록이 아닙니다.');
     var key = Object.keys(DB_TABLES).filter(function (k) { return DB_TABLES[k].sheet === entry.table; })[0];
+    if (DB_TABLES[key].adminOnly && !isAdmin) throw new Error(entry.table + ' 항목은 관리자 모드에서만 복원할 수 있습니다.');
     var rec = JSON.parse(entry.before);
     if (readTable_(key).some(function (r) { return r.id === rec.id; })) throw new Error('같은 ID(' + rec.id + ')가 이미 있습니다.');
     var sh = dbSpreadsheet_().getSheetByName(DB_TABLES[key].sheet);
@@ -605,7 +628,14 @@ function dbImport_(key, rawRows, user, commit) {
       } else {
         var merged = stripRow_(match);
         t.cols.forEach(function (c) { if (c.type !== 'auto' && rec[c.key] !== '') merged[c.key] = rec[c.key]; });
-        if (key === 'deals') { if (merged.stage !== match.stage) merged.stageDate = nowStamp_().slice(0, 10); computeDeal_(merged, fxRows); }
+        if (key === 'deals') {
+          if (merged.stage !== match.stage) merged.stageDate = nowStamp_().slice(0, 10);
+          if (match.approvedAt && kpiFieldsChanged_(match, merged)) {
+            merged.approvedBy = ''; merged.approvedAt = '';
+            logs.push({ user: user, table: key, recordId: match.id, action: '승인 해제', field: 'KPI 승인', before: '승인', after: '엑셀 업로드로 KPI 관련 내용 변경 → 승인 대기' });
+          }
+          computeDeal_(merged, fxRows);
+        }
         merged.updatedBy = user; merged.updatedAt = nowStamp_();
         toUpdate.push({ row: match._row, rec: merged }); result.updated++;
         changes.forEach(function (ch) { logs.push({ user: user, table: key, recordId: match.id, action: '엑셀 업로드-수정', field: ch.field, before: ch.before, after: ch.after }); });
@@ -653,7 +683,7 @@ function kpiStatusFromDeals_(year, deals, goals) {
   var sum = function (part, half) {
     var t = 0;
     deals.forEach(function (d) {
-      if (Number(d.year) !== year || !isConfirmedStage_(d.stage) || typeof d.kpiKrw !== 'number') return;
+      if (Number(d.year) !== year || !isConfirmedStage_(d.stage) || !isApproved_(d) || typeof d.kpiKrw !== 'number') return;
       if (part !== '전체' && d.part !== part) return;
       if (half && d.kpiHalf !== half) return;
       t += d.kpiKrw;
@@ -664,16 +694,21 @@ function kpiStatusFromDeals_(year, deals, goals) {
     var g = goalOf(part, period);
     return { goal: g.goal, goalBase: g.goalBase, actual: sum(part, period === '연간' ? null : period) };
   };
-  var pipe = { active: 0, weighted: 0, activeCount: 0, confirmedCount: 0 };
+  var pipe = { active: 0, weighted: 0, activeCount: 0, confirmedCount: 0, pending: 0, pendingCount: 0 };
   deals.forEach(function (d) {
     if (Number(d.year) !== year || typeof d.kpiKrw !== 'number') return;
-    if (isConfirmedStage_(d.stage)) { pipe.confirmedCount++; return; }
+    if (isConfirmedStage_(d.stage)) {
+      if (isApproved_(d)) pipe.confirmedCount++;
+      else { pipe.pending += d.kpiKrw; pipe.pendingCount++; }
+      return;
+    }
     if (isActiveStage_(d.stage)) { pipe.active += d.kpiKrw; pipe.weighted += d.kpiKrw * stageInfo_(d.stage).weight / 100; pipe.activeCount++; }
   });
   return {
     annual: rec('전체', '연간'), h1: rec('전체', '상반기'), h2: rec('전체', '하반기'),
     parts: ['광고', 'IP'].map(function (p) { return { name: p, annual: rec(p, '연간'), h1: rec(p, '상반기'), h2: rec(p, '하반기') }; }),
-    pipeline: { active: eok_(pipe.active), weighted: eok_(pipe.weighted), activeCount: pipe.activeCount, confirmedCount: pipe.confirmedCount },
+    pipeline: { active: eok_(pipe.active), weighted: eok_(pipe.weighted), activeCount: pipe.activeCount, confirmedCount: pipe.confirmedCount,
+      pending: eok_(pipe.pending), pendingCount: pipe.pendingCount },
   };
 }
 
@@ -809,7 +844,7 @@ function getBusinessCalendarDataDb_() {
 // 인사이트: 그 주에 확정된 사업(확정일 또는 단계 변경일 기준) + 현재 반기 KPI 기여 상위 5건
 function getInsightDataDb_() {
   var year = cfg_().general.year;
-  var deals = readTable_('deals').filter(function (d) { return Number(d.year) === year && isConfirmedStage_(d.stage) && typeof d.kpiKrw === 'number'; });
+  var deals = readTable_('deals').filter(function (d) { return Number(d.year) === year && isConfirmedStage_(d.stage) && isApproved_(d) && typeof d.kpiKrw === 'number'; });
   var weekKeys = {};
   Object.keys(getKpiDataDb_().byWeek).forEach(function (k) { weekKeys[k] = true; });
   var half = new Date().getMonth() < 6 ? '상반기' : '하반기';
@@ -821,8 +856,7 @@ function getInsightDataDb_() {
   Object.keys(weekKeys).forEach(function (k) {
     var r = weekRange_(year, k), p = k.split('_');
     var thisWeek = deals.filter(function (d) {
-      var basis = /^\d{4}-\d{2}-\d{2}$/.test(d.decidedDate) ? d.decidedDate : (/^\d{4}-\d{2}-\d{2}$/.test(d.stageDate) ? d.stageDate : '');
-      var dt = parseFlexToDate_(basis);
+      var dt = parseFlexToDate_(String(d.approvedAt || '').slice(0, 10)); // KPI 실적 인정 시점 = 관리자 승인일
       return dt && dt >= r.start && dt <= r.end;
     }).map(function (d) {
       return { category: d.part, project: d.brand + (d.name ? ' ' + d.name : ''), actual: eok_(d.kpiKrw), contribPct: halfTotal ? Math.round(d.kpiKrw / halfTotal * 1000) / 10 : null };
@@ -921,6 +955,81 @@ function migrateFromSheets_(user) {
 }
 
 // ============================================================
+// 관리자 모드 기능 — KPI 승인, 운영 연도 전환, 기준 정보, 플랫폼 시작하기
+// ============================================================
+function dbApprove_(ids, approve, user) {
+  return withLock_(function () {
+    var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.deals.sheet);
+    var rows = readTable_('deals'), fxRows = readTable_('fx'), logs = [];
+    var done = 0, skipped = [];
+    (ids || []).forEach(function (id) {
+      var d = rows.filter(function (r) { return r.id === id; })[0];
+      if (!d) { skipped.push(id + ': 없음'); return; }
+      if (approve) {
+        if (!isConfirmedStage_(d.stage)) { skipped.push(id + ': 진행 확정이 아님'); return; }
+        if (typeof d.kpiKrw !== 'number') { skipped.push(id + ': KPI 추산금액 없음(KPI 고정환율 확인)'); return; }
+        if (String(d.kpiHalf).indexOf('미정') === 0) { skipped.push(id + ': KPI 인정 반기 미정(시작일 또는 반기 직접 지정 필요)'); return; }
+        if (d.approvedAt) return;
+        d.approvedBy = user; d.approvedAt = nowStamp_();
+      } else {
+        if (!d.approvedAt) return;
+        d.approvedBy = ''; d.approvedAt = '';
+      }
+      var row = recordToRow_('deals', computeDeal_(d, fxRows));
+      sh.getRange(d._row, 1, 1, row.length).setValues([row]);
+      logs.push({ user: user, table: 'deals', recordId: id, action: approve ? 'KPI 승인' : 'KPI 승인 취소', field: 'KPI 승인',
+        before: approve ? '승인 대기' : '승인', after: approve ? '승인 (' + d.year + ' ' + d.kpiHalf + ' · ' + d.kpiKrw + '원)' : '승인 대기' });
+      done++;
+    });
+    appendLogs_(logs);
+    return { ok: true, done: done, skipped: skipped };
+  });
+}
+
+function setOperatingYear_(year, user) {
+  var y = parseInt(year, 10);
+  if (!(y >= 2000 && y <= 2100)) throw new Error('연도를 확인해 주세요.');
+  var c = JSON.parse(JSON.stringify(cfg_()));
+  var before = c.general.year;
+  c.general.year = y;
+  saveConfig_(sanitizeConfig_(c), user, '운영 연도 전환: ' + before + ' → ' + y);
+  if (dbReady_()) appendLogs_([{ user: user, table: '기준 정보', recordId: '', action: '운영 연도 전환', field: '운영 연도', before: before, after: y }]);
+  return y;
+}
+
+function saveCodes_(codes, user) {
+  var c = JSON.parse(JSON.stringify(cfg_()));
+  var before = JSON.stringify(dbCodes_().stages);
+  c.codes = codes || {};
+  saveConfig_(sanitizeConfig_(c), user, '기준 정보(코드) 변경');
+  if (dbReady_()) {
+    appendLogs_([{ user: user, table: '기준 정보', recordId: '', action: '기준 정보 변경', field: '진행 단계 등', before: before, after: JSON.stringify(dbCodes_().stages) }]);
+    withLock_(function () { recalcDeals_(user); }); // 가중치가 바뀌었을 수 있으므로 다시 계산
+  }
+  return dbCodes_();
+}
+
+function startPlatform_(user) {
+  var report = [];
+  if (!dbReady_()) { var db = createDb_(user); report.push('협업 DB 생성: ' + db.name); }
+  else report.push('협업 DB 이미 있음');
+  try { report = report.concat(migrateFromSheets_(user)); }
+  catch (e) { report.push('기존 시트 가져오기 일부 실패: ' + String(e && e.message || e)); }
+  return report;
+}
+
+function dbYears_() {
+  var set = {};
+  set[cfg_().general.year] = true;
+  if (dbReady_()) {
+    ['deals', 'kpiGoals', 'snapshots', 'agenda', 'trend'].forEach(function (k) {
+      readTable_(k).forEach(function (r) { var y = parseInt(r.year, 10); if (y >= 2000 && y <= 2100) set[y] = true; });
+    });
+  }
+  return Object.keys(set).map(Number).sort(function (a, b) { return b - a; });
+}
+
+// ============================================================
 // 협업 API (Index.html → google.script.run.dbApi)
 // ============================================================
 function dbApi(action, password, user, payloadJson) {
@@ -929,20 +1038,33 @@ function dbApi(action, password, user, payloadJson) {
   var payload = {};
   try { payload = JSON.parse(payloadJson || '{}') || {}; } catch (e) { payload = {}; }
   user = cleanText_(user, 20, '(이름 없음)');
+  // 관리자 모드: 화면이 관리자 비밀번호를 함께 보내면 확인(틀리면 잠금 횟수에 포함)
+  var adminDenied = payload.adminPw ? checkAdminPassword_(payload.adminPw) : { error: 'forbidden' };
+  var isAdmin = !adminDenied;
+  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
+  if (ADMIN_ACTIONS[action] && !isAdmin) {
+    return JSON.stringify(adminDenied.error === 'forbidden' ? { ok: false, error: 'forbidden', message: '관리자 모드에서만 할 수 있습니다.' } : adminDenied);
+  }
   try {
     var res;
     switch (action) {
+      case 'adminCheck': res = { ok: true }; break;
+      case 'approve': res = dbApprove_(payload.ids, payload.approve !== false, user); break;
+      case 'setYear': res = { ok: true, year: setOperatingYear_(payload.year, user) }; break;
+      case 'saveCodes': res = { ok: true, codes: saveCodes_(payload.codes, user) }; break;
+      case 'start': res = { ok: true, report: startPlatform_(user) }; break;
       case 'meta':
-        res = { ok: true, ready: dbReady_(), year: cfg_().general.year, currentWeek: weekKeyOf_(new Date()),
-          tables: DB_TABLE_ORDER.map(function (k) { return { key: k, sheet: DB_TABLES[k].sheet, editable: DB_TABLES[k].editable, cols: DB_TABLES[k].cols }; }),
+        res = { ok: true, ready: dbReady_(), year: cfg_().general.year, operatingYear: cfg_().general.year, years: dbYears_(), isAdmin: isAdmin, currentWeek: weekKeyOf_(new Date()),
+          tables: DB_TABLE_ORDER.map(function (k) { return { key: k, sheet: DB_TABLES[k].sheet, editable: DB_TABLES[k].editable, adminOnly: !!DB_TABLES[k].adminOnly, cols: DB_TABLES[k].cols }; }),
+          stageDefaults: DEFAULT_CODES.stages,
           codes: dbReady_() ? dbCodes_() : null,
           members: dbReady_() ? readTable_('members').filter(function (m) { return m.active !== '중지'; }).map(function (m) { return { name: m.name, role: m.role, part: m.part }; }) : [],
           dbUrl: dbReady_() ? 'https://docs.google.com/spreadsheets/d/' + cfg_().sources.dbSheet + '/edit' : '' };
         break;
       case 'list': res = { ok: true, rows: readTable_(payload.table).map(stripRow_) }; break;
-      case 'save': res = dbSave_(payload.table, payload.record || {}, user, payload.baseUpdatedAt); break;
-      case 'delete': res = dbDelete_(payload.table, payload.id, user); break;
-      case 'restore': res = dbRestore_(payload.logId, user); break;
+      case 'save': res = dbSave_(payload.table, payload.record || {}, user, payload.baseUpdatedAt, isAdmin); break;
+      case 'delete': res = dbDelete_(payload.table, payload.id, user, isAdmin); break;
+      case 'restore': res = dbRestore_(payload.logId, user, isAdmin); break;
       case 'importPreview': res = { ok: true, result: dbImport_(payload.table, payload.rows || [], user, false) }; break;
       case 'importCommit': res = { ok: true, result: dbImport_(payload.table, payload.rows || [], user, true) }; break;
       default: res = { ok: false, error: 'unknown_action' };
