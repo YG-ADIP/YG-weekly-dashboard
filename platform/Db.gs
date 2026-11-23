@@ -41,8 +41,8 @@ var DB_TABLES = {
       { key: 'endDate', label: '계약 종료일', type: 'flexdate' },
       { key: 'endStatus', label: '종료일 상태', type: 'select', codes: 'dateStatus' },
       { key: 'months', label: '계약기간(개월)', type: 'number' },
-      { key: 'cur', label: '계약통화', type: 'select', codes: 'currencies', required: true },
-      { key: 'amount', label: '계약금액', type: 'number', required: true },
+      { key: 'cur', label: '계약통화', type: 'select', codes: 'currencies' }, // 최종 압축(가중치 70%) 이상이면 필수 — cleanRecord_
+      { key: 'amount', label: '계약금액', type: 'number' },
       { key: 'kpiHalfManual', label: 'KPI 인정 반기(직접 지정)', type: 'select', codes: 'halves' },
       { key: 'kpiHalf', label: 'KPI 인정 반기', type: 'auto' },
       { key: 'kpiKrw', label: 'KPI 추산금액(KRW)', type: 'auto' },
@@ -169,7 +169,7 @@ var DEFAULT_CODES = {
   stages: [
     { name: '01 제안 중', weight: 10, desc: '브랜드에 제안서·단가 전달, 회신 대기' },
     { name: '02 협의 중', weight: 30, desc: '브랜드 관심 표명, 금액·범위 등 조건 협의' },
-    { name: '03 최종 압축', weight: 70, desc: '경영진 보고 완료 — 진행 가능성이 높은 프로젝트' },
+    { name: '03 최종 압축', weight: 70, desc: '경영진 승인 완료 — 계약통화·금액을 입력하면 KPI가 자동 계산됩니다' },
     { name: '04 계약 진행 중', weight: 90, desc: '계약서 검토·서명 단계(조건 확정)' },
     { name: '05 진행 확정', weight: 100, desc: '계약 체결·진행 확정 → KPI 실적 인정' },
     { name: '06 진행 불발', weight: 0, desc: '진행 무산 — 불발 사유 입력' },
@@ -209,6 +209,7 @@ function stageInfo_(name) {
   return { name: name, weight: 0 };
 }
 function isConfirmedStage_(name) { return stageInfo_(name).weight >= 100; }
+var MONEY_REQUIRED_WEIGHT = 70; // 이 가중치(최종 압축) 이상 단계부터 계약통화·금액 필수
 
 // KPI 실적 승인제: '진행 확정'이어도 관리자가 승인해야 그 연도 KPI 실적에 집계된다.
 // 승인 뒤 아래 칸이 바뀌면(관리자가 아닌 사람이 고친 경우) 승인이 풀리고 다시 승인 대기가 된다.
@@ -405,6 +406,11 @@ function cleanRecord_(key, input, errors) {
     if (c.required && (rec[c.key] === '' || rec[c.key] === undefined)) errors.push(c.label + ': 필수 입력');
   });
   if (key === 'deals' && rec.stage && stageInfo_(rec.stage).weight === 0 && /불발/.test(rec.stage) && !rec.reason) errors.push('불발·보류 사유: 진행 불발이면 사유를 입력해 주세요');
+  // 최종 압축(경영진 승인 완료) 이후 단계는 KPI 자동 계산을 위해 통화·금액 필수
+  if (key === 'deals' && rec.stage && stageInfo_(rec.stage).weight >= MONEY_REQUIRED_WEIGHT) {
+    if (!rec.cur) errors.push('계약통화: ' + rec.stage + ' 단계부터는 필수입니다(KPI 자동 계산)');
+    if (rec.amount === '' || rec.amount === undefined) errors.push('계약금액: ' + rec.stage + ' 단계부터는 필수입니다(KPI 자동 계산)');
+  }
   return rec;
 }
 
@@ -641,7 +647,7 @@ function dbImport_(key, rawRows, user, commit) {
         var c = byFp[dealFingerprint_(rec)];
         if (c && c.length === 1) match = c[0];
         // 시작일이 없는 엑셀(예: BIS 진행현황)은 브랜드+아티스트 그룹+계약구분이 하나로 특정될 때만 같은 사업으로 봄
-        else if (!rec.startDate) { var c2 = byFp2[dealFingerprint2_(rec)]; if (c2 && c2.length === 1) match = c2[0]; }
+        else { var c2 = byFp2[dealFingerprint2_(rec)]; if (c2 && c2.length === 1 && (!rec.startDate || !c2[0].startDate)) match = c2[0]; }
       }
       var status = errors.length ? 'error' : match ? 'update' : 'new';
       var changes = [];
@@ -909,6 +915,161 @@ function getInsightDataDb_() {
 // ============================================================
 // 기존 시트 데이터 이관 (관리자 설정 → [기존 데이터 가져오기]) — 여러 번 눌러도 중복되지 않음
 // ============================================================
+// ---- 기존 시트의 사업 데이터 → 사업 원장 ----
+// ① 실적현황 최신 주차 '실적 인정 사업 리스트'(금액·반기 있음) ② 사업캘린더(main) 계약 목록 ③ 05_검토 Tracker 지난 계약.
+// 같은 사업(브랜드 + 아티스트 그룹)이 이미 있으면 새로 만들지 않고 비어 있는 계약 시작·종료일만 채운다.
+// 실적 인정 리스트 건도 KPI 중복 집계를 막기 위해 '승인 대기'로 들어간다(관리자가 확인 후 승인).
+var OTHER_ARTISTS = ['BLACKPINK', 'YG', 'AKMU', '2NE1', 'BIGBANG', 'JENNIE', 'LISA', 'ROSÉ', 'JISOO'];
+var GROUP_KO = { '트레저': 'TREASURE', '베이비몬스터': 'BABYMONSTER', '위너': 'WINNER', '빅뱅': 'BIGBANG', 'TR': 'TREASURE', 'BM': 'BABYMONSTER', 'WN': 'WINNER', 'BB': 'BIGBANG' };
+function groupOf_(text) {
+  var t = String(text || '').trim();
+  if (GROUP_KO[t]) return GROUP_KO[t];
+  var up = t.toUpperCase();
+  var hit = dbCodes_().groups.filter(function (g) { return g !== '기타' && up.indexOf(g.toUpperCase()) >= 0; })[0];
+  return hit || '';
+}
+function brandKey_(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9가-힣]/g, ''); }
+function sameBrand_(a, b) {
+  var x = brandKey_(a), y = brandKey_(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  var short = x.length < y.length ? x : y, long = x.length < y.length ? y : x;
+  if (short.length >= 2 && long.indexOf(short) === 0) return true;
+  if (short.length >= 3 && long.indexOf(short) >= 0) return true; // '가르니에' ⊂ '로레알 가르니에'
+  var i = 0; while (i < short.length && x[i] === y[i]) i++;
+  return i >= 3; // 'ZUS Coffee' ↔ 'ZUS 커피'처럼 앞 3글자 이상 같으면 같은 브랜드로 봄(그룹도 같아야 함)
+}
+function findDeal_(deals, brand, group) {
+  return deals.filter(function (d) { return sameBrand_(d.brand, brand) && (!group || !d.group || d.group === group || d.group === '기타'); });
+}
+
+function migrateDeals_(user, ss) {
+  var report = [];
+  var deals = readTable_('deals');
+  // 다시 실행해도 중복으로 쌓이지 않도록: 이미 시트에서 옮긴 사업이 있으면 건너뜀
+  if (deals.some(function (d) { return /^시트 이관/.test(String(d.source || '')); })) return ['사업 원장 ← 기존 시트: 이미 옮겨 왔음(건너뜀)'];
+  var fxRows = readTable_('fx');
+  var toAdd = [], toUpdate = {};
+  var year = cfg_().general.year;
+  var seq = deals.slice();
+  var addDeal = function (d) {
+    d.year = d.year || year; d.id = nextId_('deals', d, seq);
+    d.updatedBy = '시트 이관'; d.updatedAt = nowStamp_(); d.stageDate = '';
+    computeDeal_(d, fxRows);
+    seq.push(d); toAdd.push(d); deals.push(d);
+  };
+  var fillDates = function (d, start, end, months) {
+    var changed = false;
+    if (start && !d.startDate) { d.startDate = start; d.startStatus = ''; changed = true; }
+    if (end && !d.endDate) { d.endDate = end; d.endStatus = ''; changed = true; }
+    if (months !== '' && months !== undefined && (d.months === '' || d.months === undefined)) { d.months = months; changed = true; }
+    if (changed) { computeDeal_(d, fxRows); if (d._row) toUpdate[d._row] = d; }
+    return changed;
+  };
+  var confirmed = stageNameByWeight_(100);
+
+  // ① 실적 인정 사업 리스트(최신 주차)
+  var perfAdded = 0, perfMatched = 0;
+  var preExisting = deals.slice(), claimed = {}; // 이관 전부터 있던 사업(BIS 업로드 등)과만 같은 건 판단
+  try {
+    var kss = SpreadsheetApp.openById(cfg_().sources.kpiFile);
+    var latest = null, lo = -1;
+    kss.getSheets().forEach(function (sh) { var mw = monthWeekFromSheetName_(sh.getName()); if (mw && weekOrder_(mw.monthAbbr, mw.weekNum) > lo) { lo = weekOrder_(mw.monthAbbr, mw.weekNum); latest = sh; } });
+    var rows = latest ? latest.getDataRange().getValues() : [];
+    var h = -1, ci = {};
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i].map(function (c) { return String(c).trim(); });
+      var a = r.indexOf('아티스트'), n = -1;
+      r.forEach(function (c, j) { if (/사업명/.test(c)) n = j; });
+      if (a >= 0 && n >= 0) { h = i; ci = { half: a - 1, artist: a, part: a + 1, brand: r.indexOf('브랜드/파트너사명'), name: n }; r.forEach(function (c, j) { if (/신규\s*계약금/.test(c) && ci.amount === undefined) ci.amount = j; }); break; }
+    }
+    for (var k = h + 1; h >= 0 && k < rows.length; k++) {
+      var row = rows[k];
+      var name = String(row[ci.name] || '').trim(), amount = numOrBlank_(row[ci.amount]);
+      if (!name || amount === '' || amount === null) continue;
+      var half = String(row[ci.half] || '').trim();
+      var group = groupOf_(row[ci.artist]) || '기타';
+      var part = String(row[ci.part] || '').trim() === 'IP' ? 'IP' : '광고';
+      var m = name.match(/^\[(.+?)\]\s*(.+)$/);
+      var kind = m ? m[1] : '';
+      var rest = (m ? m[2] : name).replace(/\(.*?\)/g, '').trim();
+      // '[광고] ZUS Coffee_TR 현하요' → ZUS Coffee, '[광고] 키노 화보 6월' → 키노. 괄호 없는 예전 형식은 사업명 전체를 두고 확인 필요 표시
+      var brand = String(row[ci.brand] || '').trim() || (m ? (rest.indexOf('_') >= 0 ? rest.split('_')[0].trim() : rest.split(/\s+/)[0]) : rest);
+      var ckMap = { '광고': '광고', '화보': '화보', 'PPL': 'SNS 시딩', '행사': '행사', 'SNS': 'SNS 시딩' };
+      var ckind = ckMap[kind] || (part === 'IP' ? (/MG/.test(name) ? 'MG' : /로열티/.test(name) ? '로열티' : /전시/.test(name) ? '전시' : '라이선스')
+        : /로열티/.test(name) ? '로열티' : /화보/.test(name) ? '화보' : /행사|출연료/.test(name) ? '행사' : /SNS|PPL/.test(name) ? 'SNS 시딩' : '광고');
+      var cands = m
+        ? preExisting.filter(function (d) { return !claimed[d.id] && d.ckind === ckind && sameBrand_(d.brand, brand) && (!d.group || d.group === group); })
+        : preExisting.filter(function (d) { var bk = brandKey_(d.brand); return !claimed[d.id] && d.ckind === ckind && d.group === group && bk.length >= 2 && brandKey_(name).indexOf(bk) >= 0; });
+      if (cands.length === 1) { claimed[cands[0].id] = true; perfMatched++; continue; }
+      addDeal({ part: part, group: group, artist: String(row[ci.artist] || '').trim() || group, brand: brand, name: name, ctype: '신규계약', ckind: ckind,
+        stage: confirmed, cur: 'KRW', amount: amount, kpiHalfManual: half === '상반기' || half === '하반기' ? half : '',
+        source: '시트 이관(실적 인정 리스트 ' + (latest ? latest.getName() : '') + ')', note: m ? '' : '시트 이관 — 브랜드·사업명 확인 필요' });
+      perfAdded++;
+    }
+  } catch (e) { report.push('실적 인정 리스트: 읽지 못함 — ' + String(e && e.message || e)); }
+  report.push('사업 원장 ← 실적 인정 리스트: ' + perfAdded + '건 추가 · ' + perfMatched + '건은 이미 있음');
+
+  // ②·③ 사업캘린더(main) · 05_검토 Tracker 계약 목록
+  var calAdded = 0, calFilled = 0, calMatched = 0, calAmbiguous = 0;
+  try {
+    var bss = SpreadsheetApp.openById(cfg_().sources.bizCalSheet);
+    // 'GROUP - 브랜드'로 그룹이 적힌 시트(검토 Tracker)를 먼저 처리해야 그룹 없는 목록이 그 결과를 기준으로 맞춰짐
+    var sheetsOrdered = bss.getSheets().slice().sort(function (a, b) { return (/Tracker/i.test(b.getName()) ? 1 : 0) - (/Tracker/i.test(a.getName()) ? 1 : 0); });
+    sheetsOrdered.forEach(function (sh) {
+      var values = sh.getDataRange().getValues();
+      var hi = -1, col = {};
+      for (var i = 0; i < Math.min(values.length, 10); i++) {
+        var r = values[i].map(function (c) { return String(c).trim(); });
+        if (r.indexOf('프로젝트') >= 0 && r.indexOf('계약 시작일') >= 0 && r.indexOf('계약 종료일') >= 0) {
+          hi = i; col = { project: r.indexOf('프로젝트'), part: r.indexOf('구분'), start: r.indexOf('계약 시작일'), end: r.indexOf('계약 종료일'), months: r.indexOf('계약기간(개월)'), type: r.indexOf('사업 유형') };
+          break;
+        }
+      }
+      if (hi < 0) return;
+      for (var k = hi + 1; k < values.length; k++) {
+        var row = values[k];
+        var project = String(row[col.project] || '').trim();
+        if (!project || project === '프로젝트' || /^[▼▲※]/.test(project)) continue;
+        var parts = project.split(/\s+-\s+/);
+        var g0 = groupOf_(parts[0]) || (parts[1] && OTHER_ARTISTS.indexOf(parts[0].trim().toUpperCase()) >= 0 ? '기타' : '');
+        var group = g0 || (parts[1] ? groupOf_(parts[1]) : '') || '';
+        var brand = g0 && parts[1] ? parts[1] : parts[0];
+        var artist = g0 ? (g0 === '기타' ? parts[0].trim() : g0) : (parts[1] || '');
+        var start = normFlexDate_(row[col.start]) || '', end = normFlexDate_(row[col.end]) || '';
+        var months = col.months >= 0 ? numOrBlank_(row[col.months]) : '';
+        var hit = findDeal_(deals, brand, group);
+        if (hit.length && !group) {
+          var groups = {};
+          hit.forEach(function (d) { groups[d.group] = true; });
+          if (Object.keys(groups).length > 1) { calAmbiguous++; continue; } // 어느 그룹 계약인지 모름 → 건드리지 않음
+        }
+        if (hit.length) {
+          var any = false;
+          hit.forEach(function (d) { if (fillDates(d, start, end, months === null ? '' : months)) any = true; });
+          if (any) calFilled++; else calMatched++;
+          continue;
+        }
+        var sy = flexMonth_(start);
+        addDeal({ part: String(row[col.part] || '').trim() === 'IP' ? 'IP' : '광고', year: sy ? sy.y : year, group: group || '기타', artist: artist || group || '-', brand: brand,
+          name: col.type >= 0 ? String(row[col.type] || '').trim() : '', ctype: '신규계약', ckind: String(row[col.part] || '').trim() === 'IP' ? '라이선스' : '광고',
+          stage: confirmed, cur: '', amount: '', startDate: start, endDate: end, months: months === null ? '' : months,
+          source: '시트 이관(' + sh.getName() + ')', note: '' });
+        calAdded++;
+      }
+    });
+  } catch (e) { report.push('사업 캘린더 시트: 읽지 못함 — ' + String(e && e.message || e)); }
+  report.push('사업 원장 ← 사업 캘린더 시트: ' + calAdded + '건 추가 · ' + calFilled + '건 계약일 보강 · ' + calMatched + '건은 이미 있음' + (calAmbiguous ? ' · ' + calAmbiguous + '건은 그룹 불명확으로 건너뜀' : ''));
+
+  var sh2 = ss.getSheetByName(DB_TABLES.deals.sheet);
+  Object.keys(toUpdate).forEach(function (r) { var row = recordToRow_('deals', toUpdate[r]); sh2.getRange(Number(r), 1, 1, row.length).setValues([row]); });
+  if (toAdd.length) {
+    var out = toAdd.map(function (d) { return recordToRow_('deals', d); });
+    sh2.getRange(sh2.getLastRow() + 1, 1, out.length, out[0].length).setValues(out);
+  }
+  return report;
+}
+
 function migrateFromSheets_(user) {
   var year = cfg_().general.year, report = [];
   return withLock_(function () {
@@ -951,6 +1112,8 @@ function migrateFromSheets_(user) {
       });
       return out;
     });
+    // 1-2) 사업 원장: 실적 인정 리스트·사업 캘린더 계약 목록
+    report = report.concat(migrateDeals_(user, ss));
     // 2) KPI 주차 기록·목표: 기존 실적현황 시트의 주차별 KPI 표
     var kpi = getByWeekFromFile_(cfg_().sources.kpiFile, extractKpiStatusFromSheet_).byWeek;
     var snaps = readTable_('snapshots'), haveSnap = {};
