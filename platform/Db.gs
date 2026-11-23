@@ -58,6 +58,9 @@ var DB_TABLES = {
       { key: 'source', label: '데이터 출처', type: 'auto' },
       { key: 'updatedBy', label: '최종 수정자', type: 'auto' },
       { key: 'updatedAt', label: '최종 수정일시', type: 'auto' },
+      // 2026-11 추가(관리자 전용): 실적 인정 기준 — 'KPI 고정환율'(기본, 계약금액×고정환율) 또는 '실입금액'
+      { key: 'kpiBasis', label: '실적 인정 기준', type: 'select', codes: 'kpiBases', adminOnly: true },
+      { key: 'kpiCounted', label: '실적 인정금액(KRW)', type: 'auto' },
     ],
   },
   kpiGoals: {
@@ -186,7 +189,11 @@ var FIXED_CODES = {
   dateStatus: ['확정', '예정', '미정'], halves: ['상반기', '하반기'],
   agendaKinds: ['WIN', 'SHARE', 'CHALLENGE'], trendKinds: ['내부', '외부'],
   roles: ['팀원', '관리자'], activeFlags: ['사용', '중지'],
+  kpiBases: ['KPI 고정환율', '실입금액'],
 };
+// 이 사업의 실적 인정금액: 기준이 '실입금액'이면 실입금액, 아니면 KPI 추산금액(계약금액×KPI 고정환율)
+function basisOf_(d) { return d.kpiBasis === '실입금액' ? '실입금액' : 'KPI 고정환율'; }
+function countedKrw_(d) { var v = basisOf_(d) === '실입금액' ? d.paidKrw : d.kpiKrw; return typeof v === 'number' ? v : ''; }
 
 function dbCodes_() {
   var c = cfg_().codes || {};
@@ -283,6 +290,7 @@ function cellToValue_(col, v) {
 function readTable_(key) {
   var t = DB_TABLES[key];
   var sh = dbSpreadsheet_().getSheetByName(t.sheet) || ensureTable_(dbSpreadsheet_(), key);
+  if (sh.getLastColumn() < t.cols.length) ensureTable_(dbSpreadsheet_(), key); // 새로 추가된 열의 머리글
   var last = sh.getLastRow();
   if (last < 2) return [];
   var values = sh.getRange(2, 1, last - 1, t.cols.length).getValues();
@@ -376,6 +384,7 @@ function computeDeal_(rec, fxRows) {
   }
   if (!rec.startStatus) rec.startStatus = rec.startDate ? (/^\d{4}-\d{2}-\d{2}$/.test(rec.startDate) ? '확정' : '예정') : '미정';
   if (!rec.endStatus) rec.endStatus = rec.endDate ? (/^\d{4}-\d{2}-\d{2}$/.test(rec.endDate) ? '확정' : '예정') : '미정';
+  rec.kpiCounted = countedKrw_(rec);
   if (info.weight >= 100) rec.approval = rec.approvedAt ? '승인' : '승인 대기';
   else { rec.approval = ''; rec.approvedBy = ''; rec.approvedAt = ''; }
   return rec;
@@ -455,6 +464,7 @@ function dbSave_(key, input, user, baseUpdatedAt, isAdmin) {
     var approvalLog = null;
     if (key === 'deals') {
       rec.source = existing ? existing.source : (input.source || '화면 입력');
+      if (!isAdmin) rec.kpiBasis = existing ? (existing.kpiBasis || '') : ''; // 실적 인정 기준은 관리자만
       rec.stageDate = existing && existing.stage === rec.stage ? existing.stageDate : nowStamp_().slice(0, 10);
       if (existing && existing.approvedAt) {
         if (!isAdmin && kpiFieldsChanged_(existing, rec)) {
@@ -729,10 +739,10 @@ function kpiStatusFromDeals_(year, deals, goals) {
   var sum = function (part, half) {
     var t = 0;
     deals.forEach(function (d) {
-      if (Number(d.year) !== year || !isConfirmedStage_(d.stage) || !isApproved_(d) || typeof d.kpiKrw !== 'number') return;
+      if (Number(d.year) !== year || !isConfirmedStage_(d.stage) || !isApproved_(d) || countedKrw_(d) === '') return;
       if (part !== '전체' && d.part !== part) return;
       if (half && d.kpiHalf !== half) return;
-      t += d.kpiKrw;
+      t += countedKrw_(d);
     });
     return eok_(t);
   };
@@ -890,7 +900,8 @@ function getBusinessCalendarDataDb_() {
 // 인사이트: 그 주에 확정된 사업(확정일 또는 단계 변경일 기준) + 현재 반기 KPI 기여 상위 5건
 function getInsightDataDb_() {
   var year = cfg_().general.year;
-  var deals = readTable_('deals').filter(function (d) { return Number(d.year) === year && isConfirmedStage_(d.stage) && isApproved_(d) && typeof d.kpiKrw === 'number'; });
+  var deals = readTable_('deals').filter(function (d) { return Number(d.year) === year && isConfirmedStage_(d.stage) && isApproved_(d) && countedKrw_(d) !== ''; })
+    .map(function (d) { var o = stripRow_(d); o.kpiKrw = countedKrw_(d); return o; }); // 인사이트도 실적 인정금액 기준
   var weekKeys = {};
   Object.keys(getKpiDataDb_().byWeek).forEach(function (k) { weekKeys[k] = true; });
   var half = new Date().getMonth() < 6 ? '상반기' : '하반기';
@@ -1170,7 +1181,8 @@ function dbApprove_(ids, approve, user) {
       if (!d) { skipped.push(id + ': 없음'); return; }
       if (approve) {
         if (!isConfirmedStage_(d.stage)) { skipped.push(id + ': 진행 확정이 아님'); return; }
-        if (typeof d.kpiKrw !== 'number') { skipped.push(id + ': KPI 추산금액 없음(KPI 고정환율 확인)'); return; }
+        if (basisOf_(d) === '실입금액' && typeof d.paidKrw !== 'number') { skipped.push(id + ': 실입금액 기준인데 실입금액이 비어 있음'); return; }
+        if (basisOf_(d) !== '실입금액' && typeof d.kpiKrw !== 'number') { skipped.push(id + ': KPI 추산금액 없음(KPI 고정환율 확인)'); return; }
         if (String(d.kpiHalf).indexOf('미정') === 0) { skipped.push(id + ': KPI 인정 반기 미정(시작일 또는 반기 직접 지정 필요)'); return; }
         if (d.approvedAt) return;
         d.approvedBy = user; d.approvedAt = nowStamp_();
@@ -1180,12 +1192,65 @@ function dbApprove_(ids, approve, user) {
       }
       var row = recordToRow_('deals', computeDeal_(d, fxRows));
       sh.getRange(d._row, 1, 1, row.length).setValues([row]);
-      logs.push({ user: user, table: 'deals', recordId: id, action: approve ? 'KPI 승인' : 'KPI 승인 취소', field: 'KPI 승인',
-        before: approve ? '승인 대기' : '승인', after: approve ? '승인 (' + d.year + ' ' + d.kpiHalf + ' · ' + d.kpiKrw + '원)' : '승인 대기' });
+      logs.push({ user: user, table: 'deals', recordId: id, action: approve ? '실적 반영 ON' : '실적 반영 OFF', field: 'KPI 승인',
+        before: approve ? '승인 대기' : '승인', after: approve ? '승인 (' + d.year + ' ' + d.kpiHalf + ' · ' + basisOf_(d) + ' 기준 ' + countedKrw_(d) + '원)' : '승인 대기' });
       done++;
     });
     appendLogs_(logs);
     return { ok: true, done: done, skipped: skipped };
+  });
+}
+
+function dbSetBasis_(ids, basis, user) {
+  if (basis !== '실입금액' && basis !== 'KPI 고정환율') throw new Error('실적 인정 기준을 확인해 주세요.');
+  return withLock_(function () {
+    var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.deals.sheet);
+    var rows = readTable_('deals'), fxRows = readTable_('fx'), logs = [], done = 0;
+    (ids || []).forEach(function (id) {
+      var d = rows.filter(function (r) { return r.id === id; })[0];
+      if (!d || basisOf_(d) === basis) return;
+      var before = basisOf_(d);
+      d.kpiBasis = basis;
+      var row = recordToRow_('deals', computeDeal_(d, fxRows));
+      sh.getRange(d._row, 1, 1, row.length).setValues([row]);
+      logs.push({ user: user, table: 'deals', recordId: id, action: '실적 인정 기준 변경', field: '실적 인정 기준', before: before, after: basis });
+      done++;
+    });
+    appendLogs_(logs);
+    return { ok: true, done: done, rows: rows.filter(function (r) { return (ids || []).indexOf(r.id) >= 0; }).map(stripRow_) };
+  });
+}
+
+// KPI 고정환율 한 번에 저장(관리자 모드): rates = [{cur, unit, rate}] — 비운 환율은 삭제하지 않고 건너뜀
+function dbSaveFx_(year, rates, user) {
+  var y = parseInt(year, 10);
+  if (!(y >= 2000 && y <= 2100)) throw new Error('연도를 확인해 주세요.');
+  var curNames = dbCodes_().currencies.map(function (x) { return typeof x === 'string' ? x : x.name; });
+  return withLock_(function () {
+    var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.fx.sheet) || ensureTable_(dbSpreadsheet_(), 'fx');
+    var rows = readTable_('fx'), logs = [], errors = [], changed = 0;
+    (rates || []).forEach(function (r) {
+      var cur = String(r.cur || '').trim();
+      if (!cur || cur === 'KRW') return;
+      if (curNames.indexOf(cur) < 0) { errors.push(cur + ': 통화 목록에 없음'); return; }
+      var rate = numOrBlank_(r.rate), unit = numOrBlank_(r.unit);
+      if (rate === '' ) return;
+      if (rate === null || rate <= 0) { errors.push(cur + ': 환율은 0보다 큰 숫자'); return; }
+      if (unit === null || unit === '' || unit <= 0) unit = 1;
+      var ex = rows.filter(function (x) { return Number(x.year) === y && x.cur === cur; })[0];
+      if (ex && Number(ex.rate) === rate && Number(ex.unit || 1) === unit) return;
+      var rec = ex ? ex : { id: nextId_('fx', {}, rows), year: y, cur: cur, note: '' };
+      var before = ex ? summaryOf_('fx', ex) : '';
+      rec.unit = unit; rec.rate = rate; rec.updatedBy = user; rec.updatedAt = nowStamp_();
+      var row = recordToRow_('fx', rec);
+      if (ex) sh.getRange(ex._row, 1, 1, row.length).setValues([row]);
+      else { sh.getRange(sh.getLastRow() + 1, 1, 1, row.length).setValues([row]); rows.push(rec); }
+      logs.push({ user: user, table: 'fx', recordId: rec.id, action: ex ? '수정' : '추가', field: 'KPI 고정환율', before: before, after: summaryOf_('fx', rec) });
+      changed++;
+    });
+    appendLogs_(logs);
+    var recalced = changed ? recalcDeals_(user) : 0;
+    return { ok: errors.length === 0 || changed > 0, changed: changed, errors: errors, recalced: recalced };
   });
 }
 
@@ -1244,7 +1309,7 @@ function dbApi(action, password, user, payloadJson) {
   // 관리자 모드: 화면이 관리자 비밀번호를 함께 보내면 확인(틀리면 잠금 횟수에 포함)
   var adminDenied = payload.adminPw ? checkAdminPassword_(payload.adminPw) : { error: 'forbidden' };
   var isAdmin = !adminDenied;
-  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
+  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
   if (ADMIN_ACTIONS[action] && !isAdmin) {
     return JSON.stringify(adminDenied.error === 'forbidden' ? { ok: false, error: 'forbidden', message: '관리자 모드에서만 할 수 있습니다.' } : adminDenied);
   }
@@ -1253,6 +1318,8 @@ function dbApi(action, password, user, payloadJson) {
     switch (action) {
       case 'adminCheck': res = { ok: true }; break;
       case 'approve': res = dbApprove_(payload.ids, payload.approve !== false, user); break;
+      case 'setBasis': res = dbSetBasis_(payload.ids, payload.basis, user); break;
+      case 'saveFx': res = dbSaveFx_(payload.year, payload.rates, user); break;
       case 'setYear': res = { ok: true, year: setOperatingYear_(payload.year, user) }; break;
       case 'saveCodes': res = { ok: true, codes: saveCodes_(payload.codes, user) }; break;
       case 'start': res = { ok: true, report: startPlatform_(user) }; break;

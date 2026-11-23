@@ -583,6 +583,109 @@
   .kpi-pipe2 { margin-top: 16px; padding: 10px 14px; border: 1px solid rgba(255,255,255,0.22); font-size: 12px; color: #b9b9bc; display: flex; flex-wrap: wrap; gap: 6px 18px; }
   .kpi-pipe2 b { color: #ffffff; font-size: 14px; }
   @media (max-width: 560px) { .app-tab2 { padding: 8px 9px; font-size: 12px; } .data-search2 { width: 100%; } }
+
+  /* ============================================================
+     2026-11 디자인 폴리싱 — 레이아웃·기능은 그대로, 톤만 정리
+     (밝은 회청색 바탕 · 흰 카드 라운드 + 옅은 그림자 · 선명한 블루 포인트 · 알약형 탭/배지)
+     ============================================================ */
+  :root {
+    --accent: #2f6bff; --accent-700: #1f54d6; --accent-900: #173f9e; --accent-300: #a9c1ff; --accent-tint: #eef3ff;
+    --canvas: #f4f6fa; --card-radius: 16px; --ctl-radius: 10px;
+    --shadow-card: 0 1px 2px rgba(20,32,66,0.04), 0 6px 20px rgba(20,32,66,0.06);
+    --hairline: rgba(20,32,66,0.10); --header-strip: #f3f5f9;
+  }
+  body { background: var(--canvas); }
+  ::selection { background: #d5e2ff; }
+  .blueprint { border: 1px solid rgba(20,32,66,0.06); border-radius: var(--card-radius); background: #fff; box-shadow: var(--shadow-card); }
+  .blueprint > .corner { display: none; }
+  .dashsec { padding: 22px 24px 24px; }
+  .dashsec.dark-section { background: #15171c; border-color: #15171c; }
+  .dashsec-head { border-bottom-color: var(--hairline); }
+  .dashsec-head h2 { font-size: 21px; letter-spacing: -0.01em; }
+  .dash-header2 { border-bottom: none; margin-bottom: 18px; }
+  .insight-bar2 { border: none; border-left: 4px solid var(--accent); border-radius: 14px; background: #fff; box-shadow: var(--shadow-card); }
+
+  /* 탭 · 상단 칩 */
+  .app-tabs2 { gap: 6px; border-bottom: none; background: #fff; padding: 6px; border-radius: 14px; box-shadow: var(--shadow-card); margin: -4px 0 22px; }
+  .app-tab2 { border-bottom: none; border-radius: 10px; padding: 8px 14px; color: #6b7280; transition: background .15s, color .15s; }
+  .app-tab2:hover { background: #f3f6fb; color: var(--ink); }
+  .app-tab2.active2 { background: var(--accent-tint); color: var(--accent-700); }
+  .year-select2, .week-select2 { border-radius: var(--ctl-radius); border-color: var(--hairline); }
+  .admin-chip2, .user-chip2 { border-radius: 999px; }
+  .user-chip2 { background: var(--accent-tint); border-color: transparent; color: var(--accent-700); }
+
+  /* 버튼 */
+  .btn-primary2, .btn-line2, .btn-danger2, .btn-approve2, .btn-outline-toggle2,
+  .insight-edit-toggle2, .insight-confirm-btn2, .insight-save-btn2 { border-radius: var(--ctl-radius); transition: background .15s, box-shadow .15s; }
+  .btn-primary2 { box-shadow: 0 4px 12px rgba(47,107,255,0.22); }
+  .btn-line2 { border-color: rgba(47,107,255,0.35); background: #fff; }
+  .btn-line2:hover { background: var(--accent-tint); }
+  .btn-approve2 { border-radius: var(--ctl-radius); }
+
+  /* 입력 칸 */
+  .data-search2, .data-filter2, .form-field2 input, .form-field2 select, .form-field2 textarea, .basis-select2 { border-radius: var(--ctl-radius); border-color: rgba(20,32,66,0.16); }
+  .form-field2 input:focus, .form-field2 select:focus, .form-field2 textarea:focus, .data-search2:focus, .data-filter2:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(47,107,255,0.15); outline: none; }
+  .seg2 { border-radius: var(--ctl-radius); overflow: hidden; border-color: rgba(20,32,66,0.16); }
+  .form-auto2, .deal-auto2 { border-radius: var(--ctl-radius); }
+
+  /* 표 */
+  .data-table-wrap2 { border-radius: 12px; border: 1px solid var(--hairline); overflow: auto; }
+  .data-table2 th { background: #f7f9fc; color: #6b7280; font-weight: 600; padding: 10px 10px; border-bottom: 1px solid var(--hairline); }
+  .data-table2 td { padding: 10px 10px; border-bottom: 1px solid #f0f2f6; }
+  .data-table2 tr:last-child td { border-bottom: none; }
+  .data-table2 tr.clickable2:hover td { background: #f5f8ff; }
+
+  /* 배지 · 칩 */
+  .stage-chip2 { border-radius: 999px; padding: 4px 12px; border-color: var(--hairline); }
+  .stage-chip2.on2 { background: var(--accent-tint); border-color: var(--accent); color: var(--accent-700); }
+  .todo-chip2 { border-radius: 999px; padding: 2px 9px; }
+  .import-pill2 { border-radius: 999px; }
+
+  /* 모달 · 양식 */
+  .modal-box2 { border: none; border-radius: 18px; overflow: hidden; box-shadow: 0 24px 60px rgba(20,32,66,0.28); }
+  .modal-head2 { border-bottom-color: var(--hairline); }
+  .form-sec2 { background: #fafbfd; border: 1px solid #eef1f6; border-radius: 14px; padding: 12px 14px 14px; }
+  .form-sec2 + .form-sec2, .todo-box2 + .form-sec2, .form-sec2 + .form-more2 { margin-top: 12px; }
+  .form-sec2 .form-group-title2, .form-sec2 + .form-sec2 .form-group-title2, .todo-box2 + .form-sec2 .form-group-title2 { margin-top: 0; }
+  .admin-sec2 { background: #f3f6ff; border-color: #dfe7ff; }
+  .todo-box2 { border-radius: 12px; border-left-width: 4px; }
+  .form-more2 { border-top: none; background: #fafbfd; border: 1px solid #eef1f6; border-radius: 14px; padding: 10px 14px; }
+  .form-more2 summary { margin-bottom: 0; }
+  .form-more2[open] summary { margin-bottom: 10px; }
+  .start-box2 { border-radius: 14px; }
+
+  /* 실적 반영 토글 · 기준 선택 */
+  .count-cell2 { min-width: 170px; }
+  .count-ctl2 { display: flex; align-items: center; gap: 6px; }
+  .switch2 { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px 0 30px; border-radius: 999px; border: none; background: #e3e7ee; color: #6b7280; font: inherit; font-size: 10.5px; font-weight: 700; cursor: pointer; transition: background .18s; }
+  .switch2 .knob2 { position: absolute; left: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.25); transition: left .18s; }
+  .switch2.on2 { background: var(--accent); color: #fff; padding: 0 30px 0 10px; }
+  .switch2.on2 .knob2 { left: calc(100% - 21px); }
+  .switch2:disabled { opacity: .6; cursor: wait; }
+  .basis-select2 { font: inherit; font-size: 11px; padding: 3px 6px; border: 1px solid rgba(20,32,66,0.16); background: #fff; color: var(--ink); }
+  .count-badge2 { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: #e3e7ee; color: #6b7280; }
+  .count-badge2.on2 { background: var(--accent-tint); color: var(--accent-700); }
+  .count-basis2 { font-size: 11px; color: var(--soft); }
+  .count-amt2 { font-size: 10.5px; color: var(--faint); margin-top: 3px; }
+
+  /* KPI 고정환율 입력판 */
+  .fx-panel2 { background: #fafbfd; border: 1px solid #eef1f6; border-radius: 14px; padding: 14px 16px; margin-bottom: 18px; }
+  .fx-head2 { display: flex; align-items: center; gap: 10px; }
+  .fx-head2 .data-table-title2 { margin: 0; }
+  .fx-panel2 > .data-desc2 { margin: 8px 0 0; }
+  .data-table2 td.long2 { min-width: 180px; max-width: 320px; }
+  .fx-grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 10px 0 12px; }
+  .fx-card2 { background: #fff; border: 1px solid #e8ecf3; border-radius: 12px; padding: 10px 12px; }
+  .fx-card2.miss2 { border-color: #f1c88a; background: #fffaf0; }
+  .fx-cur2 { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+  .fx-row2 { display: flex; align-items: center; gap: 6px; }
+  .fx-row2 input { font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid rgba(20,32,66,0.16); border-radius: 8px; min-width: 0; }
+  .fx-row2 .fx-unit2 { width: 56px; text-align: right; }
+  .fx-row2 .fx-rate2 { flex: 1; text-align: right; }
+  .fx-row2 input:disabled { background: #f5f6f8; color: var(--soft); }
+  .fx-eq2 { font-size: 11px; color: var(--soft); white-space: nowrap; }
+  .fx-meta2 { font-size: 10.5px; color: var(--faint); margin-top: 6px; min-height: 14px; }
+  .fx-card2.miss2 .fx-meta2 { color: #8a6420; font-weight: 600; }
 </style>
 </head>
 <body class="locked">
@@ -1270,8 +1373,8 @@
         const box = el("div", "kpi-pipe2");
         const forecast = annual.actual + pipe.weighted;
         const add = (label, value) => { const sp = el("span", null); sp.appendChild(document.createTextNode(label + " ")); sp.appendChild(elText("b", null, value)); box.appendChild(sp); };
-        add("승인 실적", `${pipe.confirmedCount}건`);
-        if (pipe.pendingCount) add("KPI 승인 대기", `${pipe.pendingCount}건 · ${fmtAmt(pipe.pending)}억`);
+        add("실적 반영", `${pipe.confirmedCount}건`);
+        if (pipe.pendingCount) add("실적 반영 대기", `${pipe.pendingCount}건 · ${fmtAmt(pipe.pending)}억`);
         add("진행 중 파이프라인", `${pipe.activeCount}건 · ${fmtAmt(pipe.active)}억`);
         add("가중 예상", `${fmtAmt(pipe.weighted)}억`);
         add("연간 전망(확정+가중)", `${fmtAmt(forecast)}억` + (annual.goal ? ` · 목표 대비 ${fmtAch(forecast / annual.goal * 100)}%` : ""));
@@ -2600,7 +2703,7 @@
   // 탭별 수정 권한: KPI 목표·환율·팀원은 관리자 모드에서만
   function canEdit(table) { const d = tableDef(table); return d.editable && (!d.adminOnly || isAdminMode()); }
   const DATA_VIEWS = [
-    { key: "deals", title: "사업 원장", tables: ["deals"], desc: "광고·IP 사업을 제안부터 확정·불발까지 한 줄로 관리합니다. '진행 확정' 건은 관리자가 KPI 승인을 해야 그 연도 KPI 실적에 집계됩니다. 계약 종료일은 사업 캘린더 알림에 반영됩니다." },
+    { key: "deals", title: "사업 원장", tables: ["deals"], desc: "광고·IP 사업을 제안부터 확정·불발까지 한 줄로 관리합니다. '진행 확정' 건은 관리자가 실적 인정 기준(KPI 고정환율/실입금액)을 고르고 [실적 반영]을 켜야 그 연도 KPI 실적에 집계됩니다. 계약 종료일은 사업 캘린더 알림에 반영됩니다." },
     { key: "kpi", title: "KPI 목표·환율", tables: ["kpiGoals", "fx", "snapshots"], desc: "KPI 목표(Stretch/Base)와 KPI 고정환율 — 관리자 모드에서 입력합니다. KPI 금액은 계약금액 × KPI 고정환율로 자동 추산됩니다. 주간기록은 매주 자동 저장됩니다." },
     { key: "agenda", title: "팀 AGENDA", tables: ["agenda"], desc: "주차별 WIN / SHARE / CHALLENGE 안건을 작성합니다. 지난 주차 내용도 그대로 보관됩니다." },
     { key: "trend", title: "트렌드 리포트", tables: ["trend"], desc: "주차별 업계 트렌드를 작성합니다. 내용 칸의 줄바꿈 1줄이 대시보드 카드의 글머리 1줄이 됩니다." },
@@ -2610,7 +2713,7 @@
   ];
   // 표에 보이는 열(나머지는 입력 양식에서 확인)
   const LIST_COLS = {
-    deals: ["part", "group", "artist", "brand", "name", "stage", "todo", "endDate", "cur", "amount", "kpiKrw", "kpiHalf", "approval", "updatedBy"],
+    deals: ["part", "group", "artist", "brand", "name", "stage", "approval", "todo", "cur", "amount", "kpiKrw", "kpiHalf", "endDate"],
     kpiGoals: ["year", "part", "period", "goalS", "goalB", "note", "updatedBy"],
     fx: ["year", "cur", "unit", "rate", "note", "updatedBy"],
     snapshots: ["week", "part", "period", "goalS", "goalB", "actual", "pipeline", "weighted", "source", "recordedAt"],
@@ -2653,11 +2756,11 @@
     if (w === 0 && /불발/.test(r.stage || "") && !r.reason) add("불발 사유 입력 필요");
     if (w === 0 && /보류/.test(r.stage || "") && !r.reason) add("보류 사유 입력 필요");
     if (w >= MONEY_REQUIRED_WEIGHT && (!r.cur || r.amount === "" || r.amount == null)) add("계약통화·금액 입력 필요");
-    else if (r.kpiKrw === "KPI 환율 없음") add(`KPI 고정환율 등록 필요(${r.cur})`, "관리자");
+    else if (r.kpiKrw === "KPI 환율 없음" && r.kpiBasis !== "실입금액") add(`KPI 고정환율 등록 필요(${r.cur})`, "관리자");
     if (w >= 90 && !r.startDate) add("계약 시작일 확인 필요");
     if (w >= 90 && !r.endDate) add("계약 종료일 확인 필요");
     if (w >= 100 && !r.startDate && !r.kpiHalfManual) add("KPI 인정 반기 지정 필요");
-    if (w >= 100 && r.approval === "승인 대기" && !out.length) add("관리자 KPI 승인 대기", "관리자");
+    if (w >= 100 && r.kpiBasis === "실입금액" && (r.paidKrw === "" || r.paidKrw == null)) add("실입금액 입력 필요(실적 인정 기준)", "회계");
     // 입금 확인은 계약이 시작된 뒤에만(시작 전 건까지 띄우면 목록이 온통 '확인 필요'가 됨)
     const today = new Date(), ym = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
     if (w >= 100 && (r.paidKrw === "" || r.paidKrw == null) && r.startDate && String(r.startDate).slice(0, 7) <= ym) add("실입금액 확인 필요", "회계");
@@ -2670,7 +2773,7 @@
     if (w < MONEY_REQUIRED_WEIGHT) return "경영진 보고·승인이 끝나면 '03 최종 압축'으로 바꾸고 계약통화·금액을 입력하세요.";
     if (w < 90) return "경영진 승인 완료 건 — 계약통화·금액을 넣으면 KPI가 자동 계산됩니다. 계약서 작업이 시작되면 '04 계약 진행 중'으로.";
     if (w < 100) return "계약 체결되면 '05 진행 확정'으로 바꾸고 계약 시작일·종료일을 확인하세요.";
-    return "확정 건 — 관리자가 KPI 승인하면 실적으로 집계됩니다. 입금되면 회계 확인 후 실입금액을 입력하세요.";
+    return "확정 건 — 관리자가 실적 인정 기준을 고르고 [실적 반영]을 켜면 실적으로 집계됩니다. 입금되면 회계 확인 후 실입금액을 입력하세요.";
   }
 
   function callDb(action, payload) {
@@ -2752,7 +2855,7 @@
   }
   function openAdminLogin() {
     const m = openModal("관리자 모드");
-    m.body.appendChild(elText("p", "modal-desc2", "관리자 비밀번호를 입력하면 이 창에서 KPI 목표·환율, KPI 승인, 엑셀 업로드, 팀원, 기준 정보(운영 연도·진행 단계)를 바꿀 수 있습니다. 5회 틀리면 30분 잠깁니다."));
+    m.body.appendChild(elText("p", "modal-desc2", "관리자 비밀번호를 입력하면 이 창에서 KPI 목표·고정환율, 실적 반영(기준 선택·ON/OFF), 엑셀 업로드, 팀원, 기준 정보(운영 연도·진행 단계)를 바꿀 수 있습니다. 5회 틀리면 30분 잠깁니다."));
     const row = el("div", "user-free2");
     const input = document.createElement("input");
     input.type = "password"; input.placeholder = "관리자 비밀번호"; input.autocomplete = "current-password";
@@ -2887,11 +2990,67 @@
       return;
     }
     if (viewKey === "settings") { card.appendChild(renderSettingsView()); return; }
+    if (viewKey === "kpi") { const fxBox = el("div", "fx-panel2"); card.appendChild(fxBox); renderFxPanel(fxBox); }
     for (const t of view.tables) {
       const section = el("div", "data-table-block2");
       card.appendChild(section);
       await renderTableBlock(section, t, view.tables.length > 1);
     }
+  }
+
+  // KPI 고정환율 입력판: 연도를 고르고 통화별 환율을 한 번에 입력·저장(관리자 모드). 저장하면 사업 원장 KPI 금액이 다시 계산됨.
+  async function renderFxPanel(box) {
+    box.innerHTML = "";
+    const admin = isAdminMode();
+    const head = el("div", "fx-head2");
+    head.appendChild(elText("h3", "data-table-title2", "KPI 고정환율"));
+    const yearSel = document.createElement("select"); yearSel.className = "data-filter2";
+    const years = Array.from(new Set([CFG_YEAR, COLLAB.meta.operatingYear, COLLAB.meta.operatingYear + 1].concat(COLLAB.meta.years || []))).sort((a, b) => b - a);
+    years.forEach(y => yearSel.appendChild(new Option(y + "년", y)));
+    yearSel.value = String(box.dataset.year || CFG_YEAR);
+    yearSel.addEventListener("change", () => { box.dataset.year = yearSel.value; renderFxPanel(box); });
+    head.appendChild(yearSel);
+    box.appendChild(head);
+    box.appendChild(elText("p", "data-desc2", admin ? "통화별로 '기준 단위당 원화'를 입력하고 [환율 저장]을 누르세요(예: USD 1 = 1,350 · JPY 100 = 900). 저장하면 해당 연도 사업의 KPI 추산금액이 자동으로 다시 계산됩니다." : "관리자가 입력한 KPI 고정환율입니다. 수정은 관리자 모드에서 할 수 있습니다."));
+    let fx = [], deals = [];
+    try { [fx, deals] = await Promise.all([loadRows("fx", true), loadRows("deals")]); } catch (e) { box.appendChild(elText("p", "err2", "불러오지 못했어요: " + e.message)); return; }
+    const year = parseInt(yearSel.value, 10);
+    const curs = codeNames("currencies").filter(c => c !== "KRW");
+    const missing = {};
+    deals.forEach(d => { if (Number(d.year) === year && d.kpiKrw === "KPI 환율 없음") missing[d.cur] = (missing[d.cur] || 0) + 1; });
+    const grid = el("div", "fx-grid2");
+    curs.forEach(cur => {
+      const ex = fx.find(r => Number(r.year) === year && r.cur === cur) || {};
+      const card = el("div", "fx-card2" + (missing[cur] ? " miss2" : ""));
+      card.dataset.cur = cur;
+      card.appendChild(elText("div", "fx-cur2", cur));
+      const row = el("div", "fx-row2");
+      const unit = document.createElement("input"); unit.type = "text"; unit.inputMode = "decimal"; unit.className = "fx-unit2"; unit.value = ex.unit || (cur === "JPY" ? 100 : 1); unit.disabled = !admin; unit.title = "기준 단위";
+      const rate = document.createElement("input"); rate.type = "text"; rate.inputMode = "decimal"; rate.className = "fx-rate2"; rate.value = ex.rate === undefined ? "" : ex.rate; rate.disabled = !admin;
+      rate.placeholder = admin ? "예) " + ({ USD: "1350", CNY: "190", JPY: "900", EUR: "1450" }[cur] || "원화 금액") : "미입력";
+      row.append(unit, elText("span", "fx-eq2", cur + " ="), rate, elText("span", "fx-eq2", "원"));
+      card.appendChild(row);
+      card.appendChild(elText("div", "fx-meta2", missing[cur] ? `환율이 없어 KPI 계산 안 된 사업 ${missing[cur]}건` : (ex.updatedAt ? `${ex.updatedBy || ""} · ${String(ex.updatedAt).slice(0, 10)}` : "")));
+      grid.appendChild(card);
+    });
+    box.appendChild(grid);
+    if (!admin) return;
+    const actions = el("div", "data-toolbar2");
+    const save = elText("button", "btn-primary2", "환율 저장"); save.type = "button";
+    const msg = el("span", "form-meta2");
+    save.addEventListener("click", async () => {
+      if (!COLLAB.user) { openUserPicker(false); return; }
+      const rates = Array.from(grid.querySelectorAll(".fx-card2")).map(c => ({ cur: c.dataset.cur, unit: c.querySelector(".fx-unit2").value, rate: c.querySelector(".fx-rate2").value }));
+      save.disabled = true; save.textContent = "저장 중…";
+      const res = await callDb("saveFx", { year, rates });
+      save.disabled = false; save.textContent = "환율 저장";
+      if (!res.ok) { msg.textContent = "실패: " + (res.message || res.error || (res.errors || []).join(", ")); return; }
+      COLLAB.dashDirty = true; COLLAB.rows.deals = null;
+      alert(res.changed ? `${year}년 KPI 고정환율 ${res.changed}건 저장 · 사업 ${res.recalced}건 KPI 금액 재계산` + (res.errors.length ? "\n확인 필요: " + res.errors.join(", ") : "") : "바뀐 환율이 없어요." + (res.errors.length ? "\n확인 필요: " + res.errors.join(", ") : ""));
+      renderDataView(COLLAB.view);
+    });
+    actions.append(save, msg);
+    box.appendChild(actions);
   }
 
   // 처음 시작하기: 협업 DB 만들기 + 기존 시트 데이터(AGENDA·트렌드·KPI 기록·목표) 가져오기 — 관리자 모드
@@ -2965,7 +3124,7 @@
     // 진행 단계
     const stageBox = el("div", "settings-block2");
     stageBox.appendChild(elText("h3", "data-table-title2", "진행 단계 · 가중치"));
-    stageBox.appendChild(elText("p", "data-desc2", "가중치 100 = 진행 확정(관리자 KPI 승인 후 실적 집계) · 1~99 = 진행 중(가중 예상) · 0 = 불발·보류"));
+    stageBox.appendChild(elText("p", "data-desc2", "가중치 100 = 진행 확정(관리자가 실적 반영을 켜면 실적 집계) · 1~99 = 진행 중(가중 예상) · 0 = 불발·보류"));
     const t = el("table", "data-table2");
     const hr = el("tr", null); ["단계", "가중치", "설명"].forEach(h => hr.appendChild(elText("th", null, h)));
     const th = el("thead", null); th.appendChild(hr); t.appendChild(th);
@@ -3087,7 +3246,7 @@
     if (table === "deals") {
       addSelect("파트", codeNames("parts"), f.part, v => { f.part = v; });
       addSelect("단계", codeNames("stages"), f.stage, v => { f.stage = v; });
-      addSelect("KPI 승인", ["승인 대기", "승인"], f.approval || "", v => { f.approval = v; });
+      addSelect("실적 반영", [{ value: "승인 대기", label: "OFF(반영 대기)" }, { value: "승인", label: "ON(반영)" }], f.approval || "", v => { f.approval = v; });
       addSelect("다음 할 일", ["확인 필요", "없음"], f.todo || "", v => { f.todo = v; });
     }
     const spacer = el("span", "data-spacer2");
@@ -3103,15 +3262,15 @@
       toolbar.appendChild(up);
     }
     if (table === "deals" && isAdminMode()) {
-      const appr = elText("button", "btn-approve2", "승인 대기 일괄 승인"); appr.type = "button";
+      const appr = elText("button", "btn-approve2", "목록 전체 실적 반영 ON"); appr.type = "button";
       appr.addEventListener("click", async () => {
         const targets = filteredRows(table, rows).filter(r => r.approval === "승인 대기");
-        if (!targets.length) { alert("지금 목록에 승인 대기 건이 없어요."); return; }
-        const sum = targets.reduce((a, r) => a + (typeof r.kpiKrw === "number" ? r.kpiKrw : 0), 0);
-        if (!confirm(`지금 목록의 승인 대기 ${targets.length}건(KPI ${(sum / 1e8).toFixed(2)}억)을 승인할까요?\n승인하면 각 건의 KPI 기준연도·인정 반기 실적으로 집계됩니다.`)) return;
+        if (!targets.length) { alert("지금 목록에 실적 반영 OFF인 확정 건이 없어요."); return; }
+        const sum = targets.reduce((a, r) => a + (typeof r.kpiCounted === "number" ? r.kpiCounted : typeof r.kpiKrw === "number" && r.kpiBasis !== "실입금액" ? r.kpiKrw : 0), 0);
+        if (!confirm(`지금 목록의 반영 OFF ${targets.length}건(약 ${(sum / 1e8).toFixed(2)}억)을 실적 반영 ON 할까요?\n각 건의 실적 인정 기준(KPI 고정환율/실입금액) 금액으로 KPI 기준연도·인정 반기 실적에 집계됩니다.`)) return;
         const res = await callDb("approve", { ids: targets.map(r => r.id), approve: true });
         if (!res.ok) { alert("실패: " + (res.message || res.error)); return; }
-        alert(`${res.done}건 승인했습니다.` + (res.skipped.length ? `\n제외 ${res.skipped.length}건:\n` + res.skipped.slice(0, 10).join("\n") : ""));
+        alert(`${res.done}건 실적 반영 ON 했습니다.` + (res.skipped.length ? `\n제외 ${res.skipped.length}건:\n` + res.skipped.slice(0, 10).join("\n") : ""));
         COLLAB.dashDirty = true; rerender();
       });
       toolbar.appendChild(appr);
@@ -3149,7 +3308,7 @@
       if (pending.length) {
         const chip = el("button", "stage-chip2 pending2" + (defaultFilters(table).approval === "승인 대기" ? " on2" : ""));
         chip.type = "button";
-        chip.appendChild(elText("b", null, "KPI 승인 대기"));
+        chip.appendChild(elText("b", null, "실적 반영 대기"));
         chip.appendChild(document.createTextNode(` ${pending.length}건`));
         chip.addEventListener("click", () => { const f = defaultFilters(table); f.approval = f.approval === "승인 대기" ? "" : "승인 대기"; drawTable(wrap, summary, table, rows); });
         summary.appendChild(chip);
@@ -3171,7 +3330,7 @@
     if (!list.length) { wrap.appendChild(elText("p", "state-msg2", "조건에 맞는 항목이 없어요." + (def.editable ? " [＋ 새로 추가]로 입력하세요." : ""))); return; }
     const t = el("table", "data-table2");
     const thead = el("thead", null), hr = el("tr", null);
-    LIST_COLS[table].forEach(k => hr.appendChild(elText("th", null, k === "todo" ? "다음 할 일" : colDef(table, k).label)));
+    LIST_COLS[table].forEach(k => hr.appendChild(elText("th", null, k === "todo" ? "다음 할 일" : (table === "deals" && k === "approval") ? "실적 반영 · 기준" : colDef(table, k).label)));
     if (table === "log") hr.appendChild(elText("th", null, ""));
     thead.appendChild(hr); t.appendChild(thead);
     const tbody = el("tbody", null);
@@ -3181,6 +3340,7 @@
       if (r.id) tr.title = "ID " + r.id;
       LIST_COLS[table].forEach(k => {
         if (k === "todo") { const td = el("td", "todo-cell2"); todoChips(td, dealTodos(r)); tr.appendChild(td); return; }
+        if (table === "deals" && k === "approval") { const td = el("td", "count-cell2"); countCell(td, r); tr.appendChild(td); return; }
         const td = elText("td", ["content", "before", "after", "name"].includes(k) ? "long2" : null, cellText(table, k, r[k]));
         if (k === "approval" && r.approval) td.classList.add(r.approval === "승인" ? "appr-ok2" : "appr-wait2");
         if (k === "stage" && r.stage) td.dataset.weight = String(((COLLAB.meta.codes.stages.find(s => s.name === r.stage) || {}).weight) || 0);
@@ -3222,6 +3382,59 @@
     return {};
   }
 
+  // 실적 반영 토글(관리자) — 켜면 KPI 실적으로 집계, 끄면 제외. 기존 'KPI 승인'과 같은 값(승인/승인 대기)을 씀.
+  function countSwitch(r, onDone) {
+    const on = r.approval === "승인";
+    const sw = el("button", "switch2" + (on ? " on2" : ""));
+    sw.type = "button"; sw.setAttribute("role", "switch"); sw.setAttribute("aria-checked", on ? "true" : "false");
+    sw.title = on ? "실적 반영 중 — 누르면 끔" : "실적 미반영 — 누르면 켬";
+    sw.appendChild(el("span", "knob2"));
+    sw.appendChild(elText("span", "switch-label2", on ? "ON" : "OFF"));
+    sw.addEventListener("click", async e => {
+      e.stopPropagation();
+      if (!COLLAB.user) { openUserPicker(false); return; }
+      sw.disabled = true;
+      const res = await callDb("approve", { ids: [r.id], approve: !on });
+      sw.disabled = false;
+      if (!res.ok) { alert("실패: " + (res.message || res.error)); return; }
+      if (res.skipped && res.skipped.length) { alert("실적 반영을 켤 수 없어요:\n" + res.skipped.join("\n")); return; }
+      COLLAB.dashDirty = true; onDone && onDone();
+    });
+    return sw;
+  }
+  function basisSelect(r, onDone) {
+    const sel = document.createElement("select");
+    sel.className = "basis-select2";
+    sel.title = "실적 인정 기준";
+    [["KPI 고정환율", "고정환율 기준"], ["실입금액", "실입금액 기준"]].forEach(([v, t]) => sel.appendChild(new Option(t, v)));
+    sel.value = r.kpiBasis === "실입금액" ? "실입금액" : "KPI 고정환율";
+    sel.addEventListener("click", e => e.stopPropagation());
+    sel.addEventListener("change", async e => {
+      e.stopPropagation();
+      if (!COLLAB.user) { openUserPicker(false); return; }
+      sel.disabled = true;
+      const res = await callDb("setBasis", { ids: [r.id], basis: sel.value });
+      sel.disabled = false;
+      if (!res.ok) { alert("실패: " + (res.message || res.error)); return; }
+      COLLAB.dashDirty = true; onDone && onDone();
+    });
+    return sel;
+  }
+  function countCell(td, r) {
+    if (!r.approval) { td.appendChild(elText("span", "todo-none2", "—")); return; }
+    const basisText = r.kpiBasis === "실입금액" ? "실입금액" : "고정환율";
+    const amt = typeof r.kpiCounted === "number" ? (r.kpiCounted / 1e8).toFixed(2) + "억" : "금액 없음";
+    const refresh = () => renderDataView(COLLAB.view);
+    if (isAdminMode()) {
+      const row = el("div", "count-ctl2");
+      row.append(countSwitch(r, refresh), basisSelect(r, refresh));
+      td.appendChild(row);
+    } else {
+      td.appendChild(elText("span", "count-badge2" + (r.approval === "승인" ? " on2" : ""), r.approval === "승인" ? "반영 ON" : "반영 OFF"));
+      td.appendChild(elText("span", "count-basis2", " " + basisText + " 기준"));
+    }
+    td.appendChild(elText("div", "count-amt2", "인정 " + amt));
+  }
   function todoChips(box, todos) {
     box.innerHTML = "";
     if (!todos.length) { box.appendChild(elText("span", "todo-none2", "—")); return; }
@@ -3326,7 +3539,7 @@
       if (typeof rec.kpiKrw === "number") parts.push(`KPI 추산 ${(rec.kpiKrw / 1e8).toFixed(2)}억원` + (rec.kpiHalf ? ` (${rec.kpiHalf})` : ""));
       else if (rec.kpiKrw) parts.push("KPI: " + rec.kpiKrw);
       if (typeof rec.weighted === "number" && stageWeight(rec.stage) < 100) parts.push(`가중 예상 ${(rec.weighted / 1e8).toFixed(2)}억원`);
-      if (rec.approval) parts.push("KPI " + rec.approval + (rec.approvedBy ? ` (${rec.approvedBy})` : ""));
+      if (rec.approval) parts.push("실적 반영 " + (rec.approval === "승인" ? "ON" : "OFF") + ` · ${rec.kpiBasis === "실입금액" ? "실입금액" : "KPI 고정환율"} 기준` + (typeof rec.kpiCounted === "number" ? ` ${(rec.kpiCounted / 1e8).toFixed(2)}억원` : "") + (rec.approvedBy ? ` (${rec.approvedBy})` : ""));
       if (rec.source) parts.push("출처: " + rec.source);
       form.appendChild(elText("div", "deal-auto2", parts.join(" · ") || "자동 계산 값 없음"));
     }
@@ -3347,6 +3560,28 @@
       form.appendChild(sec);
       sections.push({ sec, keys });
     });
+    // 관리자 전용: 실적 인정 기준 · 실적 반영(진행 확정 건)
+    let adminSec = null;
+    if (isAdminMode()) {
+      adminSec = el("div", "form-sec2 admin-sec2");
+      adminSec.appendChild(elText("h4", "form-group-title2", "실적 반영 (관리자)"));
+      const grid = el("div", "form-grid2");
+      const bcol = def.cols.find(c => c.key === "kpiBasis");
+      if (bcol) {
+        const f = fieldInput("deals", bcol, rec.kpiBasis || "KPI 고정환율");
+        f.appendChild(elText("span", "form-hint2", "KPI 고정환율 = 계약금액 × 고정환율 · 실입금액 = 회계 확인된 입금액"));
+        fields.kpiBasis = f; grid.appendChild(f);
+      }
+      if (!isNew && rec.approval) {
+        const wrapSw = el("div", "form-field2");
+        wrapSw.appendChild(elText("span", "form-label2", "실적 반영"));
+        wrapSw.appendChild(countSwitch(rec, () => { document.querySelector(".modal-x2") && document.querySelector(".modal-x2").click(); renderDataView(COLLAB.view); }));
+        wrapSw.appendChild(elText("span", "form-hint2", "켜면 그 해 KPI 실적에 집계 · 기준을 바꿨다면 먼저 [저장]"));
+        grid.appendChild(wrapSw);
+      }
+      adminSec.appendChild(grid);
+      form.appendChild(adminSec);
+    }
     const more = document.createElement("details");
     more.className = "form-more2";
     more.appendChild(elText("summary", null, "추가 정보 (선택 — KPI 기준연도·계약유형·품목·국가·조건·담당자·비고 등)"));
@@ -3370,6 +3605,7 @@
       });
       if (fields.reason) { fields.reason.querySelector(".req2").textContent = w === 0 ? " *" : ""; fields.reason.classList.toggle("need2", w === 0 && !val("reason")); }
       sections.forEach(s => { s.sec.hidden = s.keys.every(k => !fields[k] || fields[k].hidden); });
+      if (adminSec) adminSec.hidden = w < 100;
       const cur = Object.assign({}, rec);
       form.querySelectorAll("[data-key]").forEach(i => { cur[i.dataset.key] = i.value; });
       if (cur.cur !== rec.cur || String(cur.amount) !== String(rec.amount)) cur.kpiKrw = ""; // 통화·금액을 바꾸면 환율 여부는 저장 후 다시 판단
@@ -3420,19 +3656,7 @@
       });
       actions.appendChild(del);
     }
-    if (table === "deals" && !isNew && isAdminMode() && rec.approval) {
-      const approving = rec.approval !== "승인";
-      const ab = elText("button", approving ? "btn-approve2" : "btn-line2", approving ? "KPI 실적 승인" : "KPI 승인 취소"); ab.type = "button";
-      ab.addEventListener("click", async () => {
-        if (!confirm(approving ? `이 사업을 ${rec.year}년 ${rec.kpiHalf} KPI 실적(${fmtNum(rec.kpiKrw)}원)으로 승인할까요?` : "KPI 승인을 취소할까요? 실적 집계에서 빠집니다.")) return;
-        const res = await callDb("approve", { ids: [rec.id], approve: approving });
-        if (!res.ok) { msg.textContent = res.message || res.error; return; }
-        if (res.skipped.length) { msg.textContent = "승인할 수 없어요: " + res.skipped.join(" / "); return; }
-        COLLAB.dashDirty = true; m.close(); onDone && onDone();
-      });
-      actions.appendChild(ab);
-    }
-    if (!isNew && rec.updatedAt) actions.appendChild(elText("span", "form-meta2", `최종 수정: ${rec.updatedBy || "-"} · ${rec.updatedAt}` + (rec.approvedAt ? ` · KPI 승인: ${rec.approvedBy} ${rec.approvedAt}` : "")));
+    if (!isNew && rec.updatedAt) actions.appendChild(elText("span", "form-meta2", `최종 수정: ${rec.updatedBy || "-"} · ${rec.updatedAt}` + (rec.approvedAt ? ` · 실적 반영: ${rec.approvedBy} ${rec.approvedAt}` : "")));
     m.body.appendChild(actions);
     save.addEventListener("click", async () => {
       if (!COLLAB.user) { openUserPicker(false); return; }
@@ -3454,7 +3678,7 @@
         COLLAB.dashDirty = true;
         if (table === "members") refreshMeta();
         m.close();
-        if (res.approvalReset) alert("KPI 관련 내용(금액·연도·단계 등)이 바뀌어 KPI 승인이 해제됐습니다. 관리자의 재승인이 필요합니다.");
+        if (res.approvalReset) alert("KPI 관련 내용(금액·연도·단계 등)이 바뀌어 실적 반영이 꺼졌습니다(OFF). 관리자가 다시 켜야 실적에 집계됩니다.");
         onDone && onDone();
       } catch (err) {
         msg.appendChild(elText("p", "err2", "저장 실패: " + err.message));
