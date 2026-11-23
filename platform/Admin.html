@@ -99,25 +99,12 @@
     <a class="back" href="<?= appUrl ?>" target="_top">← 대시보드로</a>
   </header>
 
-  <section class="card" id="dbCard">
-    <h2>0. 협업 DB</h2>
-    <p class="desc">팀원이 화면에서 직접 입력·저장하는 데이터 저장소(구글 시트 1개)입니다. 만들면 대시보드의 KPI·팀 AGENDA·트렌드 리포트·계약 알림·인사이트가 기존 시트 대신 <b>협업 DB</b>에서 계산됩니다.</p>
-    <div id="dbStatus" class="muted">확인 중…</div>
-    <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
-      <button class="btn" type="button" id="createDbBtn">협업 DB 만들기</button>
-      <button class="btn ghost" type="button" id="migrateBtn">기존 시트 데이터 가져오기</button>
-      <button class="btn ghost" type="button" id="recalcBtn">KPI 추산금액 다시 계산</button>
-    </div>
-    <p class="muted" style="margin-top:10px;">· 기존 시트 데이터 가져오기: 팀 AGENDA·트렌드 리포트의 지난 주차 전체, 실적현황 시트의 주차별 KPI 기록·목표를 협업 DB로 옮깁니다. 여러 번 눌러도 중복되지 않습니다.<br>· 사업 원장(BIS)은 대시보드 [사업 원장] 탭에서 BIS 엑셀을 그대로 업로드하세요.</p>
-    <div class="results" id="dbResult"></div>
-  </section>
-
   <section class="card">
     <h2>1. 기본 정보</h2>
-    <p class="desc">대시보드 제목과 기준 연도입니다. 섹션 이름의 {year}는 기준 연도로 바뀝니다(예: {year} KPI 현황 → 2027 KPI 현황).</p>
+    <p class="desc">대시보드 제목과 팀명입니다. 섹션 이름의 {year}는 운영 연도로 바뀝니다(예: {year} KPI 현황 → 2027 KPI 현황).</p>
     <div class="grid">
       <label class="field">대시보드 제목<input type="text" data-path="general.title"></label>
-      <label class="field">기준 연도<input type="number" data-path="general.year" min="2000" max="2100"></label>
+      <div class="field">운영 연도<span class="hint">대시보드 → 관리자 모드 → 기준 정보 탭에서 전환합니다.</span></div>
       <label class="field">팀명<input type="text" data-path="general.teamName"></label>
       <label class="field">팀명(영문)<input type="text" data-path="general.teamNameEn"></label>
     </div>
@@ -204,18 +191,6 @@
     <p class="desc">저장할 때마다 그 시점의 설정 전체가 기록됩니다(최근 20건). [되돌리기]를 누르면 그 시점 설정으로 즉시 복원됩니다.</p>
     <div class="history" id="history"></div>
     <div style="margin-top:12px;"><button class="btn danger" type="button" id="resetBtn">기본값으로 복원</button></div>
-  </section>
-  <section class="card">
-    <h2>10. 코드(드롭다운) 관리</h2>
-    <p class="desc">사업 원장 입력 칸의 선택 목록입니다. 비워 두면 기본값을 씁니다. 진행 단계는 한 줄에 <b>이름|가중치(%)|설명</b> — 가중치 100 = 진행 확정(KPI 실적 인정), 1~99 = 진행 중(가중 예상), 0 = 불발·보류.</p>
-    <div class="grid">
-      <label class="field wide">진행 단계<textarea data-path="codes.stages" data-list="stages" style="min-height:150px; font-family: monospace;"></textarea></label>
-      <label class="field">아티스트 그룹<span class="hint">쉼표 구분</span><textarea data-path="codes.groups" data-list="text"></textarea></label>
-      <label class="field">계약유형<textarea data-path="codes.ctypes" data-list="text"></textarea></label>
-      <label class="field">계약구분<textarea data-path="codes.ckinds" data-list="text"></textarea></label>
-      <label class="field">품목<textarea data-path="codes.items" data-list="text"></textarea></label>
-      <label class="field">계약통화<textarea data-path="codes.currencies" data-list="text"></textarea></label>
-    </div>
   </section>
 </div>
 
@@ -416,49 +391,8 @@
     if (res.history) historyList = res.history;
     fillForm();
     renderHistory();
-    renderDbStatus();
   }
 
-  function renderDbStatus() {
-    const id = config.sources.dbSheet;
-    const st = $("dbStatus");
-    st.innerHTML = "";
-    if (id) {
-      st.appendChild(document.createTextNode("✅ 연결됨 — "));
-      const a = document.createElement("a");
-      a.href = "https://docs.google.com/spreadsheets/d/" + id + "/edit"; a.target = "_blank"; a.rel = "noopener"; a.textContent = "협업 DB 시트 열기";
-      st.appendChild(a);
-      st.appendChild(document.createTextNode(" (엑셀로 내려받기: 시트에서 파일 → 다운로드 → Microsoft Excel)"));
-    } else {
-      st.textContent = "아직 없음 — 지금은 기존 구글 시트를 읽어 보여주는 상태입니다.";
-    }
-    $("createDbBtn").disabled = !!id;
-    $("migrateBtn").disabled = !id;
-    $("recalcBtn").disabled = !id;
-  }
-
-  async function dbAction(action, confirmText, okText) {
-    if (confirmText && !confirm(confirmText)) return;
-    const box = $("dbResult");
-    box.innerHTML = '<p class="muted">처리 중… (시트를 읽고 쓰느라 1분 가까이 걸릴 수 있습니다)</p>';
-    try {
-      const res = await callAdmin(action, { by: $("byName").value || "관리자" });
-      if (!res.ok) throw new Error(res.message || res.error);
-      box.innerHTML = "";
-      const lines = res.report || (res.db ? ["만든 시트: " + res.db.name] : res.count !== undefined ? ["다시 계산한 사업: " + res.count + "건"] : []);
-      const row = document.createElement("div"); row.className = "result ok";
-      row.innerHTML = '<span class="icon">✅</span>';
-      const body = document.createElement("div"); body.textContent = okText + " — " + lines.join(" / ");
-      row.appendChild(body); box.appendChild(row);
-      if (res.config) applyServerConfig(res);
-    } catch (err) {
-      box.innerHTML = "";
-      const row = document.createElement("div"); row.className = "result ng";
-      row.innerHTML = '<span class="icon">❌</span>';
-      const body = document.createElement("div"); body.textContent = "실패: " + err.message;
-      row.appendChild(body); box.appendChild(row);
-    }
-  }
 
   async function runAndApply(action, payload, okText) {
     setStatus("처리 중…");
@@ -529,9 +463,6 @@
     if (!confirm("모든 설정을 기본값(2026 운영값)으로 되돌릴까요? 현재 설정은 이력에 남습니다.")) return;
     await runAndApply("reset", { by: $("byName").value }, "기본값으로 복원했습니다.");
   });
-  $("createDbBtn").addEventListener("click", () => dbAction("createDb", "엘라님 드라이브에 협업 DB 시트를 새로 만들까요? 만든 뒤에는 대시보드가 협업 DB 기준으로 바뀝니다(기존 시트는 그대로 둠).", "협업 DB를 만들었습니다"));
-  $("migrateBtn").addEventListener("click", () => dbAction("migrate", "기존 시트(팀 AGENDA·트렌드·실적현황)의 데이터를 협업 DB로 가져올까요? 이미 있는 주차는 건너뜁니다.", "기존 데이터를 가져왔습니다"));
-  $("recalcBtn").addEventListener("click", () => dbAction("recalc", null, "KPI 추산금액을 다시 계산했습니다"));
   $("pwBtn").addEventListener("click", async () => {
     const dashboard = $("newDashPw").value, admin = $("newAdminPw").value;
     if (!dashboard && !admin) { $("pwMsg").textContent = "변경할 비밀번호를 입력하세요."; return; }
