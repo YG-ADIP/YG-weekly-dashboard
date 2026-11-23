@@ -37,6 +37,7 @@ var DEFAULT_CONFIG = {
     bizCalSheet: '1hS_eFCaFaVo-shSL3oZiGgG1IEsKc5VnNa8oH6vcPig',     // 사업 캘린더(main) 시트
     teamCalendar: 'c_ba39a76170dcab8c99022cc72144d5706bda1be2cfd589a88eabe857259799a3@group.calendar.google.com',
     teamCalendarLabel: '광고 IP 사업팀 캘린더',
+    dbSheet: '', // 협업 DB(구글 시트) — 관리자 설정 [협업 DB 만들기]로 생성. 연결되면 KPI·AGENDA·트렌드·계약 알림을 DB에서 읽음
   },
   // 시트에 목표가 없을 때만 쓰는 예비값(억원). 평소엔 최신 주차 시트의 목표를 그대로 씀.
   kpi: { goalAnnual: 222, goalH2: 101 },
@@ -57,6 +58,8 @@ var DEFAULT_CONFIG = {
 var CONFIG_PROP = 'PLATFORM_CONFIG_JSON';
 var CONFIG_HISTORY_INDEX_PROP = 'PLATFORM_CONFIG_HISTORY'; // [{key, at, by, memo}] 최신순
 var CONFIG_HISTORY_MAX = 20;
+var ADMIN_MAX_FAILS = 5;     // 관리자 비밀번호 연속 실패 허용 횟수
+var ADMIN_LOCK_MINUTES = 30; // 초과 시 잠금 시간(분)
 
 var CFG_CACHE_ = null;    // 한 번 실행 안에서 설정을 여러 번 읽지 않게 보관
 var CFG_OVERRIDE_ = null; // 연결 테스트 때 "저장 전 입력값"으로 잠시 바꿔 끼우는 용도
@@ -147,6 +150,7 @@ function sanitizeConfig_(input) {
       bizCalSheet: extractId_(src.bizCalSheet) || d.sources.bizCalSheet,
       teamCalendar: extractId_(src.teamCalendar) || d.sources.teamCalendar,
       teamCalendarLabel: cleanText_(src.teamCalendarLabel, 40, d.sources.teamCalendarLabel),
+      dbSheet: extractId_(src.dbSheet),
     },
     kpi: { goalAnnual: num(k.goalAnnual, d.kpi.goalAnnual), goalH2: num(k.goalH2, d.kpi.goalH2) },
     bizCal: {
@@ -160,7 +164,32 @@ function sanitizeConfig_(input) {
       upcomingDays: clampInt_(t.upcomingDays, 1, 31, d.teamCal.upcomingDays),
     },
     sections: sections,
+    codes: sanitizeCodes_(c.codes),
   };
+}
+
+// 협업 DB 드롭다운 목록(진행 단계·가중치, 아티스트 그룹 등) — 비어 있으면 Db.gs의 기본값 사용.
+// 진행 단계는 "이름|가중치(%)|설명" 줄 단위 또는 객체 배열 모두 받음.
+function sanitizeCodes_(codes) {
+  var c = codes || {}, out = {};
+  var stagesIn = Array.isArray(c.stages) ? c.stages : String(c.stages || '').split('\n');
+  var stages = [];
+  stagesIn.forEach(function (x) {
+    var name, weight, desc;
+    if (x && typeof x === 'object') { name = x.name; weight = x.weight; desc = x.desc; }
+    else { var p = String(x || '').split('|'); name = p[0]; weight = p[1]; desc = p[2]; }
+    name = String(name || '').trim();
+    if (!name || stages.some(function (s) { return s.name === name; }) || stages.length >= 12) return;
+    var w = parseFloat(weight);
+    stages.push({ name: name.slice(0, 20), weight: isNaN(w) ? 0 : Math.max(0, Math.min(100, w)), desc: String(desc || '').trim().slice(0, 60) });
+  });
+  if (stages.length) out.stages = stages;
+  ['groups', 'ctypes', 'ckinds', 'items', 'currencies'].forEach(function (k) {
+    if (c[k] === undefined) return;
+    var list = cleanList_(c[k], 40);
+    if (list.length) out[k] = list;
+  });
+  return out;
 }
 
 // 화면(로그인 전 포함)에 내려주는 설정 — 시트·캘린더 ID는 빼고 표시용 값만.
@@ -225,15 +254,15 @@ function handleApi_(params) {
   if (!pw || params.password !== pw) return { ok: false, error: 'unauthorized' };
   try {
     switch (params.section) {
-      case 'kpi': return getKpiData_();
+      case 'kpi': return dbReady_() ? getKpiDataDb_() : getKpiData_();
       case 'insight': return getInsightData_();
       case 'saveInsight':
         saveInsightOverride_(resolveInsightWeekKey_(params), String(params.text || '').trim());
         return { ok: true };
-      case 'agenda': return getByWeekSectionData_(cfg_().sources.agendaFolder, extractAgendaFromSheet_);
-      case 'trend': return getByWeekSectionData_(cfg_().sources.trendFolder, extractTrendFromSheet_);
+      case 'agenda': return dbReady_() ? getAgendaDataDb_() : getByWeekSectionData_(cfg_().sources.agendaFolder, extractAgendaFromSheet_);
+      case 'trend': return dbReady_() ? getTrendDataDb_() : getByWeekSectionData_(cfg_().sources.trendFolder, extractTrendFromSheet_);
       case 'calendar': return getCalendarData_();
-      case 'businessCalendar': return getBusinessCalendarData_();
+      case 'businessCalendar': return dbReady_() ? getBusinessCalendarDataDb_() : getBusinessCalendarData_();
       case 'teamCalendar':
         return getTeamCalendarData_(parseInt(params.year, 10), parseInt(params.month, 10));
       case 'upcomingSelection': return { ok: true, selection: getUpcomingSelection_() };
@@ -259,18 +288,37 @@ function adminApi(action, adminPassword, payloadJson) {
   if (!adminPw) {
     return JSON.stringify({ ok: false, error: 'admin_not_configured', message: '관리자 비밀번호가 아직 설정되지 않았습니다. Apps Script 프로젝트 설정 → 스크립트 속성에 ADMIN_PASSWORD를 추가해 주세요.' });
   }
-  if (adminPassword !== adminPw) return JSON.stringify({ ok: false, error: 'unauthorized', message: '관리자 비밀번호가 틀렸습니다.' });
+  // 무작위 대입 방지: 연속 5회 틀리면 30분 동안 관리자 입장 차단(맞게 입력하면 횟수 초기화)
+  var cache = CacheService.getScriptCache();
+  var lockedUntil = Number(cache.get('adminLockUntil') || 0);
+  if (lockedUntil > new Date().getTime()) {
+    return JSON.stringify({ ok: false, error: 'locked', message: '비밀번호를 연속으로 틀려 관리자 화면이 잠겼습니다. ' + Math.ceil((lockedUntil - new Date().getTime()) / 60000) + '분 뒤 다시 시도해 주세요.' });
+  }
+  if (adminPassword !== adminPw) {
+    var fails = Number(cache.get('adminFail') || 0) + 1;
+    if (fails >= ADMIN_MAX_FAILS) {
+      cache.put('adminLockUntil', String(new Date().getTime() + ADMIN_LOCK_MINUTES * 60000), ADMIN_LOCK_MINUTES * 60);
+      cache.remove('adminFail');
+      return JSON.stringify({ ok: false, error: 'locked', message: '비밀번호를 ' + ADMIN_MAX_FAILS + '회 틀려 ' + ADMIN_LOCK_MINUTES + '분 동안 관리자 화면이 잠겼습니다.' });
+    }
+    cache.put('adminFail', String(fails), ADMIN_LOCK_MINUTES * 60);
+    return JSON.stringify({ ok: false, error: 'unauthorized', message: '관리자 비밀번호가 틀렸습니다. (' + fails + '/' + ADMIN_MAX_FAILS + '회, ' + ADMIN_MAX_FAILS + '회 틀리면 ' + ADMIN_LOCK_MINUTES + '분 잠김)' });
+  }
+  cache.remove('adminFail');
   var payload = {};
   try { payload = JSON.parse(payloadJson || '{}') || {}; } catch (e) { payload = {}; }
   try {
     var res;
     switch (action) {
-      case 'load': res = { ok: true, config: cfg_(), defaults: sanitizeConfig_({}), history: getConfigHistoryIndex_() }; break;
+      case 'load': res = { ok: true, config: cfg_(), defaults: sanitizeConfig_({}), codeDefaults: DEFAULT_CODES, history: getConfigHistoryIndex_() }; break;
       case 'test': res = { ok: true, results: testConnections_(sanitizeConfig_(payload.config)) }; break;
       case 'save': res = { ok: true, config: saveConfig_(sanitizeConfig_(payload.config), payload.by, payload.memo) }; break;
       case 'restore': res = { ok: true, config: restoreConfig_(payload.key, payload.by) }; break;
       case 'reset': res = { ok: true, config: saveConfig_(sanitizeConfig_({}), payload.by, '기본값으로 복원') }; break;
       case 'passwords': changePasswords_(payload.dashboard, payload.admin); res = { ok: true }; break;
+      case 'createDb': res = { ok: true, db: createDb_(payload.by), config: cfg_() }; break;
+      case 'migrate': res = { ok: true, report: migrateFromSheets_(cleanText_(payload.by, 20, '관리자')) }; break;
+      case 'recalc': res = { ok: true, count: withLock_(function () { return recalcDeals_(payload.by); }) }; break;
       default: res = { ok: false, error: 'unknown_action' };
     }
     if (res.ok && res.config) res.history = getConfigHistoryIndex_();
@@ -394,6 +442,14 @@ function testConnections_(config) {
       if (!cal) return { ok: false, detail: '캘린더를 열 수 없습니다(ID 또는 공유 권한 확인).' };
       var now = new Date(), later = new Date(now.getTime() + 30 * 86400000);
       return { ok: true, detail: cal.getName() + ' · 앞으로 30일 일정 ' + cal.getEvents(now, later).length + '건' };
+    });
+    add('협업 DB', function () {
+      if (!config.sources.dbSheet) return { ok: true, detail: '아직 없음 — [협업 DB 만들기]로 생성하면 화면 입력·저장이 가능해집니다(그 전엔 기존 시트를 읽음).' };
+      var ss = SpreadsheetApp.openById(config.sources.dbSheet);
+      var missing = DB_TABLE_ORDER.filter(function (k) { return !ss.getSheetByName(DB_TABLES[k].sheet); });
+      return missing.length
+        ? { ok: false, detail: ss.getName() + ' — 없는 탭: ' + missing.map(function (k) { return DB_TABLES[k].sheet; }).join(', ') }
+        : { ok: true, detail: ss.getName() + ' · 탭 ' + DB_TABLE_ORDER.length + '개 확인' };
     });
     add('KPI 원본 시트 링크', function () {
       var u = config.sources.kpiSourceUrl;
@@ -719,7 +775,7 @@ function getInsightByWeekCached_() {
 }
 
 function getInsightData_() {
-  var base = getInsightByWeekCached_();
+  var base = dbReady_() ? getInsightDataDb_() : getInsightByWeekCached_();
   var overrides = getInsightOverrides_();
   var latestKey = null, latestOrder = -1;
   Object.keys(base.byWeek).forEach(function (key) {
@@ -767,7 +823,7 @@ function getInsightOverrides_() {
 // 항상 weekKey를 함께 보내므로 이 폴백을 타지 않는다.
 function resolveInsightWeekKey_(params) {
   if (params.weekKey) return params.weekKey;
-  var base = getInsightByWeekCached_();
+  var base = dbReady_() ? getInsightDataDb_() : getInsightByWeekCached_();
   var latestKey = null, latestOrder = -1;
   Object.keys(base.byWeek).forEach(function (key) {
     var e = base.byWeek[key];

@@ -99,6 +99,19 @@
     <a class="back" href="<?= appUrl ?>" target="_top">← 대시보드로</a>
   </header>
 
+  <section class="card" id="dbCard">
+    <h2>0. 협업 DB</h2>
+    <p class="desc">팀원이 화면에서 직접 입력·저장하는 데이터 저장소(구글 시트 1개)입니다. 만들면 대시보드의 KPI·팀 AGENDA·트렌드 리포트·계약 알림·인사이트가 기존 시트 대신 <b>협업 DB</b>에서 계산됩니다.</p>
+    <div id="dbStatus" class="muted">확인 중…</div>
+    <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="btn" type="button" id="createDbBtn">협업 DB 만들기</button>
+      <button class="btn ghost" type="button" id="migrateBtn">기존 시트 데이터 가져오기</button>
+      <button class="btn ghost" type="button" id="recalcBtn">KPI 추산금액 다시 계산</button>
+    </div>
+    <p class="muted" style="margin-top:10px;">· 기존 시트 데이터 가져오기: 팀 AGENDA·트렌드 리포트의 지난 주차 전체, 실적현황 시트의 주차별 KPI 기록·목표를 협업 DB로 옮깁니다. 여러 번 눌러도 중복되지 않습니다.<br>· 사업 원장(BIS)은 대시보드 [사업 원장] 탭에서 BIS 엑셀을 그대로 업로드하세요.</p>
+    <div class="results" id="dbResult"></div>
+  </section>
+
   <section class="card">
     <h2>1. 기본 정보</h2>
     <p class="desc">대시보드 제목과 기준 연도입니다. 섹션 이름의 {year}는 기준 연도로 바뀝니다(예: {year} KPI 현황 → 2027 KPI 현황).</p>
@@ -120,6 +133,7 @@
       <label class="field wide">사업 캘린더 시트<span class="hint">"프로젝트 · 계약 종료일 · D-DAY" 머리글 표가 있는 시트</span><input type="text" data-path="sources.bizCalSheet" data-id="1"><span class="idpreview"></span></label>
       <label class="field wide">팀 구글 캘린더<span class="hint">캘린더 ID(…@group.calendar.google.com) 또는 공유 링크</span><input type="text" data-path="sources.teamCalendar" data-id="1"><span class="idpreview"></span></label>
       <label class="field">팀 캘린더 표시 이름<input type="text" data-path="sources.teamCalendarLabel"></label>
+      <label class="field wide">협업 DB 시트<span class="hint">[협업 DB 만들기]로 자동 입력됨 · 다른 DB 시트로 바꿀 때만 수정</span><input type="text" data-path="sources.dbSheet" data-id="1"><span class="idpreview"></span></label>
       <label class="field">KPI "원본 시트" 링크<span class="hint">비우면 링크를 표시하지 않음</span><input type="text" data-path="sources.kpiSourceUrl"></label>
     </div>
   </section>
@@ -191,6 +205,18 @@
     <div class="history" id="history"></div>
     <div style="margin-top:12px;"><button class="btn danger" type="button" id="resetBtn">기본값으로 복원</button></div>
   </section>
+  <section class="card">
+    <h2>10. 코드(드롭다운) 관리</h2>
+    <p class="desc">사업 원장 입력 칸의 선택 목록입니다. 비워 두면 기본값을 씁니다. 진행 단계는 한 줄에 <b>이름|가중치(%)|설명</b> — 가중치 100 = 진행 확정(KPI 실적 인정), 1~99 = 진행 중(가중 예상), 0 = 불발·보류.</p>
+    <div class="grid">
+      <label class="field wide">진행 단계<textarea data-path="codes.stages" data-list="stages" style="min-height:150px; font-family: monospace;"></textarea></label>
+      <label class="field">아티스트 그룹<span class="hint">쉼표 구분</span><textarea data-path="codes.groups" data-list="text"></textarea></label>
+      <label class="field">계약유형<textarea data-path="codes.ctypes" data-list="text"></textarea></label>
+      <label class="field">계약구분<textarea data-path="codes.ckinds" data-list="text"></textarea></label>
+      <label class="field">품목<textarea data-path="codes.items" data-list="text"></textarea></label>
+      <label class="field">계약통화<textarea data-path="codes.currencies" data-list="text"></textarea></label>
+    </div>
+  </section>
 </div>
 
 <div class="actionbar hidden" id="actionbar">
@@ -209,6 +235,7 @@
   let config = null;    // 화면에서 편집 중인 설정
   let savedJson = "";   // 마지막으로 저장(또는 불러온)된 설정 — 미저장 변경 표시용
   let historyList = [];
+  let codeDefaults = {}; // 코드 칸이 비어 있을 때 보여줄 기본값
 
   const $ = id => document.getElementById(id);
 
@@ -243,8 +270,11 @@
   function fillForm() {
     document.querySelectorAll("[data-path]").forEach(input => {
       const v = getPath(config, input.dataset.path);
+      const codeKey = input.dataset.path.indexOf("codes.") === 0 ? input.dataset.path.slice(6) : null;
+      const val = codeKey && (!v || !v.length) ? codeDefaults[codeKey] : v;
       if (input.type === "checkbox") input.checked = !!v;
-      else if (input.dataset.list) input.value = (v || []).join(input.tagName === "TEXTAREA" ? ", " : ", ");
+      else if (input.dataset.list === "stages") input.value = (val || []).map(st => `${st.name}|${st.weight}|${st.desc || ""}`).join("\n");
+      else if (input.dataset.list) input.value = (val || []).join(", ");
       else input.value = v == null ? "" : v;
       if (input.dataset.id) updatePreview(input);
     });
@@ -262,6 +292,7 @@
     document.querySelectorAll("[data-path]").forEach(input => {
       let v;
       if (input.type === "checkbox") v = input.checked;
+      else if (input.dataset.list === "stages") v = input.value.split("\n").map(x => x.trim()).filter(Boolean);
       else if (input.dataset.list === "num") v = input.value.split(/[,\s]+/).map(x => parseInt(x, 10)).filter(n => !isNaN(n));
       else if (input.dataset.list === "text") v = input.value.split(/[,\n]/).map(x => x.trim()).filter(Boolean);
       else if (input.type === "number") v = input.value === "" ? null : Number(input.value);
@@ -378,11 +409,55 @@
   }
 
   function applyServerConfig(res) {
+    if (res.codeDefaults) codeDefaults = res.codeDefaults;
     config = res.config;
+    config.codes = config.codes || {};
     savedJson = JSON.stringify(config);
     if (res.history) historyList = res.history;
     fillForm();
     renderHistory();
+    renderDbStatus();
+  }
+
+  function renderDbStatus() {
+    const id = config.sources.dbSheet;
+    const st = $("dbStatus");
+    st.innerHTML = "";
+    if (id) {
+      st.appendChild(document.createTextNode("✅ 연결됨 — "));
+      const a = document.createElement("a");
+      a.href = "https://docs.google.com/spreadsheets/d/" + id + "/edit"; a.target = "_blank"; a.rel = "noopener"; a.textContent = "협업 DB 시트 열기";
+      st.appendChild(a);
+      st.appendChild(document.createTextNode(" (엑셀로 내려받기: 시트에서 파일 → 다운로드 → Microsoft Excel)"));
+    } else {
+      st.textContent = "아직 없음 — 지금은 기존 구글 시트를 읽어 보여주는 상태입니다.";
+    }
+    $("createDbBtn").disabled = !!id;
+    $("migrateBtn").disabled = !id;
+    $("recalcBtn").disabled = !id;
+  }
+
+  async function dbAction(action, confirmText, okText) {
+    if (confirmText && !confirm(confirmText)) return;
+    const box = $("dbResult");
+    box.innerHTML = '<p class="muted">처리 중… (시트를 읽고 쓰느라 1분 가까이 걸릴 수 있습니다)</p>';
+    try {
+      const res = await callAdmin(action, { by: $("byName").value || "관리자" });
+      if (!res.ok) throw new Error(res.message || res.error);
+      box.innerHTML = "";
+      const lines = res.report || (res.db ? ["만든 시트: " + res.db.name] : res.count !== undefined ? ["다시 계산한 사업: " + res.count + "건"] : []);
+      const row = document.createElement("div"); row.className = "result ok";
+      row.innerHTML = '<span class="icon">✅</span>';
+      const body = document.createElement("div"); body.textContent = okText + " — " + lines.join(" / ");
+      row.appendChild(body); box.appendChild(row);
+      if (res.config) applyServerConfig(res);
+    } catch (err) {
+      box.innerHTML = "";
+      const row = document.createElement("div"); row.className = "result ng";
+      row.innerHTML = '<span class="icon">❌</span>';
+      const body = document.createElement("div"); body.textContent = "실패: " + err.message;
+      row.appendChild(body); box.appendChild(row);
+    }
   }
 
   async function runAndApply(action, payload, okText) {
@@ -454,6 +529,9 @@
     if (!confirm("모든 설정을 기본값(2026 운영값)으로 되돌릴까요? 현재 설정은 이력에 남습니다.")) return;
     await runAndApply("reset", { by: $("byName").value }, "기본값으로 복원했습니다.");
   });
+  $("createDbBtn").addEventListener("click", () => dbAction("createDb", "엘라님 드라이브에 협업 DB 시트를 새로 만들까요? 만든 뒤에는 대시보드가 협업 DB 기준으로 바뀝니다(기존 시트는 그대로 둠).", "협업 DB를 만들었습니다"));
+  $("migrateBtn").addEventListener("click", () => dbAction("migrate", "기존 시트(팀 AGENDA·트렌드·실적현황)의 데이터를 협업 DB로 가져올까요? 이미 있는 주차는 건너뜁니다.", "기존 데이터를 가져왔습니다"));
+  $("recalcBtn").addEventListener("click", () => dbAction("recalc", null, "KPI 추산금액을 다시 계산했습니다"));
   $("pwBtn").addEventListener("click", async () => {
     const dashboard = $("newDashPw").value, admin = $("newAdminPw").value;
     if (!dashboard && !admin) { $("pwMsg").textContent = "변경할 비밀번호를 입력하세요."; return; }

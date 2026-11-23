@@ -78,8 +78,6 @@
   .header-actions2 label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--soft); }
   .week-select2 { font-family: inherit; font-size: 13px; font-weight: 500; padding: 7px 10px; border-radius: 0; border: 1px solid rgba(29,31,32,0.28); background: #fff; color: var(--ink); }
   .conn-state2 { font-size: 11px; color: var(--soft); }
-  .btn-settings2 { font-size: 12px; font-weight: 700; padding: 6px 12px; border: 1px solid rgba(29,31,32,0.2); color: var(--soft); text-decoration: none; white-space: nowrap; }
-  .btn-settings2:hover { border-color: var(--accent); color: var(--accent-700); }
   .btn-primary2 { font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; padding: 7px 14px; border-radius: 0; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
   .btn-primary2:hover { background: var(--accent-700); border-color: var(--accent-700); }
 
@@ -469,6 +467,77 @@
   #pwGate button.pw-toggle2 svg { width: 18px; height: 18px; display: block; }
   #pwGate .pw-err2 { margin: 10px 0 0; min-height: 17px; font-size: 12px; color: var(--bad); }
   body.locked .wrap { display: none; }
+  /* ---- 협업 입력(2026-11): 탭 · 표 · 입력 양식 · 모달 ---- */
+  .app-tabs2 { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: -8px 0 22px; border-bottom: 1px solid var(--hairline); }
+  .app-tab2 { font-family: inherit; font-size: 13px; font-weight: 700; padding: 9px 14px; border: none; border-bottom: 3px solid transparent; background: transparent; color: var(--soft); cursor: pointer; }
+  .app-tab2:hover { color: var(--ink); }
+  .app-tab2.active2 { color: var(--ink); border-bottom-color: var(--accent); }
+  .user-chip2 { margin-left: auto; font-family: inherit; font-size: 12px; font-weight: 700; padding: 5px 12px; border: 1px solid var(--accent-300); background: var(--accent-tint); color: var(--accent-900); border-radius: 999px; cursor: pointer; }
+  .data-desc2 { margin: -6px 0 14px; font-size: 12px; color: var(--faint); }
+  .data-table-block2 { margin-top: 10px; }
+  .data-table-block2 + .data-table-block2 { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--hairline); }
+  .data-table-title2 { margin: 0 0 10px; font-size: 15px; }
+  .data-toolbar2 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .data-search2, .data-filter2 { font: inherit; font-size: 12px; padding: 6px 9px; border: 1px solid rgba(29,31,32,0.2); background: #fff; color: var(--ink); min-width: 0; }
+  .data-search2 { width: 180px; }
+  .data-spacer2 { flex: 1 1 auto; }
+  .btn-line2 { font-family: inherit; font-size: 12px; font-weight: 700; padding: 6px 12px; border: 1px solid var(--accent); background: #fff; color: var(--accent-700); cursor: pointer; white-space: nowrap; }
+  .btn-line2:hover { background: #eef6ff; }
+  .btn-line2.small2 { padding: 2px 8px; font-size: 11px; }
+  .btn-danger2 { font-family: inherit; font-size: 12px; font-weight: 700; padding: 7px 14px; border: 1px solid var(--bad); background: #fff; color: var(--bad); cursor: pointer; }
+  .data-summary2 { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 10px; }
+  .stage-chip2 { font-family: inherit; font-size: 11px; padding: 3px 10px; border: 1px solid var(--hairline); background: #fff; color: var(--soft); border-radius: 999px; cursor: pointer; }
+  .stage-chip2 b { color: var(--ink); }
+  .stage-chip2.on2 { border-color: var(--accent); background: var(--accent-tint); }
+  .data-count2 { font-size: 11px; color: var(--faint); margin-left: 4px; }
+  .data-table-wrap2 { overflow-x: auto; border: 1px solid var(--hairline); max-height: 70vh; overflow-y: auto; }
+  .data-table2 { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .data-table2 th { position: sticky; top: 0; background: var(--header-strip); text-align: left; font-size: 11px; font-weight: 700; color: var(--soft); padding: 7px 8px; white-space: nowrap; border-bottom: 1px solid var(--hairline); z-index: 1; }
+  .data-table2 td { padding: 7px 8px; border-bottom: 1px solid #eeece7; vertical-align: top; white-space: nowrap; color: #424244; }
+  .data-table2 td.long2 { white-space: pre-wrap; min-width: 200px; max-width: 420px; }
+  .data-table2 tr.clickable2 { cursor: pointer; }
+  .data-table2 tr.clickable2:hover td { background: #f4f8fc; }
+  .data-table2 td[data-weight="100"] { color: var(--good); font-weight: 700; }
+  .data-table2 td[data-weight="0"] { color: var(--faint); }
+  .modal-back2 { position: fixed; inset: 0; z-index: 600; background: rgba(29,31,32,0.45); display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; }
+  .modal-box2 { width: 100%; max-width: 560px; background: #fff; border: 1px solid var(--ink); box-shadow: var(--shadow-pop); }
+  .modal-box2.wide2 { max-width: 960px; }
+  .modal-head2 { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--hairline); }
+  .modal-head2 h3 { margin: 0; font-size: 16px; }
+  .modal-x2 { border: none; background: transparent; font-size: 22px; line-height: 1; cursor: pointer; color: var(--faint); }
+  .modal-body2 { padding: 16px 18px 18px; }
+  .modal-desc2 { margin: 0 0 12px; font-size: 12px; color: var(--faint); }
+  .user-grid2 { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .user-pick2 { font-family: inherit; font-size: 13px; font-weight: 700; padding: 8px 14px; border: 1px solid var(--accent-300); background: #fff; color: var(--accent-900); cursor: pointer; }
+  .user-pick2:hover { background: var(--accent-tint); }
+  .user-free2 { display: flex; gap: 8px; }
+  .user-free2 input { flex: 1; font: inherit; padding: 7px 10px; border: 1px solid rgba(29,31,32,0.25); }
+  .form-group-title2 { margin: 16px 0 8px; font-size: 12px; color: var(--accent-700); letter-spacing: 0.04em; }
+  .form-group-title2:first-child { margin-top: 0; }
+  .form-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 14px; }
+  .form-field2 { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .form-field2.full2 { grid-column: 1 / -1; }
+  .form-label2 { font-size: 11px; font-weight: 700; color: var(--soft); }
+  .form-field2 input, .form-field2 select, .form-field2 textarea { font: inherit; font-size: 13px; padding: 7px 9px; border: 1px solid rgba(29,31,32,0.25); background: #fff; color: var(--ink); min-width: 0; width: 100%; }
+  .form-field2 textarea { resize: vertical; line-height: 1.5; }
+  .form-auto2 { font-size: 13px; padding: 7px 9px; background: var(--header-strip); color: var(--soft); min-height: 33px; }
+  .form-hint2 { font-size: 10px; color: var(--faint); }
+  .form-msg2 { margin-top: 12px; font-size: 12px; }
+  .form-msg2 ul { margin: 4px 0 0; padding-left: 18px; color: var(--bad); }
+  .err2 { color: var(--bad); }
+  .form-actions2 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--hairline); }
+  .form-meta2 { margin-left: auto; font-size: 11px; color: var(--faint); }
+  .import-sum2 { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .import-pill2 { font-size: 12px; padding: 4px 12px; border: 1px solid var(--hairline); }
+  .import-pill2.new2 { border-color: var(--good); color: var(--good); }
+  .import-pill2.upd2 { border-color: var(--accent); color: var(--accent-700); }
+  .import-pill2.err2 { border-color: var(--bad); }
+  .import-table2 tr.st-error2 td { background: rgba(162,69,60,0.06); }
+  .import-table2 tr.st-new2 td:nth-child(2) { color: var(--good); font-weight: 700; }
+  .import-table2 tr.st-update2 td:nth-child(2) { color: var(--accent-700); font-weight: 700; }
+  .kpi-pipe2 { margin-top: 16px; padding: 10px 14px; border: 1px solid rgba(255,255,255,0.22); font-size: 12px; color: #b9b9bc; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+  .kpi-pipe2 b { color: #ffffff; font-size: 14px; }
+  @media (max-width: 560px) { .app-tab2 { padding: 8px 9px; font-size: 12px; } .data-search2 { width: 100%; } }
 </style>
 </head>
 <body class="locked">
@@ -516,7 +585,6 @@
       <select class="week-select2" id="globalWeekSelect"></select>
       <span class="conn-state2" id="connState"></span>
       <button class="btn-primary2" id="refreshBtn">↻ 새로고침</button>
-      <a class="btn-settings2" href="<?= appUrl ?>?page=admin" target="_top" title="관리자 설정(관리자 비밀번호 필요)">⚙ 설정</a>
     </div>
   </header>
 
@@ -1151,6 +1219,18 @@
       ];
       const halvesBlock = halves.some(x => x.p) ? kpiHalvesBlock(halves) : null;
       card.appendChild(kpiHeroBody(annualBlock, halvesBlock, trendPoints, true));
+      const pipe = sectionCache.kpi && sectionCache.kpi.pipeline;
+      const latestKey = GLOBAL_WEEKS.length ? GLOBAL_WEEKS[0].key : null;
+      if (pipe && key === latestKey) {
+        const box = el("div", "kpi-pipe2");
+        const forecast = annual.actual + pipe.weighted;
+        const add = (label, value) => { const sp = el("span", null); sp.appendChild(document.createTextNode(label + " ")); sp.appendChild(elText("b", null, value)); box.appendChild(sp); };
+        add("확정", `${pipe.confirmedCount}건`);
+        add("진행 중 파이프라인", `${pipe.activeCount}건 · ${fmtAmt(pipe.active)}억`);
+        add("가중 예상", `${fmtAmt(pipe.weighted)}억`);
+        add("연간 전망(확정+가중)", `${fmtAmt(forecast)}억` + (annual.goal ? ` · 목표 대비 ${fmtAch(forecast / annual.goal * 100)}%` : ""));
+        card.appendChild(box);
+      }
     }
     slotEl.innerHTML = "";
     slotEl.appendChild(card);
@@ -2431,9 +2511,11 @@
     hideLoadingOverlay2();
   }
 
+  let collabStarted = false;
   function boot() {
     renderAllPlaceholders();
     loadAll();
+    if (!collabStarted) { collabStarted = true; initCollab(); }
   }
 
   document.getElementById("refreshBtn").addEventListener("click", () => loadAll());
@@ -2461,6 +2543,580 @@
     }
     document.getElementById("pwInput").focus();
   })();
+
+  // ============================================================
+  // 협업 입력(2026-11) — 탭 전환 · 표 편집 · 입력 양식 · 엑셀 업로드/다운로드 · 이름 선택
+  // 저장소는 서버의 협업 DB(구글 시트). 여기서 저장한 내용은 [대시보드] 탭의 KPI·AGENDA·트렌드·
+  // 사업 캘린더(계약 알림)·인사이트에 그대로 반영된다(서버가 화면이 원래 받던 모양으로 계산해 줌).
+  // ============================================================
+  const COLLAB = { meta: null, user: "", view: "dashboard", rows: {}, dashDirty: false, filters: {} };
+  const DATA_VIEWS = [
+    { key: "deals", title: "사업 원장", tables: ["deals"], desc: "광고·IP 사업을 제안부터 확정·불발까지 한 줄로 관리합니다. 확정 건의 KPI 추산금액이 KPI 현황에, 계약 종료일이 사업 캘린더 알림에 반영됩니다." },
+    { key: "kpi", title: "KPI 목표·환율", tables: ["kpiGoals", "fx", "snapshots"], desc: "KPI 목표(Stretch/Base)와 KPI 고정환율을 관리합니다. KPI 금액은 계약금액 × KPI 고정환율로 자동 추산됩니다. 주간기록은 매주 자동 저장됩니다." },
+    { key: "agenda", title: "팀 AGENDA", tables: ["agenda"], desc: "주차별 WIN / SHARE / CHALLENGE 안건을 작성합니다. 지난 주차 내용도 그대로 보관됩니다." },
+    { key: "trend", title: "트렌드 리포트", tables: ["trend"], desc: "주차별 업계 트렌드를 작성합니다. 내용 칸의 줄바꿈 1줄이 대시보드 카드의 글머리 1줄이 됩니다." },
+    { key: "members", title: "팀원", tables: ["members"], desc: "입장할 때 고르는 이름 목록입니다. 저장 기록의 작성자로 표시됩니다." },
+    { key: "log", title: "변경 이력", tables: ["log"], desc: "누가·언제·무엇을 바꿨는지 자동으로 기록됩니다. 삭제된 항목은 [복원]으로 되살릴 수 있습니다." },
+  ];
+  // 표에 보이는 열(나머지는 입력 양식에서 확인)
+  const LIST_COLS = {
+    deals: ["id", "part", "group", "artist", "brand", "name", "stage", "startDate", "endDate", "cur", "amount", "kpiKrw", "kpiHalf", "paidKrw", "updatedBy"],
+    kpiGoals: ["year", "part", "period", "goalS", "goalB", "note", "updatedBy"],
+    fx: ["year", "cur", "unit", "rate", "note", "updatedBy"],
+    snapshots: ["week", "part", "period", "goalS", "goalB", "actual", "pipeline", "weighted", "source", "recordedAt"],
+    agenda: ["week", "kind", "team", "project", "content", "updatedBy", "updatedAt"],
+    trend: ["week", "kind", "artist", "brand", "content", "updatedBy", "updatedAt"],
+    members: ["name", "part", "role", "active", "note"],
+    log: ["at", "user", "table", "recordId", "action", "field", "before", "after"],
+  };
+  // 사업 원장 입력 양식 묶음
+  const DEAL_FORM_GROUPS = [
+    ["기본", ["part", "year", "group", "artist", "brand", "name", "ctype", "ckind", "item", "country", "cond"]],
+    ["진행", ["stage", "stageDate", "shortDate", "decidedDate", "reason"]],
+    ["계약 기간", ["startDate", "startStatus", "endDate", "endStatus", "months"]],
+    ["금액 · KPI", ["cur", "amount", "kpiHalfManual", "kpiHalf", "kpiKrw", "weight", "weighted"]],
+    ["입금(회계 확인 후 입력)", ["paidKrw", "paidDate"]],
+    ["관리", ["owner", "note", "source", "id", "updatedBy", "updatedAt"]],
+  ];
+  const FLEX_HINT = "2026-07-21 (일자) · 2026-07 (월만) · 비우면 미정";
+
+  function callDb(action, payload) {
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(text => { try { resolve(JSON.parse(text)); } catch (e) { reject(e); } })
+        .withFailureHandler(err => reject(err instanceof Error ? err : new Error(String((err && err.message) || err))))
+        .dbApi(action, storedPw(), COLLAB.user, JSON.stringify(payload || {}));
+    });
+  }
+  function tableDef(key) { return COLLAB.meta.tables.find(t => t.key === key); }
+  function colDef(table, key) { return tableDef(table).cols.find(c => c.key === key); }
+  function codeNames(codeKey) { return (COLLAB.meta.codes[codeKey] || []).map(x => (typeof x === "string" ? x : x.name)); }
+  function fmtNum(v) { return typeof v === "number" ? v.toLocaleString("ko-KR") : (v == null ? "" : String(v)); }
+  function weekTitle(key) { const p = String(key || "").split("_"); return p.length === 2 ? `${krMonth(p[0])}월 ${p[1]}주차` : key; }
+  function cellText(table, key, v) {
+    if (v === "" || v == null) return "";
+    if (key === "week") return weekTitle(v);
+    if (key === "weight") return Math.round(v * 100) + "%";
+    if (["amount", "kpiKrw", "weighted", "paidKrw", "rate"].includes(key)) return fmtNum(v);
+    return String(v);
+  }
+
+  // ---------------- 탭 바 · 사용자 ----------------
+  function setupCollabShell() {
+    const header = document.querySelector(".dash-header2");
+    const bar = el("nav", "app-tabs2");
+    bar.id = "appTabs";
+    [{ key: "dashboard", title: "대시보드" }].concat(DATA_VIEWS).forEach(v => {
+      const b = elText("button", "app-tab2" + (v.key === "dashboard" ? " active2" : ""), v.title);
+      b.type = "button"; b.dataset.view = v.key;
+      b.addEventListener("click", () => switchView(v.key));
+      bar.appendChild(b);
+    });
+    const userBtn = el("button", "user-chip2");
+    userBtn.type = "button"; userBtn.id = "userChip";
+    userBtn.addEventListener("click", () => openUserPicker(true));
+    bar.appendChild(userBtn);
+    header.after(bar);
+    const dash = el("div", null); dash.id = "dashView";
+    const insight = document.getElementById("insightSlot");
+    insight.before(dash);
+    dash.appendChild(insight);
+    dash.appendChild(document.getElementById("sectionsRoot"));
+    const data = el("div", null); data.id = "dataView"; data.hidden = true;
+    dash.after(data);
+    updateUserChip();
+  }
+  function updateUserChip() {
+    const chip = document.getElementById("userChip");
+    if (chip) chip.textContent = "👤 " + (COLLAB.user || "이름 선택");
+  }
+  function switchView(key) {
+    COLLAB.view = key;
+    document.querySelectorAll(".app-tab2").forEach(b => b.classList.toggle("active2", b.dataset.view === key));
+    const isDash = key === "dashboard";
+    document.getElementById("dashView").hidden = !isDash;
+    document.getElementById("dataView").hidden = isDash;
+    document.querySelectorAll(".header-actions2 label, #globalWeekSelect").forEach(n => { n.style.visibility = isDash ? "" : "hidden"; });
+    if (isDash) {
+      if (COLLAB.dashDirty) { COLLAB.dashDirty = false; loadAll(); }
+      return;
+    }
+    renderDataView(key);
+  }
+
+  async function initCollab() {
+    setupCollabShell();
+    try {
+      const meta = await callDb("meta");
+      if (!meta.ok) throw new Error(meta.message || meta.error);
+      COLLAB.meta = meta;
+    } catch (err) {
+      COLLAB.meta = { ready: false, error: err.message };
+    }
+    try { COLLAB.user = localStorage.getItem("dashUser") || ""; } catch (e) {}
+    updateUserChip();
+    if (COLLAB.meta.ready && !COLLAB.user) openUserPicker(false);
+  }
+
+  function openUserPicker(closable) {
+    const members = (COLLAB.meta && COLLAB.meta.members) || [];
+    const m = openModal("이름 선택", closable);
+    m.body.appendChild(elText("p", "modal-desc2", "저장한 내용에 작성자로 표시됩니다. 이 브라우저에 기억되며, 오른쪽 위 이름을 눌러 바꿀 수 있습니다."));
+    const list = el("div", "user-grid2");
+    members.forEach(mb => {
+      const b = elText("button", "user-pick2", mb.name + (mb.part ? " · " + mb.part : ""));
+      b.type = "button";
+      b.addEventListener("click", () => { setUser(mb.name); m.close(); });
+      list.appendChild(b);
+    });
+    m.body.appendChild(list);
+    const row = el("div", "user-free2");
+    const input = document.createElement("input");
+    input.type = "text"; input.placeholder = members.length ? "목록에 없으면 직접 입력" : "이름 입력"; input.maxLength = 20;
+    const ok = elText("button", "btn-primary2", "확인"); ok.type = "button";
+    ok.addEventListener("click", () => { if (input.value.trim()) { setUser(input.value.trim()); m.close(); } });
+    input.addEventListener("keydown", e => { if (e.key === "Enter") ok.click(); });
+    row.append(input, ok);
+    m.body.appendChild(row);
+    if (!members.length) m.body.appendChild(elText("p", "modal-desc2", "팀원 탭에 명단을 등록하면 이름을 골라서 들어올 수 있어요."));
+    setTimeout(() => input.focus(), 50);
+  }
+  function setUser(name) {
+    COLLAB.user = name;
+    try { localStorage.setItem("dashUser", name); } catch (e) {}
+    updateUserChip();
+  }
+
+  // ---------------- 모달 ----------------
+  function openModal(title, closable = true, wide = false) {
+    const back = el("div", "modal-back2");
+    const box = el("div", "modal-box2" + (wide ? " wide2" : ""));
+    const head = el("div", "modal-head2");
+    head.appendChild(elText("h3", null, title));
+    const close = () => back.remove();
+    if (closable) {
+      const x = elText("button", "modal-x2", "×"); x.type = "button";
+      x.addEventListener("click", close);
+      head.appendChild(x);
+      back.addEventListener("click", e => { if (e.target === back) close(); });
+    }
+    const body = el("div", "modal-body2");
+    box.append(head, body);
+    back.appendChild(box);
+    document.body.appendChild(back);
+    return { back, box, body, close };
+  }
+
+  // ---------------- 데이터 탭 ----------------
+  async function renderDataView(viewKey) {
+    const host = document.getElementById("dataView");
+    const view = DATA_VIEWS.find(v => v.key === viewKey);
+    host.innerHTML = "";
+    const card = sectionShell(false, "data-card2");
+    const head = el("div", "dashsec-head");
+    const left = el("div", "kicker-left");
+    left.appendChild(elText("span", "dashsec-num", "DATA"));
+    left.appendChild(elText("h2", null, view.title));
+    head.appendChild(left);
+    card.appendChild(head);
+    card.appendChild(elText("p", "data-desc2", view.desc));
+    host.appendChild(card);
+    if (!COLLAB.meta || !COLLAB.meta.ready) {
+      card.appendChild(elText("p", "state-msg2 err2", COLLAB.meta && COLLAB.meta.error
+        ? "협업 DB에 연결하지 못했어요: " + COLLAB.meta.error
+        : "협업 DB가 아직 만들어지지 않았어요. 관리자에게 [협업 DB 만들기]를 요청해 주세요."));
+      return;
+    }
+    for (const t of view.tables) {
+      const section = el("div", "data-table-block2");
+      card.appendChild(section);
+      await renderTableBlock(section, t, view.tables.length > 1);
+    }
+  }
+
+  async function loadRows(table, force) {
+    if (!force && COLLAB.rows[table]) return COLLAB.rows[table];
+    const res = await callDb("list", { table });
+    if (!res.ok) throw new Error(res.message || res.error);
+    COLLAB.rows[table] = res.rows;
+    return res.rows;
+  }
+
+  function defaultFilters(table) {
+    const f = COLLAB.filters[table] || (COLLAB.filters[table] = { q: "", year: String(COLLAB.meta.year), week: "", part: "", stage: "" });
+    if ((table === "agenda" || table === "trend") && !f.week) f.week = COLLAB.meta.currentWeek;
+    return f;
+  }
+
+  function filteredRows(table, rows) {
+    const f = defaultFilters(table);
+    const q = f.q.trim().toLowerCase();
+    return rows.filter(r => {
+      if (f.year && r.year !== undefined && r.year !== "" && String(r.year) !== f.year && table !== "log" && table !== "members") return false;
+      if (f.week && r.week !== undefined && r.week !== f.week) return false;
+      if (f.part && r.part !== f.part) return false;
+      if (f.stage && r.stage !== f.stage) return false;
+      if (q && !Object.values(r).some(v => String(v).toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }
+
+  async function renderTableBlock(section, table, showTitle) {
+    const def = tableDef(table);
+    section.innerHTML = "";
+    if (showTitle) section.appendChild(elText("h3", "data-table-title2", def.sheet.replace(/_/g, " ")));
+    const toolbar = el("div", "data-toolbar2");
+    section.appendChild(toolbar);
+    const summary = el("div", "data-summary2");
+    section.appendChild(summary);
+    const tableWrap = el("div", "data-table-wrap2");
+    section.appendChild(tableWrap);
+    tableWrap.appendChild(elText("p", "state-msg2", "불러오는 중…"));
+    let rows;
+    try { rows = await loadRows(table, true); } catch (err) {
+      tableWrap.innerHTML = ""; tableWrap.appendChild(elText("p", "state-msg2 err2", "불러오지 못했어요: " + err.message)); return;
+    }
+    const f = defaultFilters(table);
+    const rerender = () => renderTableBlock(section, table, showTitle);
+    const redraw = () => drawTable(tableWrap, summary, table, rows);
+
+    // 필터
+    const search = document.createElement("input");
+    search.type = "search"; search.placeholder = "검색"; search.value = f.q; search.className = "data-search2";
+    search.addEventListener("input", () => { f.q = search.value; redraw(); });
+    toolbar.appendChild(search);
+    const addSelect = (label, options, value, onChange) => {
+      const s = document.createElement("select");
+      s.className = "data-filter2";
+      s.appendChild(new Option(label + ": 전체", ""));
+      options.forEach(o => s.appendChild(new Option(typeof o === "string" ? o : o.label, typeof o === "string" ? o : o.value)));
+      s.value = value;
+      s.addEventListener("change", () => { onChange(s.value); redraw(); });
+      toolbar.appendChild(s);
+    };
+    if (def.cols.some(c => c.key === "year")) {
+      const years = Array.from(new Set(rows.map(r => String(r.year)).filter(Boolean).concat(String(COLLAB.meta.year)))).sort().reverse();
+      addSelect("연도", years, f.year, v => { f.year = v; });
+    }
+    if (def.cols.some(c => c.key === "week")) {
+      const weeks = Array.from(new Set(rows.map(r => r.week).filter(Boolean).concat(COLLAB.meta.currentWeek)))
+        .sort((a, b) => { const pa = a.split("_"), pb = b.split("_"); return weekOrder(pb[0], +pb[1]) - weekOrder(pa[0], +pa[1]); });
+      addSelect("주차", weeks.map(w => ({ value: w, label: weekTitle(w) + (w === COLLAB.meta.currentWeek ? " (이번 주)" : "") })), f.week, v => { f.week = v; });
+    }
+    if (table === "deals") {
+      addSelect("파트", codeNames("parts"), f.part, v => { f.part = v; });
+      addSelect("단계", codeNames("stages"), f.stage, v => { f.stage = v; });
+    }
+    const spacer = el("span", "data-spacer2");
+    toolbar.appendChild(spacer);
+    if (def.editable) {
+      const add = elText("button", "btn-primary2", "＋ 새로 추가"); add.type = "button";
+      add.addEventListener("click", () => openRecordForm(table, null, rerender));
+      toolbar.appendChild(add);
+      const up = elText("button", "btn-line2", "엑셀 업로드"); up.type = "button";
+      up.addEventListener("click", () => pickExcel(table, rerender));
+      toolbar.appendChild(up);
+    }
+    const down = elText("button", "btn-line2", "엑셀 다운로드"); down.type = "button";
+    down.addEventListener("click", () => downloadExcel([table], filteredRows(table, rows)));
+    toolbar.appendChild(down);
+    if (table === "deals") {
+      const all = elText("button", "btn-line2", "전체 DB 엑셀"); all.type = "button";
+      all.addEventListener("click", () => downloadAllDb());
+      toolbar.appendChild(all);
+    }
+    redraw();
+  }
+
+  function drawTable(wrap, summary, table, rows) {
+    const def = tableDef(table);
+    const list = filteredRows(table, rows);
+    summary.innerHTML = "";
+    if (table === "deals") {
+      const byStage = {};
+      list.forEach(r => { const s = byStage[r.stage] || (byStage[r.stage] = { n: 0, krw: 0 }); s.n++; if (typeof r.kpiKrw === "number") s.krw += r.kpiKrw; });
+      codeNames("stages").forEach(st => {
+        if (!byStage[st]) return;
+        const chip = el("button", "stage-chip2" + (defaultFilters(table).stage === st ? " on2" : ""));
+        chip.type = "button";
+        chip.appendChild(elText("b", null, st));
+        chip.appendChild(document.createTextNode(` ${byStage[st].n}건 · ${(byStage[st].krw / 1e8).toFixed(1)}억`));
+        chip.addEventListener("click", () => { const f = defaultFilters(table); f.stage = f.stage === st ? "" : st; drawTable(wrap, summary, table, rows); });
+        summary.appendChild(chip);
+      });
+    }
+    summary.appendChild(elText("span", "data-count2", `${list.length}건${list.length !== rows.length ? ` / 전체 ${rows.length}건` : ""}`));
+    wrap.innerHTML = "";
+    if (!list.length) { wrap.appendChild(elText("p", "state-msg2", "조건에 맞는 항목이 없어요." + (def.editable ? " [＋ 새로 추가]로 입력하세요." : ""))); return; }
+    const t = el("table", "data-table2");
+    const thead = el("thead", null), hr = el("tr", null);
+    LIST_COLS[table].forEach(k => hr.appendChild(elText("th", null, colDef(table, k).label)));
+    if (table === "log") hr.appendChild(elText("th", null, ""));
+    thead.appendChild(hr); t.appendChild(thead);
+    const tbody = el("tbody", null);
+    const sorted = list.slice().sort((a, b) => String(b.updatedAt || b.at || b.recordedAt || "").localeCompare(String(a.updatedAt || a.at || a.recordedAt || "")));
+    sorted.slice(0, 500).forEach(r => {
+      const tr = el("tr", def.editable ? "clickable2" : null);
+      LIST_COLS[table].forEach(k => {
+        const td = elText("td", ["content", "before", "after", "name"].includes(k) ? "long2" : null, cellText(table, k, r[k]));
+        if (k === "stage" && r.stage) td.dataset.weight = String(((COLLAB.meta.codes.stages.find(s => s.name === r.stage) || {}).weight) || 0);
+        tr.appendChild(td);
+      });
+      if (table === "log") {
+        const td = el("td", null);
+        if (r.action === "삭제") {
+          const b = elText("button", "btn-line2 small2", "복원"); b.type = "button";
+          b.addEventListener("click", async e => {
+            e.stopPropagation();
+            if (!confirm("이 항목을 복원할까요?")) return;
+            const res = await callDb("restore", { logId: r.id });
+            alert(res.ok ? "복원했습니다." : "복원 실패: " + (res.message || res.error));
+            if (res.ok) { COLLAB.dashDirty = true; renderDataView(COLLAB.view); }
+          });
+          td.appendChild(b);
+        }
+        tr.appendChild(td);
+      }
+      if (def.editable) tr.addEventListener("click", () => openRecordForm(table, r, () => renderDataView(COLLAB.view)));
+      tbody.appendChild(tr);
+    });
+    t.appendChild(tbody);
+    wrap.appendChild(t);
+    if (sorted.length > 500) wrap.appendChild(elText("p", "state-msg2", "최근 500건만 표시합니다. 검색·필터로 좁혀 보세요."));
+  }
+
+  // ---------------- 입력 양식 ----------------
+  function newRecordDefaults(table) {
+    const f = defaultFilters(table);
+    const year = COLLAB.meta.year;
+    if (table === "deals") return { part: "광고", year, stage: codeNames("stages")[0], cur: "KRW", ctype: "신규계약" };
+    if (table === "agenda") return { year, week: f.week || COLLAB.meta.currentWeek, kind: "WIN" };
+    if (table === "trend") return { year, week: f.week || COLLAB.meta.currentWeek, kind: "외부" };
+    if (table === "kpiGoals") return { year, part: "전체", period: "연간" };
+    if (table === "fx") return { year, unit: 1 };
+    if (table === "members") return { role: "팀원", active: "사용" };
+    return {};
+  }
+
+  function fieldInput(table, col, value) {
+    const wrap = el("label", "form-field2" + (col.type === "longtext" ? " full2" : ""));
+    wrap.appendChild(elText("span", "form-label2", col.label + (col.required ? " *" : "")));
+    let input;
+    if (col.type === "auto") {
+      input = elText("div", "form-auto2", cellText(table, col.key, value) || "—(자동)");
+    } else if (col.type === "select") {
+      input = document.createElement("select");
+      if (!col.required) input.appendChild(new Option("—", ""));
+      const names = col.codes === "weeks" ? COLLAB.meta.codes.weeks : codeNames(col.codes);
+      names.forEach(n => input.appendChild(new Option(col.codes === "weeks" ? weekTitle(n) : n, n)));
+      if (value && !names.includes(String(value))) input.appendChild(new Option(String(value) + " (목록에 없음)", value));
+      input.value = value == null ? "" : String(value);
+    } else if (col.type === "longtext") {
+      input = document.createElement("textarea");
+      input.rows = col.key === "content" ? 6 : 3;
+      input.value = value == null ? "" : value;
+    } else {
+      input = document.createElement("input");
+      input.type = "text";
+      if (col.type === "number") { input.inputMode = "decimal"; input.value = value === "" || value == null ? "" : String(value); }
+      else input.value = value == null ? "" : String(value);
+      if (col.type === "flexdate") input.placeholder = FLEX_HINT;
+    }
+    if (col.type !== "auto") input.dataset.key = col.key;
+    wrap.appendChild(input);
+    if (col.type === "flexdate") wrap.appendChild(elText("span", "form-hint2", "월만 알면 2026-07, 모르면 비워 두세요"));
+    if (col.key === "kpiHalfManual") wrap.appendChild(elText("span", "form-hint2", "계약 시작일이 미정일 때 KPI를 인정할 반기"));
+    if (col.key === "stage") {
+      const hint = elText("span", "form-hint2", "");
+      const upd = () => { const s = COLLAB.meta.codes.stages.find(x => x.name === input.value); hint.textContent = s ? `${s.desc || ""} (가중치 ${s.weight}%)` : ""; };
+      input.addEventListener("change", upd); upd();
+      wrap.appendChild(hint);
+    }
+    return wrap;
+  }
+
+  function openRecordForm(table, record, onDone) {
+    const def = tableDef(table);
+    const isNew = !record;
+    const rec = Object.assign({}, isNew ? newRecordDefaults(table) : record);
+    const m = openModal((isNew ? "새로 추가 — " : "수정 — ") + def.sheet.replace(/_/g, " "), true, table === "deals");
+    const form = el("div", "record-form2");
+    const groups = table === "deals" ? DEAL_FORM_GROUPS : [["", def.cols.map(c => c.key)]];
+    groups.forEach(([gTitle, keys]) => {
+      if (gTitle) form.appendChild(elText("h4", "form-group-title2", gTitle));
+      const grid = el("div", "form-grid2");
+      keys.forEach(k => {
+        const col = def.cols.find(c => c.key === k);
+        if (!col || (isNew && col.type === "auto")) return;
+        grid.appendChild(fieldInput(table, col, rec[k]));
+      });
+      form.appendChild(grid);
+    });
+    m.body.appendChild(form);
+    const msg = el("div", "form-msg2");
+    m.body.appendChild(msg);
+    const actions = el("div", "form-actions2");
+    const save = elText("button", "btn-primary2", "저장"); save.type = "button";
+    const cancel = elText("button", "btn-line2", "취소"); cancel.type = "button";
+    cancel.addEventListener("click", m.close);
+    actions.append(save, cancel);
+    if (!isNew) {
+      const del = elText("button", "btn-danger2", "삭제"); del.type = "button";
+      del.addEventListener("click", async () => {
+        if (!confirm("삭제할까요? (변경 이력에서 복원할 수 있습니다)")) return;
+        const res = await callDb("delete", { table, id: rec.id });
+        if (!res.ok) { msg.textContent = res.message || res.error; return; }
+        COLLAB.dashDirty = true; m.close(); onDone && onDone();
+      });
+      actions.appendChild(del);
+    }
+    if (!isNew && rec.updatedAt) actions.appendChild(elText("span", "form-meta2", `최종 수정: ${rec.updatedBy || "-"} · ${rec.updatedAt}`));
+    m.body.appendChild(actions);
+    save.addEventListener("click", async () => {
+      if (!COLLAB.user) { openUserPicker(false); return; }
+      const out = { id: isNew ? "" : rec.id };
+      form.querySelectorAll("[data-key]").forEach(inp => { out[inp.dataset.key] = inp.value; });
+      save.disabled = true; save.textContent = "저장 중…"; msg.innerHTML = "";
+      try {
+        const res = await callDb("save", { table, record: out, baseUpdatedAt: isNew ? undefined : (rec.updatedAt || "") });
+        if (!res.ok) {
+          if (res.error === "invalid") { msg.appendChild(elText("p", "err2", "입력값을 확인해 주세요:")); const ul = el("ul", null); res.errors.forEach(e => ul.appendChild(elText("li", null, e))); msg.appendChild(ul); }
+          else if (res.error === "conflict") {
+            msg.appendChild(elText("p", "err2", res.message));
+            const reload = elText("button", "btn-line2", "최신 내용 불러오기"); reload.type = "button";
+            reload.addEventListener("click", () => { m.close(); openRecordForm(table, res.current, onDone); });
+            msg.appendChild(reload);
+          } else msg.appendChild(elText("p", "err2", res.message || res.error));
+          return;
+        }
+        COLLAB.dashDirty = true;
+        m.close();
+        onDone && onDone();
+      } catch (err) {
+        msg.appendChild(elText("p", "err2", "저장 실패: " + err.message));
+      } finally { save.disabled = false; save.textContent = "저장"; }
+    });
+  }
+
+  // ---------------- 엑셀 ----------------
+  let xlsxLoading = null;
+  function loadXlsx() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (!xlsxLoading) xlsxLoading = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+      s.onload = () => resolve(window.XLSX);
+      s.onerror = () => { xlsxLoading = null; reject(new Error("엑셀 도구를 불러오지 못했어요(네트워크 확인)")); };
+      document.head.appendChild(s);
+    });
+    return xlsxLoading;
+  }
+  function sheetFor(XLSX, table, rows) {
+    const cols = tableDef(table).cols;
+    const aoa = [cols.map(c => c.label)].concat(rows.map(r => cols.map(c => (r[c.key] === undefined ? "" : r[c.key]))));
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = cols.map(c => ({ wch: Math.max(10, Math.min(40, c.label.length * 2 + 2)) }));
+    ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+    return ws;
+  }
+  async function downloadExcel(tables, rowsOverride) {
+    try {
+      const XLSX = await loadXlsx();
+      const wb = XLSX.utils.book_new();
+      for (const t of tables) {
+        const rows = rowsOverride && tables.length === 1 ? rowsOverride : await loadRows(t, true);
+        XLSX.utils.book_append_sheet(wb, sheetFor(XLSX, t, rows), tableDef(t).sheet.slice(0, 31));
+      }
+      const stamp = new Date().toISOString().slice(0, 10);
+      saveWorkbook(XLSX, wb, `${PLATFORM_UI.general.title.replace(/\s+/g, "_")}_${tables.length === 1 ? tableDef(tables[0]).sheet : "전체DB"}_${stamp}.xlsx`);
+    } catch (err) { alert("다운로드 실패: " + err.message); }
+  }
+  // 파일 이름이 확실히 붙도록 Blob + download 링크로 직접 저장
+  function saveWorkbook(XLSX, wb, fileName) {
+    const data = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const url = URL.createObjectURL(new Blob([data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = fileName;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+  function downloadAllDb() { downloadExcel(COLLAB.meta.tables.map(t => t.key)); }
+
+  function pickExcel(table, onDone) {
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = ".xlsx,.xls,.csv";
+    input.addEventListener("change", async () => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      try {
+        const XLSX = await loadXlsx();
+        const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+        const want = tableDef(table).sheet;
+        const ws = wb.Sheets[want] || wb.Sheets[wb.SheetNames[0]];
+        const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
+        // 머리글 행 찾기: 처음 10행 중 글자 칸이 가장 많은 행(BIS 엑셀처럼 위에 제목이 있어도 됨)
+        let hIdx = 0, best = -1;
+        aoa.slice(0, 10).forEach((r, i) => { const n = r.filter(v => typeof v === "string" && v.trim()).length; if (n > best) { best = n; hIdx = i; } });
+        const header = aoa[hIdx].map(h => String(h).trim());
+        const pad = n => String(n).padStart(2, "0");
+        const toCell = v => (v instanceof Date ? `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}` : v);
+        const rows = aoa.slice(hIdx + 1).filter(r => r.some(v => v !== "" && v != null))
+          .map(r => { const o = {}; header.forEach((h, j) => { if (h) o[h] = toCell(r[j]); }); return o; });
+        if (!rows.length) throw new Error("데이터 행이 없어요.");
+        previewImport(table, rows, file.name, onDone);
+      } catch (err) { alert("엑셀을 읽지 못했어요: " + err.message); }
+    });
+    input.click();
+  }
+
+  async function previewImport(table, rows, fileName, onDone) {
+    if (!COLLAB.user) { openUserPicker(false); return; }
+    const m = openModal("엑셀 업로드 미리보기 — " + fileName, true, true);
+    m.body.appendChild(elText("p", "state-msg2", `${rows.length}행 확인 중…`));
+    const res = await callDb("importPreview", { table, rows });
+    m.body.innerHTML = "";
+    if (!res.ok) { m.body.appendChild(elText("p", "err2", res.message || res.error)); return; }
+    const r = res.result;
+    const sum = el("div", "import-sum2");
+    [["신규", r.added, "new2"], ["변경", r.updated, "upd2"], ["변경 없음", r.unchanged, "same2"], ["오류", r.errors, "err2"]].forEach(([k, n, c]) => {
+      const b = el("span", "import-pill2 " + c); b.appendChild(elText("b", null, String(n))); b.appendChild(document.createTextNode(" " + k)); sum.appendChild(b);
+    });
+    m.body.appendChild(sum);
+    m.body.appendChild(elText("p", "modal-desc2", "같은 사업 판단: 사업ID가 있으면 ID로, 없으면 '브랜드 + 아티스트 그룹 + 계약구분 + 시작 월'로 찾습니다. 엑셀의 빈 칸은 기존 값을 유지합니다. 오류 행은 반영되지 않습니다."));
+    const t = el("table", "data-table2 import-table2");
+    const hr = el("tr", null);
+    ["행", "결과", "내용", "변경·오류"].forEach(h => hr.appendChild(elText("th", null, h)));
+    const thead = el("thead", null); thead.appendChild(hr); t.appendChild(thead);
+    const tbody = el("tbody", null);
+    const label = { new: "신규", update: "변경", same: "변경 없음", error: "오류" };
+    r.rows.slice(0, 300).forEach(x => {
+      const tr = el("tr", "st-" + x.status + "2");
+      tr.appendChild(elText("td", null, String(x.line)));
+      tr.appendChild(elText("td", null, label[x.status] + (x.id ? ` (${x.id})` : "")));
+      tr.appendChild(elText("td", "long2", x.summary));
+      const detail = x.errors.length ? x.errors.join(" / ") : x.changes.map(c => `${c.field}: ${c.before || "(빈칸)"} → ${c.after}`).join(" / ") + (x.changeCount > x.changes.length ? ` 외 ${x.changeCount - x.changes.length}건` : "");
+      tr.appendChild(elText("td", "long2", detail));
+      tbody.appendChild(tr);
+    });
+    t.appendChild(tbody);
+    const wrap = el("div", "data-table-wrap2"); wrap.appendChild(t);
+    m.body.appendChild(wrap);
+    const actions = el("div", "form-actions2");
+    const go = elText("button", "btn-primary2", `반영하기 (신규 ${r.added} · 변경 ${r.updated})`); go.type = "button";
+    go.disabled = !(r.added + r.updated);
+    const cancel = elText("button", "btn-line2", "취소"); cancel.type = "button"; cancel.addEventListener("click", m.close);
+    go.addEventListener("click", async () => {
+      go.disabled = true; go.textContent = "반영 중…";
+      const done = await callDb("importCommit", { table, rows });
+      if (!done.ok) { alert("반영 실패: " + (done.message || done.error)); go.disabled = false; return; }
+      COLLAB.dashDirty = true;
+      m.close();
+      alert(`반영했습니다: 신규 ${done.result.added}건 · 변경 ${done.result.updated}건${done.result.errors ? ` · 오류 ${done.result.errors}건 제외` : ""}`);
+      onDone && onDone();
+    });
+    actions.append(go, cancel);
+    m.body.appendChild(actions);
+  }
 </script>
 </body>
 </html>
