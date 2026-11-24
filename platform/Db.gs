@@ -90,6 +90,8 @@ var DB_TABLES = {
       { key: 'note', label: '비고', type: 'text' },
       { key: 'updatedBy', label: '최종 수정자', type: 'auto' },
       { key: 'updatedAt', label: '최종 수정일시', type: 'auto' },
+      // 2026-11 추가: 같은 연도라도 상반기·하반기 환율이 다름. 빈칸 = 그 해 공통(반기 환율이 없을 때 사용)
+      { key: 'half', label: '반기', type: 'select', codes: 'halves' },
     ],
   },
   agenda: {
@@ -367,25 +369,25 @@ function numOrBlank_(v) {
   return isNaN(n) ? null : n;
 }
 
-function fxRateOf_(fxRows, year, cur) {
+// KPI 고정환율: 사업의 실적 반영 반기 환율 → 없으면 그 해 공통 환율. 반기가 아직 없으면 공통 → 하반기 → 상반기.
+function fxRateOf_(fxRows, year, cur, half) {
   if (cur === 'KRW') return 1;
-  for (var i = 0; i < fxRows.length; i++) {
-    var f = fxRows[i];
-    if (Number(f.year) === Number(year) && f.cur === cur && Number(f.rate) > 0) return Number(f.rate) / (Number(f.unit) || 1);
-  }
-  return null;
+  var rows = fxRows.filter(function (f) { return Number(f.year) === Number(year) && f.cur === cur && Number(f.rate) > 0; });
+  var pick = function (h) { return rows.filter(function (f) { return String(f.half || '') === h; })[0]; };
+  var f = half === '상반기' || half === '하반기' ? (pick(half) || pick('')) : (pick('') || pick('하반기') || pick('상반기'));
+  return f ? Number(f.rate) / (Number(f.unit) || 1) : null;
 }
 
 // 사업 원장 자동 칸: KPI 인정 반기·KPI 추산금액·가중치·가중 예상금액·계약기간(빈칸이면)
 function computeDeal_(rec, fxRows) {
   var info = stageInfo_(rec.stage);
-  var rate = fxRateOf_(fxRows, rec.year, rec.cur);
+  var basis = flexMonth_(rec.startDate);
+  rec.kpiHalf = rec.kpiHalfManual || (basis ? (basis.m <= 6 ? '상반기' : '하반기') : (info.weight >= 100 ? '미정(직접 지정 필요)' : ''));
+  var rate = fxRateOf_(fxRows, rec.year, rec.cur, rec.kpiHalf); // 반기별 환율
   var krw = rate && rec.amount !== '' ? Math.round(Number(rec.amount) * rate) : '';
   rec.weight = info.weight / 100;
   rec.kpiKrw = krw === '' ? (rec.cur && rec.cur !== 'KRW' ? 'KPI 환율 없음' : '') : krw;
   rec.weighted = krw === '' ? '' : Math.round(krw * rec.weight);
-  var basis = flexMonth_(rec.startDate);
-  rec.kpiHalf = rec.kpiHalfManual || (basis ? (basis.m <= 6 ? '상반기' : '하반기') : (info.weight >= 100 ? '미정(직접 지정 필요)' : ''));
   if ((rec.months === '' || rec.months === undefined) && flexMonth_(rec.startDate) && flexMonth_(rec.endDate)) {
     var a = flexMonth_(rec.startDate), b = flexMonth_(rec.endDate);
     rec.months = Math.max(0, (b.y - a.y) * 12 + (b.m - a.m));
@@ -519,7 +521,7 @@ function summaryOf_(key, r) {
   if (key === 'trend') return [r.week, r.kind, r.artist, r.brand].join(' · ');
   if (key === 'members') return [r.name, r.part, r.role, r.active].filter(Boolean).join(' · ');
   if (key === 'kpiGoals') return [r.year, r.part, r.period, 'S ' + r.goalS + '억', r.goalB !== '' ? 'B ' + r.goalB + '억' : ''].filter(Boolean).join(' · ');
-  if (key === 'fx') return [r.year, r.cur, (r.unit || 1) + '단위 = ' + r.rate + '원'].join(' · ');
+  if (key === 'fx') return [r.year + (r.half ? ' ' + r.half : ' 공통'), r.cur, (r.unit || 1) + '단위 = ' + r.rate + '원'].join(' · ');
   return JSON.stringify(stripRow_(r));
 }
 function stripRow_(r) { var o = {}; Object.keys(r).forEach(function (k) { if (k !== '_row') o[k] = r[k]; }); return o; }
@@ -535,6 +537,20 @@ function dbDelete_(key, id, user, isAdmin) {
     // 행 전체를 남겨 두면 변경로그에서 [복원] 가능
     appendLogs_([{ user: user, table: key, recordId: id, action: '삭제', field: '', before: stripRow_(row), after: '' }]);
     return { ok: true };
+  });
+}
+
+// 여러 건 한 번에 삭제(관리자 모드). 각 건은 변경 이력에 행 전체를 남겨 [복원] 가능.
+function dbDeleteMany_(key, ids, user) {
+  var t = DB_TABLES[key];
+  if (!t || !t.editable) throw new Error('삭제할 수 없는 탭입니다.');
+  return withLock_(function () {
+    var want = {}; (ids || []).forEach(function (id) { want[id] = true; });
+    var rows = readTable_(key).filter(function (r) { return want[r.id]; }).sort(function (a, b) { return b._row - a._row; }); // 아래 행부터 지워야 번호가 안 밀림
+    var sh = dbSpreadsheet_().getSheetByName(t.sheet);
+    rows.forEach(function (r) { sh.deleteRow(r._row); });
+    appendLogs_(rows.map(function (r) { return { user: user, table: key, recordId: r.id, action: '삭제', field: '일괄 삭제', before: stripRow_(r), after: '' }; }));
+    return { ok: true, done: rows.length, missing: (ids || []).length - rows.length };
   });
 }
 
@@ -573,7 +589,26 @@ var DEAL_ALIASES = {
   'KPI 기준년도': 'year', '광고 시작일': 'startDate', '광고 종료일': 'endDate', '시작일 확정': 'startStatus', '종료일 확정': 'endStatus',
   '계약 유형': 'ctype', '계약 구분': 'ckind', '상세내용': 'name', '브랜드': 'brand', '진행 상태': 'stage', '최종 압축 날짜': 'shortDate',
   '확정/불발 날짜': 'decidedDate', '최종입금금액(KRW)': 'paidKrw', '계약기간': 'monthsText', '분류 (광고/IP)': 'part', '브랜드/파트너사명': 'brand',
+  // 간편 양식(사업 원장 정리용 16칸)
+  '사업명': 'name', '그룹': 'group', '실적 연도': 'year', '반기': 'kpiHalfManual', '실적 반기': 'kpiHalfManual',
+  'KPI 인정 금액(원)': 'kpiFixedKrw', 'KPI 인정 금액': 'kpiFixedKrw', '실적 반영': 'countFlag', '실적 반영(O/X)': 'countFlag',
 };
+// 간편 양식 머리글 순서(다운로드·안내에 사용)
+var SIMPLE_DEAL_COLS = ['사업ID', '파트', '아티스트 그룹', '아티스트', '브랜드', '사업명', '계약구분', '진행 단계', '계약통화', '계약금액', '계약 시작일', '계약 종료일', '비고', '실적 반영', '실적 연도', '반기', 'KPI 인정 금액(원)'];
+// '확정'·'계약 중'·'계약 완료'·'조건 협의 중'처럼 짧거나 다른 이름의 단계 → 진행 단계 이름
+function stageFromText_(text) {
+  var t = String(text || '').trim();
+  if (!t) return '';
+  var names = dbCodes_().stages.map(function (x) { return x.name; });
+  if (names.indexOf(t) >= 0) return t;
+  var bis = BIS_STAGE_MAP[t.replace(/\s/g, '')];
+  if (bis) return bis;
+  var zero = function (re) { return dbCodes_().stages.filter(function (x) { return x.weight === 0 && re.test(x.name); }).map(function (x) { return x.name; })[0] || stageNameByWeight_(0); };
+  if (/불발|드랍|무산|drop/i.test(t)) return zero(/불발/);
+  if (/보류|홀드|hold/i.test(t)) return zero(/보류/);
+  var w = /완료|확정/.test(t) ? 100 : /계약\s*(진행|중)|체결/.test(t) ? 90 : /압축|승인/.test(t) ? 70 : /협의/.test(t) ? 30 : /제안|논의/.test(t) ? 10 : -1;
+  return w >= 0 ? (stageNameByWeight_(w) || t) : t;
+}
 var BIS_STAGE_MAP = { '진행확정': '05 진행 확정', '진행불발': '06 진행 불발', '진행중': '02 협의 중', '최종압축': '03 최종 압축' };
 
 // rows: [{머리글: 값}] (화면에서 SheetJS로 읽은 것)
@@ -621,11 +656,21 @@ function mapImportRow_(key, raw, defaultsUsed) {
   if (key === 'agenda' || key === 'trend' || key === 'kpiGoals' || key === 'fx') fill('year', cfg_().general.year, '연도=' + cfg_().general.year);
   if (key === 'fx') fill('unit', 1, '기준 단위=1');
   if (key === 'deals') {
+    // 자동으로 채운 칸(_defaulted)은 새 사업에만 쓰고, 기존 사업을 갱신할 때는 기존 값을 유지
+    var dflt = out._defaulted = [];
     if (out.year !== undefined) out.year = String(out.year).replace(/[^\d]/g, '');
-    if (!out.year) out.year = cfg_().general.year; // BIS 진행현황처럼 연도 칸이 없으면 현재 기준연도
-    if (out.stage && BIS_STAGE_MAP[String(out.stage).replace(/\s/g, '')]) out.stage = BIS_STAGE_MAP[String(out.stage).replace(/\s/g, '')];
+    if (!out.year) { out.year = cfg_().general.year; dflt.push('year'); } // BIS 진행현황처럼 연도 칸이 없으면 현재 기준연도
+    if (out.stage) out.stage = stageFromText_(out.stage);
+    // 그룹 약칭(BM·TR·WN·BB·YG) · 한글 이름
+    if (out.group) { var gx = String(out.group).replace(/\s+/g, '').trim(); out.group = MASTER_GROUP[gx.toUpperCase()] || groupOf_(gx) || (dbCodes_().groups.indexOf(gx) >= 0 ? gx : (gx ? '기타' : '')); }
+    if (out.part && /IP/i.test(out.part)) out.part = 'IP';
+    if (out.ctype === undefined || out.ctype === '') { fill('ctype', '신규계약', '계약유형=신규계약'); dflt.push('ctype'); }
+    if (!out.artist && out.group) { out.artist = out.group; dflt.push('artist'); }
+    if (out.countFlag !== undefined) { var cf = String(out.countFlag).trim().toUpperCase(); out.countFlag = /^(O|Y|ON|예|반영)$/.test(cf) ? 'O' : /^(X|N|OFF|아니오|제외)$/.test(cf) ? 'X' : ''; }
+    if (out.kpiHalfManual !== undefined) { var hv = String(out.kpiHalfManual).trim(); out.kpiHalfManual = /상/.test(hv) ? '상반기' : /하/.test(hv) ? '하반기' : ''; }
+    if (out.kpiFixedKrw !== undefined && out.kpiFixedKrw !== '' && out.kpiBasis === undefined) out.kpiBasis = '확정 금액';
     if (!out.stage && raw['최종입금금액(KRW)'] !== undefined) out.stage = stageNameByWeight_(100); // 매출현황 = 확정 건
-    if (!out.part) out.part = '광고';
+    if (!out.part) { out.part = '광고'; dflt.push('part'); }
     ['startStatus', 'endStatus'].forEach(function (f) { if (out[f] === '-' || out[f] === '') out[f] = ''; });
     if (out.monthsText && out.months === undefined) { var mm = String(out.monthsText).match(/(\d+)\s*개월/); out.months = mm ? mm[1] : (/일/.test(out.monthsText) ? 0 : ''); }
     delete out.monthsText;
@@ -677,16 +722,36 @@ function dbImport_(key, rawRows, user, commit) {
         // 시작일이 없는 엑셀(예: BIS 진행현황)은 브랜드+아티스트 그룹+계약구분이 하나로 특정될 때만 같은 사업으로 봄
         else { var c2 = byFp2[dealFingerprint2_(rec)]; if (c2 && c2.length === 1 && (!rec.startDate || !c2[0].startDate)) match = c2[0]; }
       }
+      if (match && key === 'deals') {
+        (mapped._defaulted || []).forEach(function (k) { rec[k] = ''; }); // 자동 채움 값으로 기존 값을 덮어쓰지 않음
+        // 간편 양식으로 내려받은 '반기'(자동 계산값)를 그대로 올린 경우는 변경 아님
+        if (rec.kpiHalfManual && !match.kpiHalfManual && rec.kpiHalfManual === match.kpiHalf) rec.kpiHalfManual = '';
+      }
       var status = errors.length ? 'error' : match ? 'update' : 'new';
       var changes = [];
+      var flag = key === 'deals' ? (mapped.countFlag || '') : '';
+      // O = 실적 반영 ON, X = OFF (불발·보류이거나 인정금액·반기가 없으면 켜지 않고 안내)
+      var applyFlag = function (d) {
+        if (!flag) return '';
+        if (flag === 'X') { d.approvedBy = ''; d.approvedAt = ''; return ''; }
+        computeDeal_(d, fxRows);
+        if (stageInfo_(d.stage).weight <= 0) return '실적 반영 O지만 불발·보류 단계라 반영 안 함';
+        if (countedKrw_(d) === '') return '실적 반영 O지만 인정 금액이 없어 반영 안 함(KPI 인정 금액·환율 확인)';
+        if (!d.kpiHalf || String(d.kpiHalf).indexOf('미정') === 0) return '실적 반영 O지만 반기가 없어 반영 안 함(반기 또는 계약 시작일 입력)';
+        if (!d.approvedAt) { d.approvedBy = user; d.approvedAt = nowStamp_(); }
+        return '';
+      };
       if (match && !errors.length) {
         t.cols.forEach(function (c) {
           if (c.type === 'auto' || rec[c.key] === '' ) return; // 빈 칸은 기존 값 유지
           if (String(match[c.key]) !== String(rec[c.key])) changes.push({ field: c.label, before: match[c.key], after: rec[c.key] });
         });
+        if (flag && (flag === 'O') !== !!match.approvedAt) changes.push({ field: '실적 반영', before: match.approvedAt ? 'ON' : 'OFF', after: flag === 'O' ? 'ON' : 'OFF' });
         if (!changes.length) status = 'same';
       }
-      result.rows.push({ line: i + 2, status: status, id: match ? match.id : '', summary: summaryOf_(key, rec), errors: errors, changes: changes.slice(0, 6), changeCount: changes.length });
+      var flagNote = '';
+      if (!errors.length && flag) { var probe = match ? stripRow_(match) : JSON.parse(JSON.stringify(rec)); if (match) t.cols.forEach(function (c) { if (c.type !== 'auto' && rec[c.key] !== '') probe[c.key] = rec[c.key]; }); flagNote = applyFlag(probe); }
+      result.rows.push({ line: i + 2, status: status, id: match ? match.id : '', summary: summaryOf_(key, rec), errors: errors, changes: changes.slice(0, 6), changeCount: changes.length, notes: flagNote ? [flagNote] : [] });
       if (status === 'error') { result.errors++; return; }
       if (status === 'same') { result.unchanged++; return; }
       if (!commit) { status === 'new' ? result.added++ : result.updated++; return; }
@@ -694,7 +759,7 @@ function dbImport_(key, rawRows, user, commit) {
         rec.id = nextId_(key, rec, seq);
         rec.source = '엑셀 업로드 (' + nowStamp_().slice(0, 10) + ')';
         // 엑셀로 들어온 사업은 '오늘 단계가 바뀐 것'이 아니므로 엑셀의 확정/불발일을 단계 변경일로 씀(없으면 빈칸)
-        if (key === 'deals') { rec.stageDate = rec.decidedDate || ''; computeDeal_(rec, fxRows); }
+        if (key === 'deals') { rec.stageDate = rec.decidedDate || ''; applyFlag(rec); computeDeal_(rec, fxRows); }
         rec.updatedBy = user; rec.updatedAt = nowStamp_();
         seq.push(rec); toAppend.push(rec); result.added++;
         logs.push({ user: user, table: key, recordId: rec.id, action: '엑셀 업로드-추가', before: '', after: summaryOf_(key, rec) });
@@ -707,6 +772,7 @@ function dbImport_(key, rawRows, user, commit) {
             merged.approvedBy = ''; merged.approvedAt = '';
             logs.push({ user: user, table: key, recordId: match.id, action: '승인 해제', field: 'KPI 승인', before: '승인', after: '엑셀 업로드로 KPI 관련 내용 변경 → 승인 대기' });
           }
+          applyFlag(merged);
           computeDeal_(merged, fxRows);
         }
         merged.updatedBy = user; merged.updatedAt = nowStamp_();
@@ -1447,16 +1513,16 @@ function dbSaveFx_(year, rates, user) {
     var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.fx.sheet) || ensureTable_(dbSpreadsheet_(), 'fx');
     var rows = readTable_('fx'), logs = [], errors = [], changed = 0;
     (rates || []).forEach(function (r) {
-      var cur = String(r.cur || '').trim();
+      var cur = String(r.cur || '').trim(), half = r.half === '상반기' || r.half === '하반기' ? r.half : '';
       if (!cur || cur === 'KRW') return;
       if (curNames.indexOf(cur) < 0) { errors.push(cur + ': 통화 목록에 없음'); return; }
       var rate = numOrBlank_(r.rate), unit = numOrBlank_(r.unit);
       if (rate === '' ) return;
-      if (rate === null || rate <= 0) { errors.push(cur + ': 환율은 0보다 큰 숫자'); return; }
+      if (rate === null || rate <= 0) { errors.push(cur + (half ? ' ' + half : '') + ': 환율은 0보다 큰 숫자'); return; }
       if (unit === null || unit === '' || unit <= 0) unit = 1;
-      var ex = rows.filter(function (x) { return Number(x.year) === y && x.cur === cur; })[0];
+      var ex = rows.filter(function (x) { return Number(x.year) === y && x.cur === cur && String(x.half || '') === half; })[0];
       if (ex && Number(ex.rate) === rate && Number(ex.unit || 1) === unit) return;
-      var rec = ex ? ex : { id: nextId_('fx', {}, rows), year: y, cur: cur, note: '' };
+      var rec = ex ? ex : { id: nextId_('fx', {}, rows), year: y, cur: cur, half: half, note: '' };
       var before = ex ? summaryOf_('fx', ex) : '';
       rec.unit = unit; rec.rate = rate; rec.updatedBy = user; rec.updatedAt = nowStamp_();
       var row = recordToRow_('fx', rec);
@@ -1550,7 +1616,7 @@ function dbApi(action, password, user, payloadJson) {
   // 관리자 모드: 화면이 관리자 비밀번호를 함께 보내면 확인(틀리면 잠금 횟수에 포함)
   var adminDenied = payload.adminPw ? checkAdminPassword_(payload.adminPw) : { error: 'forbidden' };
   var isAdmin = !adminDenied;
-  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
+  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, deleteMany: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
   // 입력·저장은 팀원 명단(사용)에 있는 이름만. 관리자 모드는 예외, 명단이 비어 있으면(최초 설정) 허용.
   var WRITE_ACTIONS = { save: 1, delete: 1, restore: 1 };
   if (WRITE_ACTIONS[action] && !isAdmin && dbReady_()) {
@@ -1568,6 +1634,7 @@ function dbApi(action, password, user, payloadJson) {
       case 'setBasis': res = dbSetBasis_(payload.ids, payload.basis, user); break;
       case 'saveFx': res = dbSaveFx_(payload.year, payload.rates, user); break;
       case 'addMembers': res = dbAddMembers_(payload.records, user); break;
+      case 'deleteMany': res = dbDeleteMany_(payload.table, payload.ids, user); break;
       case 'setYear': res = { ok: true, year: setOperatingYear_(payload.year, user) }; break;
       case 'saveCodes': res = { ok: true, codes: saveCodes_(payload.codes, user) }; break;
       case 'start': res = { ok: true, report: startPlatform_(user) }; break;
