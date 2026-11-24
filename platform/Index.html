@@ -686,6 +686,18 @@
   .fx-half2 { font-size: 11px; font-weight: 700; color: var(--soft); width: 40px; flex-shrink: 0; }
   .sel-bar2 { position: sticky; left: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fff7f5; border-bottom: 1px solid #f3d3cc; font-size: 12px; }
   .sel-bar2[hidden] { display: none; }
+  .up-steps2 { border: 1px solid var(--hairline); border-radius: 12px; padding: 8px 12px; margin-bottom: 12px; background: #fafbfd; }
+  .up-step2 { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: 12.5px; color: var(--faint); }
+  .up-step2 .up-ico2 { width: 16px; text-align: center; flex-shrink: 0; }
+  .up-step2 .up-txt2 { font-weight: 700; flex-shrink: 0; }
+  .up-step2 .up-sub2 { color: var(--soft); }
+  .up-step2 .up-time2 { margin-left: auto; color: var(--soft); font-size: 11.5px; text-align: right; }
+  .up-step2.run2 { color: var(--accent-700); }
+  .up-step2.run2 .up-ico2 { animation: upPulse 1s ease-in-out infinite; }
+  .up-step2.ok2 { color: var(--good); }
+  .up-step2.hold2 { color: #8a6420; }
+  .up-step2.fail2 { color: var(--bad); }
+  @keyframes upPulse { 50% { opacity: .35; } }
   .sel-bar2 b { color: var(--bad); }
   .sel-col2 { width: 30px; text-align: center !important; }
   .sel-col2 input { width: 15px; height: 15px; cursor: pointer; }
@@ -3972,15 +3984,33 @@
 
   // ---------------- 엑셀 ----------------
   let xlsxLoading = null;
-  function loadXlsx() {
+  const XLSX_SOURCES = [
+    ["cdnjs", "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"],
+    ["jsDelivr", "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"],
+    ["unpkg", "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"],
+  ];
+  function loadXlsx(onStatus) {
     if (window.XLSX) return Promise.resolve(window.XLSX);
-    if (!xlsxLoading) xlsxLoading = new Promise((resolve, reject) => {
-      const s = document.createElement("script");
-      s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-      s.onload = () => resolve(window.XLSX);
-      s.onerror = () => { xlsxLoading = null; reject(new Error("엑셀 도구를 불러오지 못했어요(네트워크 확인)")); };
-      document.head.appendChild(s);
-    });
+    if (!xlsxLoading) xlsxLoading = (async () => {
+      const tried = [];
+      for (const [name, url] of XLSX_SOURCES) {
+        if (onStatus) onStatus(`엑셀 도구 불러오는 중 (${name})…`);
+        const ok = await new Promise(resolve => {
+          const sc = document.createElement("script");
+          let settled = false;
+          const fin = v => { if (!settled) { settled = true; clearTimeout(t); resolve(v); } };
+          const t = setTimeout(() => fin(false), 15000);
+          sc.src = url;
+          sc.onload = () => fin(!!window.XLSX);
+          sc.onerror = () => fin(false);
+          document.head.appendChild(sc);
+        });
+        if (ok && window.XLSX) return window.XLSX;
+        tried.push(name);
+      }
+      xlsxLoading = null;
+      throw new Error("엑셀 도구를 불러오지 못했어요(" + tried.join(", ") + " 모두 응답 없음). 회사 네트워크에서 외부 사이트가 막혔을 수 있어요 — 다른 네트워크(휴대폰 테더링 등)에서 다시 시도하거나 관리자에게 알려 주세요.");
+    })();
     return xlsxLoading;
   }
   function sheetFor(XLSX, table, rows) {
@@ -4058,6 +4088,41 @@
 
   // 엑셀 업로드(관리자): 파일 선택 즉시 진행 창을 띄워 "읽는 중 → 서버 확인 중 → 미리보기 → 반영 결과"를 단계별로 보여줌.
   // 어느 단계에서 실패해도 창 안에 원인을 표시(멈춘 듯 보이지 않게).
+  // 업로드 진행 상황: ① 읽기 ② 서버 확인 ③ 미리보기 ④ 반영 — 각 단계 상태와 경과 시간을 실시간 표시
+  function uploadProgress() {
+    const steps = [["read", "① 엑셀 파일 읽기"], ["check", "② 서버에서 내용 확인"], ["preview", "③ 미리보기 확인"], ["commit", "④ 반영"]];
+    const box = el("div", "up-steps2"), rows = {};
+    steps.forEach(([k, t]) => {
+      const r = el("div", "up-step2 wait2");
+      r.append(elText("span", "up-ico2", "○"), elText("span", "up-txt2", t), elText("span", "up-sub2", ""), elText("span", "up-time2", ""));
+      rows[k] = r; box.appendChild(r);
+    });
+    let timer = null;
+    const stopTimer = () => { if (timer) clearInterval(timer); timer = null; };
+    const mark = (k, state, sub) => {
+      const r = rows[k]; if (!r) return;
+      r.className = "up-step2 " + state + "2";
+      r.querySelector(".up-ico2").textContent = { wait: "○", run: "⏳", ok: "✔", fail: "✖", hold: "●" }[state];
+      if (sub !== undefined) r.querySelector(".up-sub2").textContent = sub;
+    };
+    return {
+      box,
+      start(k, sub) {
+        stopTimer(); mark(k, "run", sub);
+        const t0 = Date.now(), tm = rows[k].querySelector(".up-time2");
+        timer = setInterval(() => {
+          const sec = Math.round((Date.now() - t0) / 1000);
+          tm.textContent = sec + "초" + (sec >= 40 ? " · 오래 걸리고 있어요(행이 많거나 연결이 느림) — 창을 닫지 말고 기다려 주세요" : "");
+        }, 1000);
+      },
+      sub(k, text) { rows[k].querySelector(".up-sub2").textContent = text; },
+      done(k, sub) { stopTimer(); mark(k, "ok", sub); },
+      hold(k, sub) { stopTimer(); mark(k, "hold", sub); },
+      fail(k, sub) { stopTimer(); mark(k, "fail", sub); },
+      stop: stopTimer,
+    };
+  }
+
   function pickExcel(table, onDone) {
     const input = document.createElement("input");
     input.type = "file"; input.accept = ".xlsx,.xls,.csv";
@@ -4065,11 +4130,15 @@
       const file = input.files && input.files[0];
       if (!file) return;
       if (!COLLAB.user) { openUserPicker(false); return; }
-      const m = openModal("엑셀 업로드 — " + file.name, true, true);
-      const step = text => { m.body.innerHTML = ""; m.body.appendChild(elText("p", "state-msg2", text)); };
-      step("① 엑셀 파일 읽는 중…");
+      const modal = openModal("엑셀 업로드 — " + file.name, true, true);
+      const prog = uploadProgress();
+      const content = el("div", "up-content2");
+      modal.body.append(prog.box, content);
+      const m = { body: content, close: () => { prog.stop(); modal.close(); }, prog };
+      prog.start("read", "파일 여는 중…");
       try {
-        const XLSX = await loadXlsx();
+        const XLSX = await loadXlsx(t => prog.sub("read", t));
+        prog.sub("read", "시트 읽는 중…");
         const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
         const want = tableDef(table).sheet;
         const ws = wb.Sheets[want] || wb.Sheets[wb.SheetNames[0]];
@@ -4084,8 +4153,10 @@
         const rows = aoa.slice(hIdx + 1).filter(r => r.some(v => v !== "" && v != null))
           .map(r => { const o = {}; header.forEach((h, j) => { if (h) o[h] = toCell(r[j]); }); return o; });
         if (!rows.length) throw new Error("머리글 아래에 데이터 행이 없어요.");
+        prog.done("read", `${rows.length}행 · 머리글 ${hIdx + 1}번째 줄`);
         await previewImport(table, rows, m, onDone, hIdx + 1);
       } catch (err) {
+        prog.fail("read", "실패");
         showUploadError(m, table, err.message);
       }
     });
@@ -4115,13 +4186,17 @@
   }
 
   async function previewImport(table, rows, m, onDone, headerLine) {
+    const prog = m.prog || uploadProgress();
     m.body.innerHTML = "";
-    m.body.appendChild(elText("p", "state-msg2", `② ${rows.length}행을 서버에서 확인하는 중… (행이 많으면 수십 초 걸릴 수 있어요)`));
+    prog.start("check", `${rows.length}행 확인 중…`);
     let res;
     try { res = await callDb("importPreview", { table, rows }); }
-    catch (err) { showUploadError(m, table, "서버 확인 중 오류 — " + err.message); return; }
-    if (!res.ok) { showUploadError(m, table, res.message || res.error); return; }
+    catch (err) { prog.fail("check", "오류"); showUploadError(m, table, "서버 확인 중 오류 — " + err.message); return; }
+    if (!res.ok) { prog.fail("check", "오류"); showUploadError(m, table, res.message || res.error); return; }
     const r = res.result;
+    prog.done("check", `신규 ${r.added} · 변경 ${r.updated} · 변경 없음 ${r.unchanged} · 오류 ${r.errors}`);
+    if (r.added + r.updated) prog.hold("preview", "아래 내용을 확인한 뒤 [반영하기]를 눌러 주세요 — 아직 반영 전");
+    else prog.hold("preview", "반영할 내용이 없어요");
     m.body.innerHTML = "";
     m.body.appendChild(elText("p", "modal-desc2", `③ 미리보기 — 아직 반영 전입니다. 머리글: ${headerLine}번째 줄`));
     const cols = el("div", "import-colmap2");
@@ -4165,10 +4240,13 @@
     const cancel = elText("button", "btn-line2", "취소"); cancel.type = "button"; cancel.addEventListener("click", m.close);
     go.addEventListener("click", async () => {
       go.disabled = true; cancel.disabled = true; go.textContent = "④ 반영 중… (창을 닫지 마세요)";
+      prog.done("preview", "확인 완료");
+      prog.start("commit", `신규 ${r.added} · 변경 ${r.updated} 저장 중…`);
       let done;
       try { done = await callDb("importCommit", { table, rows }); }
       catch (err) { done = { ok: false, message: err.message }; }
-      if (!done.ok) { go.disabled = false; cancel.disabled = false; go.textContent = "다시 반영하기"; m.body.appendChild(elText("p", "err2", "반영 실패: " + (done.message || done.error))); return; }
+      if (!done.ok) { prog.fail("commit", "실패 — 아래 내용 확인"); go.disabled = false; cancel.disabled = false; go.textContent = "다시 반영하기"; m.body.appendChild(elText("p", "err2", "반영 실패: " + (done.message || done.error))); return; }
+      prog.done("commit", `신규 ${done.result.added} · 변경 ${done.result.updated} 저장 완료`);
       COLLAB.dashDirty = true;
       if (table === "members") await refreshMeta();
       m.body.innerHTML = "";
