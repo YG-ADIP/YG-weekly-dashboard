@@ -2859,7 +2859,7 @@
   function updateAdminChip() {
     const chip = document.getElementById("adminChip");
     if (!chip) return;
-    chip.textContent = isAdminMode() ? "🔓 관리자 모드 (끄기)" : "🔒 관리자 모드";
+    chip.textContent = isAdminMode() ? "\u{1F513} 관리자 모드 (끄기)" : "\u{1F512} 관리자 모드";
     chip.classList.toggle("on2", isAdminMode());
     document.body.classList.toggle("admin-mode2", isAdminMode());
   }
@@ -2919,7 +2919,7 @@
   }
   function updateUserChip() {
     const chip = document.getElementById("userChip");
-    if (chip) chip.textContent = "👤 " + (COLLAB.user || "이름 선택");
+    if (chip) chip.textContent = "\u{1F464} " + (COLLAB.user || "이름 선택");
   }
   function switchView(key) {
     COLLAB.view = key;
@@ -3016,7 +3016,7 @@
     if (!isAdminMode()) {
       const adm = el("div", "user-admin2");
       adm.appendChild(elText("span", null, "관리자이신가요? 명단에 이름이 없어도 관리자 비밀번호로 들어가 팀원을 등록할 수 있어요."));
-      const go = elText("button", "btn-line2", "🔒 관리자 모드로 시작"); go.type = "button";
+      const go = elText("button", "btn-line2", "\u{1F512} 관리자 모드로 시작"); go.type = "button";
       go.addEventListener("click", () => { m.close(); openAdminLogin({ onCancel: () => { if (!COLLAB.user) openUserPicker(false); } }); });
       adm.appendChild(go);
       m.body.appendChild(adm);
@@ -3212,7 +3212,7 @@
     const box = el("div", "start-box2");
     box.appendChild(elText("h3", null, "플랫폼 시작하기"));
     box.appendChild(elText("p", null, "협업 DB(구글 시트)를 만들고, 기존 시트의 팀 AGENDA·트렌드 리포트 지난 주차와 KPI 주차 기록·목표를 한 번에 가져옵니다. 처음 한 번만 하면 됩니다."));
-    if (!isAdminMode()) { box.appendChild(elText("p", "err2", "관리자 모드에서 시작할 수 있어요. 오른쪽 위 [🔒 관리자 모드]를 눌러 주세요.")); return box; }
+    if (!isAdminMode()) { box.appendChild(elText("p", "err2", "관리자 모드에서 시작할 수 있어요. 오른쪽 위 [\u{1F512} 관리자 모드]를 눌러 주세요.")); return box; }
     const go = elText("button", "btn-primary2", "플랫폼 시작하기"); go.type = "button";
     const out = el("div", "form-msg2");
     go.addEventListener("click", async () => {
