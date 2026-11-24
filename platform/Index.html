@@ -686,6 +686,9 @@
   .fx-half2 { font-size: 11px; font-weight: 700; color: var(--soft); width: 40px; flex-shrink: 0; }
   .sel-bar2 { position: sticky; left: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fff7f5; border-bottom: 1px solid #f3d3cc; font-size: 12px; }
   .sel-bar2[hidden] { display: none; }
+  .import-errbox2 { border: 1px solid #f3d3cc; background: #fff7f5; border-radius: 12px; padding: 8px 14px; margin: 8px 0 12px; }
+  .import-errbox2 p { margin: 0 0 4px; }
+  .import-errbox2 ul { margin: 0; padding-left: 18px; font-size: 12px; color: #6b3a33; max-height: 180px; overflow: auto; }
   .up-steps2 { border: 1px solid var(--hairline); border-radius: 12px; padding: 8px 12px; margin-bottom: 12px; background: #fafbfd; }
   .up-step2 { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: 12.5px; color: var(--faint); }
   .up-step2 .up-ico2 { width: 16px; text-align: center; flex-shrink: 0; }
@@ -865,13 +868,58 @@
   function storedPw() { try { return sessionStorage.getItem("dashPw") || ""; } catch { return ""; } }
   function setStoredPw(pw) { try { sessionStorage.setItem("dashPw", pw); } catch {} }
 
-  // 같은 Apps Script 프로젝트의 api()를 직접 호출 — 응답 모양은 기존 JSON API와 동일.
-  function callBackend(section, extraParams) {
+  // ---- 서버 호출(동시 접속 대비) ----
+  // 1) 읽기 요청은 20ms 안에 모인 것을 한 번의 서버 실행(apiBatch)으로 묶음 → 접속당 서버 실행 수를 크게 줄임
+  // 2) 일시 오류(동시 실행 초과·서버 일시 장애·잠금 대기 초과)는 1→2→4초 간격으로 최대 3번 자동 재시도
+  function gsRun(fn, ...args) {
     return new Promise((resolve, reject) => {
       google.script.run
-        .withSuccessHandler(text => { try { resolve(JSON.parse(text)); } catch (e) { reject(e); } })
-        .withFailureHandler(err => reject(err instanceof Error ? err : new Error(String((err && err.message) || err))))
-        .api(section, storedPw(), JSON.stringify(Object.assign({ viewYear: CFG_YEAR }, extraParams || {})));
+        .withSuccessHandler(resolve)
+        .withFailureHandler(err => reject(err instanceof Error ? err : new Error(String((err && err.message) || err))))[fn](...args);
+    });
+  }
+  const TRANSIENT_RE = /too many|simultaneous|invoked too many|unavailable|timed? ?out|timeout|exceeded|internal error|\b(429|500|502|503)\b|network|failed to fetch|서비스|일시/i;
+  const PRE_EXEC_RE = /too many|simultaneous|invoked too many|\b429\b/i; // 서버가 실행 전에 거절한 경우(저장 재시도해도 중복 없음)
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  function showRetry(n) { const el = document.getElementById("connState"); if (el) el.textContent = `접속이 몰려 다시 시도 중… (${n}/3)`; }
+  async function withRetry(run, canRetryError) {
+    for (let i = 0; ; i++) {
+      try {
+        const res = await run();
+        if (res && res.error === "busy" && i < 3) { showRetry(i + 1); await sleep(1000 * 2 ** i + Math.random() * 400); continue; }
+        return res;
+      } catch (err) {
+        if (i >= 3 || !canRetryError(err)) throw err;
+        showRetry(i + 1);
+        await sleep(1000 * 2 ** i + Math.random() * 400);
+      }
+    }
+  }
+  const BATCH_SECTIONS = new Set(["kpi", "insight", "agenda", "trend", "calendar", "businessCalendar", "teamCalendar", "upcomingSelection", "bizEventOverrides"]);
+  let apiQueue = [], apiTimer = null;
+  function flushApiQueue() {
+    const items = apiQueue; apiQueue = []; apiTimer = null;
+    const reqs = items.map(x => ({ section: x.section, params: x.params }));
+    withRetry(() => gsRun("apiBatch", storedPw(), JSON.stringify(reqs)).then(text => JSON.parse(text)), err => TRANSIENT_RE.test(err.message))
+      .then(results => {
+        items.forEach((x, i) => {
+          const r = results[i];
+          if (r && r.error === "not_batchable") callBackendDirect(x.section, x.params).then(x.resolve, x.reject);
+          else x.resolve(r);
+        });
+      })
+      .catch(err => items.forEach(x => x.reject(err)));
+  }
+  function callBackendDirect(section, params) {
+    return withRetry(() => gsRun("api", section, storedPw(), JSON.stringify(params)).then(text => JSON.parse(text)), err => TRANSIENT_RE.test(err.message));
+  }
+  // 같은 Apps Script 프로젝트의 api()를 호출 — 응답 모양은 기존 JSON API와 동일.
+  function callBackend(section, extraParams) {
+    const params = Object.assign({ viewYear: CFG_YEAR }, extraParams || {});
+    if (!BATCH_SECTIONS.has(section)) return callBackendDirect(section, params); // 저장 요청은 묶지 않음(같은 값으로 덮어쓰는 저장이라 재시도해도 안전)
+    return new Promise((resolve, reject) => {
+      apiQueue.push({ section, params, resolve, reject });
+      if (!apiTimer) apiTimer = setTimeout(flushApiQueue, 20);
     });
   }
 
@@ -2692,7 +2740,8 @@
     if (secVisible("bizcal")) tasks.push(loadCalSection(document.getElementById("calSlot")).then(() => markSectionsDone2(["사업 캘린더"])));
     if (secVisible("teamcal")) tasks.push(loadTeamCalSection(document.getElementById("teamCalSlot")).then(() => markSectionsDone2(["팀 일정 캘린더"])));
     await Promise.all(tasks);
-    document.getElementById("connState").textContent = "";
+    const now = new Date();
+    document.getElementById("connState").textContent = `최근 갱신 ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")} · 다른 분의 변경은 최대 1분 뒤 반영`;
     hideLoadingOverlay2();
   }
 
@@ -2814,13 +2863,18 @@
     return "확정 건 — 관리자가 실적 인정 기준을 고르고 [실적 반영]을 켜면 실적으로 집계됩니다. 입금되면 회계 확인 후 실입금액을 입력하세요.";
   }
 
-  function callDb(action, payload) {
-    return new Promise((resolve, reject) => {
-      google.script.run
-        .withSuccessHandler(text => { let res; try { res = JSON.parse(text); } catch (e) { reject(e); return; } if (res && res.error === "unknown_user") { alert(res.message || "팀원 명단에 없는 이름입니다. 이름을 다시 골라 주세요."); setUser(""); refreshMeta().then(() => openUserPicker(false)); } resolve(res); }) // 퇴사 처리 등으로 명단에서 빠진 이름이면 다시 선택
-        .withFailureHandler(err => reject(err instanceof Error ? err : new Error(String((err && err.message) || err))))
-        .dbApi(action, storedPw(), COLLAB.user, JSON.stringify(Object.assign({}, payload || {}, COLLAB.adminPw ? { adminPw: COLLAB.adminPw } : {})));
-    });
+  // 협업 DB 호출: 읽기는 일시 오류면 재시도, 저장은 '서버가 실행 전에 거절'했거나 'busy'(잠금 대기 초과·아무것도 안 씀)일 때만 재시도
+  const DB_READ_ACTIONS = new Set(["meta", "list", "adminCheck"]);
+  async function callDb(action, payload) {
+    const body = JSON.stringify(Object.assign({}, payload || {}, COLLAB.adminPw ? { adminPw: COLLAB.adminPw } : {}));
+    const canRetry = err => (DB_READ_ACTIONS.has(action) ? TRANSIENT_RE : PRE_EXEC_RE).test(err.message);
+    const res = await withRetry(() => gsRun("dbApi", action, storedPw(), COLLAB.user, body).then(text => JSON.parse(text)), canRetry);
+    if (res && res.error === "unknown_user") { // 퇴사 처리 등으로 명단에서 빠진 이름이면 다시 선택
+      alert(res.message || "팀원 명단에 없는 이름입니다. 이름을 다시 골라 주세요.");
+      setUser(""); refreshMeta().then(() => openUserPicker(false));
+    }
+    if (res && res.error === "busy" && !res.message) res.message = "다른 분이 큰 작업을 하고 있어요. 잠시 후 다시 시도해 주세요.";
+    return res;
   }
   function tableDef(key) { return COLLAB.meta.tables.find(t => t.key === key); }
   function colDef(table, key) { return tableDef(table).cols.find(c => c.key === key); }
@@ -4209,6 +4263,16 @@
       const b = el("span", "import-pill2 " + c); b.appendChild(elText("b", null, String(n))); b.appendChild(document.createTextNode(" " + k)); sum.appendChild(b);
     });
     m.body.appendChild(sum);
+    // 오류 행 요약: 어떤 행이 왜 빠지는지 맨 위에 모아서(나머지는 반영 가능)
+    const errRows = r.rows.filter(x => x.status === "error");
+    if (errRows.length && errRows.length < r.rows.length) {
+      const eb = el("div", "import-errbox2");
+      eb.appendChild(elText("p", "err2", `오류 ${errRows.length}건은 반영되지 않아요 — 나머지 ${r.added + r.updated}건은 [반영하기]로 저장됩니다. 오류 행은 엑셀에서 고쳐 다시 올리면 됩니다.`));
+      const ul = el("ul", null);
+      errRows.slice(0, 30).forEach(x => ul.appendChild(elText("li", null, `${x.line - 1 + headerLine}행 · ${x.summary.split(" · ").slice(1, 4).join(" · ")} → ${x.errors.join(" / ")}`)));
+      eb.appendChild(ul);
+      m.body.appendChild(eb);
+    }
     if (r.errors && r.errors === r.rows.length) {
       m.body.appendChild(elText("p", "err2", "모든 행에 오류가 있어 반영할 수 없어요. 아래 오류 내용과 필요한 머리글을 확인해 주세요."));
       m.body.appendChild(templateHelp(table));
@@ -4235,7 +4299,7 @@
     const wrap = el("div", "data-table-wrap2"); wrap.appendChild(t);
     m.body.appendChild(wrap);
     const actions = el("div", "form-actions2");
-    const go = elText("button", "btn-primary2", `반영하기 (신규 ${r.added} · 변경 ${r.updated})`); go.type = "button";
+    const go = elText("button", "btn-primary2", `반영하기 (신규 ${r.added} · 변경 ${r.updated}${r.errors ? ` · 오류 ${r.errors}건 제외` : ""})`); go.type = "button";
     go.disabled = !(r.added + r.updated);
     const cancel = elText("button", "btn-line2", "취소"); cancel.type = "button"; cancel.addEventListener("click", m.close);
     go.addEventListener("click", async () => {

@@ -251,6 +251,28 @@ function api(section, password, paramsJson) {
   return JSON.stringify(handleApi_(params));
 }
 
+// 대시보드 읽기 묶음 호출: 화면이 동시에 보내던 여러 읽기 요청(KPI·AGENDA·트렌드·인사이트·캘린더…)을 한 번에 처리.
+// 동시 접속 때 Apps Script 동시 실행 한도(계정당 30건)를 넘지 않도록 접속당 서버 실행 수를 줄이기 위함.
+var BATCHABLE_SECTIONS = { kpi: 1, insight: 1, agenda: 1, trend: 1, calendar: 1, businessCalendar: 1, teamCalendar: 1, upcomingSelection: 1, bizEventOverrides: 1 };
+function apiBatch(password, requestsJson) {
+  var reqs = [];
+  try { reqs = JSON.parse(requestsJson || '[]') || []; } catch (e) { reqs = []; }
+  var out = reqs.slice(0, 30).map(function (r) {
+    var params = (r && r.params) || {};
+    params.section = r && r.section;
+    params.password = password;
+    if (!BATCHABLE_SECTIONS[params.section]) return { ok: false, error: 'not_batchable' };
+    try { return handleApi_(params); } catch (err) { return { ok: false, error: 'server_error', message: String(err && err.message || err) }; }
+  });
+  return JSON.stringify(out);
+}
+
+// 잠금 대기: 큰 작업(가져오기·대량 업로드) 중이면 최대 30초 기다리고, 그래도 안 되면 'BUSY'로 알림(아무것도 쓰지 않은 상태)
+function waitLockOrBusy_(lock, ms) {
+  try { lock.waitLock(ms || 30000); }
+  catch (e) { var err = new Error('BUSY: 다른 분이 업로드·가져오기 같은 큰 작업을 하고 있어요. 잠시 후 다시 시도해 주세요.'); err.busy = true; throw err; }
+}
+
 function handleApi_(params) {
   var pw = getPassword_();
   if (!pw || params.password !== pw) return { ok: false, error: 'unauthorized' };
@@ -289,6 +311,7 @@ function handleApiInner_(params) {
         return { ok: false, error: 'unknown_section' };
     }
   } catch (err) {
+    if (err && err.busy) return { ok: false, error: 'busy', message: String(err.message).replace(/^BUSY:\s*/, '') };
     return { ok: false, error: 'server_error', message: String(err) };
   }
 }
@@ -356,7 +379,7 @@ function getConfigHistoryIndex_() {
 // 저장할 때마다 그 설정 전체를 별도 속성(PLATFORM_CONFIG_HIST_<시각>)에 스냅숏으로 남기고, 최근 20건만 유지.
 function saveConfig_(config, by, memo) {
   var lock = LockService.getScriptLock();
-  lock.waitLock(10000);
+  waitLockOrBusy_(lock, 30000);
   try {
     var props = PropertiesService.getScriptProperties();
     var json = JSON.stringify(config);
@@ -1210,7 +1233,7 @@ function saveBizEventOverrides_(includeJson, excludeJson, clearJson) {
   var inc = parseKeyList_(includeJson), exc = parseKeyList_(excludeJson), clr = parseKeyList_(clearJson);
   // 여러 팀원이 동시에 저장해도 서로의 선택을 덮어쓰지 않도록 읽기-병합-쓰기를 잠금 안에서 처리.
   var lock = LockService.getScriptLock();
-  lock.waitLock(10000);
+  waitLockOrBusy_(lock, 30000);
   try {
     var cur = getBizEventOverrides_();
     var touched = {};
