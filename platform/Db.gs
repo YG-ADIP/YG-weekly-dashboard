@@ -1551,6 +1551,12 @@ function dbApi(action, password, user, payloadJson) {
   var adminDenied = payload.adminPw ? checkAdminPassword_(payload.adminPw) : { error: 'forbidden' };
   var isAdmin = !adminDenied;
   var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
+  // 입력·저장은 팀원 명단(사용)에 있는 이름만. 관리자 모드는 예외, 명단이 비어 있으면(최초 설정) 허용.
+  var WRITE_ACTIONS = { save: 1, delete: 1, restore: 1 };
+  if (WRITE_ACTIONS[action] && !isAdmin && dbReady_()) {
+    var active = readTable_('members').filter(function (m) { return m.active !== '중지'; }).map(function (m) { return String(m.name).trim(); });
+    if (active.length && active.indexOf(user) < 0) return JSON.stringify({ ok: false, error: 'unknown_user', message: '팀원 명단에 없는 이름(' + user + ')입니다. 이름을 다시 고르거나 관리자에게 팀원 등록을 요청해 주세요.' });
+  }
   if (ADMIN_ACTIONS[action] && !isAdmin) {
     return JSON.stringify(adminDenied.error === 'forbidden' ? { ok: false, error: 'forbidden', message: '관리자 모드에서만 할 수 있습니다.' } : adminDenied);
   }
