@@ -523,6 +523,11 @@
   .user-pick2 { font-family: inherit; font-size: 13px; font-weight: 700; padding: 8px 14px; border: 1px solid var(--accent-300); background: #fff; color: var(--accent-900); cursor: pointer; }
   .user-pick2:hover { background: var(--accent-tint); }
   .user-free2 { display: flex; gap: 8px; }
+  .user-part2 { font-size: 11px; font-weight: 700; color: var(--soft); letter-spacing: 0.04em; margin: 4px 0 6px; }
+  .user-pick2 { border-radius: 10px; }
+  .user-pick2.recent2 { background: var(--accent-tint); border-color: var(--accent); }
+  .user-search2 { width: 100%; margin-bottom: 10px; box-sizing: border-box; }
+  .btn-danger2.small2 { padding: 3px 9px; font-size: 11px; border-radius: 8px; }
   .user-free2 input { flex: 1; font: inherit; padding: 7px 10px; border: 1px solid rgba(29,31,32,0.25); }
   .form-group-title2 { margin: 16px 0 8px; font-size: 12px; color: var(--accent-700); letter-spacing: 0.04em; }
   .form-group-title2:first-child { margin-top: 0; }
@@ -2784,7 +2789,7 @@
   function callDb(action, payload) {
     return new Promise((resolve, reject) => {
       google.script.run
-        .withSuccessHandler(text => { try { resolve(JSON.parse(text)); } catch (e) { reject(e); } })
+        .withSuccessHandler(text => { let res; try { res = JSON.parse(text); } catch (e) { reject(e); return; } if (res && res.error === "unknown_user") { alert(res.message || "팀원 명단에 없는 이름입니다. 이름을 다시 골라 주세요."); setUser(""); refreshMeta().then(() => openUserPicker(false)); } resolve(res); }) // 퇴사 처리 등으로 명단에서 빠진 이름이면 다시 선택
         .withFailureHandler(err => reject(err instanceof Error ? err : new Error(String((err && err.message) || err))))
         .dbApi(action, storedPw(), COLLAB.user, JSON.stringify(Object.assign({}, payload || {}, COLLAB.adminPw ? { adminPw: COLLAB.adminPw } : {})));
     });
@@ -2914,7 +2919,9 @@
     } catch (err) {
       COLLAB.meta = { ready: false, error: err.message };
     }
-    try { COLLAB.user = localStorage.getItem("dashUser") || ""; } catch (e) {}
+    let remembered = "";
+    try { remembered = localStorage.getItem("dashUser") || ""; } catch (e) {}
+    COLLAB.user = rememberedUserValid(remembered) ? remembered : ""; // 이 브라우저에서 고른 이름이 지금 명단에 있으면 자동 인식(퇴사 등으로 빠졌으면 다시 선택)
     // 같은 창에서 새로고침해도 관리자 모드 유지(창을 닫으면 해제)
     try {
       const saved = sessionStorage.getItem("dashAdminPw") || "";
@@ -2926,32 +2933,65 @@
     if (!COLLAB.meta.error && !COLLAB.user) openUserPicker(false); // 첫 입장: 이름 선택(저장·승인 기록의 작성자)
   }
 
+  // 등록된(사용 중) 팀원 이름인지. 명단이 아직 비어 있으면(최초 설정) 어떤 이름이든 허용.
+  function rememberedUserValid(name) {
+    if (!name) return false;
+    const members = (COLLAB.meta && COLLAB.meta.members) || [];
+    return !members.length || members.some(mb => mb.name === name);
+  }
+  // 이름 선택: 팀원 탭에 '사용'으로 등록된 사람만 고를 수 있음(직접 입력 없음). 명단이 비어 있을 때만 직접 입력.
   function openUserPicker(closable) {
     const members = (COLLAB.meta && COLLAB.meta.members) || [];
-    const m = openModal("이름 선택", closable);
-    m.body.appendChild(elText("p", "modal-desc2", "저장한 내용에 작성자로 표시됩니다. 이 브라우저에 기억되며, 오른쪽 위 이름을 눌러 바꿀 수 있습니다."));
-    const list = el("div", "user-grid2");
-    members.forEach(mb => {
-      const b = elText("button", "user-pick2", mb.name + (mb.part ? " · " + mb.part : ""));
-      b.type = "button";
-      b.addEventListener("click", () => { setUser(mb.name); m.close(); });
-      list.appendChild(b);
-    });
-    m.body.appendChild(list);
-    const row = el("div", "user-free2");
-    const input = document.createElement("input");
-    input.type = "text"; input.placeholder = members.length ? "목록에 없으면 직접 입력" : "이름 입력"; input.maxLength = 20;
-    const ok = elText("button", "btn-primary2", "확인"); ok.type = "button";
-    ok.addEventListener("click", () => { if (input.value.trim()) { setUser(input.value.trim()); m.close(); } });
-    input.addEventListener("keydown", e => { if (e.key === "Enter") ok.click(); });
-    row.append(input, ok);
-    m.body.appendChild(row);
-    if (!members.length) m.body.appendChild(elText("p", "modal-desc2", "팀원 탭에 명단을 등록하면 이름을 골라서 들어올 수 있어요."));
-    setTimeout(() => input.focus(), 50);
+    const m = openModal("이름 선택", closable, members.length > 12);
+    let recent = "";
+    try { recent = localStorage.getItem("dashUser") || ""; } catch (e) {}
+    if (!members.length) {
+      m.body.appendChild(elText("p", "modal-desc2", "아직 팀원 명단이 없어 이름을 직접 입력합니다. 관리자 모드 → 팀원 탭에서 명단을 등록하면, 그 뒤로는 등록된 사람만 이름을 골라 들어올 수 있어요."));
+      const row = el("div", "user-free2");
+      const input = document.createElement("input");
+      input.type = "text"; input.placeholder = "이름 입력"; input.maxLength = 20;
+      const ok = elText("button", "btn-primary2", "확인"); ok.type = "button";
+      ok.addEventListener("click", () => { if (input.value.trim()) { setUser(input.value.trim()); m.close(); } });
+      input.addEventListener("keydown", e => { if (e.key === "Enter") ok.click(); });
+      row.append(input, ok);
+      m.body.appendChild(row);
+      setTimeout(() => input.focus(), 50);
+      return;
+    }
+    m.body.appendChild(elText("p", "modal-desc2", "본인 이름을 골라 주세요. 저장한 내용에 작성자로 표시되고, 이 브라우저에서는 다음 접속부터 자동으로 인식됩니다. 이름이 없으면 관리자에게 팀원 등록을 요청해 주세요."));
+    const pick = name => { setUser(name); m.close(); };
+    let search = null;
+    if (members.length > 12) {
+      search = document.createElement("input");
+      search.type = "search"; search.className = "data-search2 user-search2"; search.placeholder = "이름 검색";
+      m.body.appendChild(search);
+    }
+    const wrap = el("div", "user-groups2");
+    const button = (mb, cls, label) => { const b = elText("button", "user-pick2" + (cls ? " " + cls : ""), label); b.type = "button"; b.addEventListener("click", () => pick(mb.name)); return b; };
+    const draw = () => {
+      wrap.innerHTML = "";
+      const q = search ? search.value.trim() : "";
+      const shown = members.filter(mb => !q || mb.name.includes(q) || String(mb.part || "").includes(q));
+      const rec = recent && shown.find(x => x.name === recent);
+      if (rec) {
+        const g = el("div", "user-grid2"); g.appendChild(button(rec, "recent2", rec.name + (rec.part ? " · " + rec.part : "")));
+        wrap.append(elText("div", "user-part2", "최근 사용"), g);
+      }
+      Array.from(new Set(shown.map(mb => mb.part || "기타"))).forEach(pt => {
+        const g = el("div", "user-grid2");
+        shown.filter(mb => (mb.part || "기타") === pt).forEach(mb => g.appendChild(button(mb, "", mb.name)));
+        wrap.append(elText("div", "user-part2", pt), g);
+      });
+      if (!shown.length) wrap.appendChild(elText("p", "state-msg2", "검색 결과가 없어요."));
+    };
+    if (search) search.addEventListener("input", draw);
+    draw();
+    m.body.appendChild(wrap);
+    setTimeout(() => { const f = search || wrap.querySelector("button"); if (f) f.focus(); }, 50);
   }
   function setUser(name) {
     COLLAB.user = name;
-    try { localStorage.setItem("dashUser", name); } catch (e) {}
+    try { if (name) localStorage.setItem("dashUser", name); } catch (e) {}
     updateUserChip();
   }
 
@@ -3404,7 +3444,7 @@
     const t = el("table", "data-table2");
     const thead = el("thead", null), hr = el("tr", null);
     LIST_COLS[table].forEach(k => hr.appendChild(elText("th", null, k === "todo" ? "다음 할 일" : (table === "deals" && k === "approval") ? "실적 반영 · 기준" : colDef(table, k).label)));
-    if (table === "log") hr.appendChild(elText("th", null, ""));
+    if (table === "log" || (table === "members" && isAdminMode())) hr.appendChild(elText("th", null, ""));
     thead.appendChild(hr); t.appendChild(thead);
     const tbody = el("tbody", null);
     const sorted = list.slice().sort((a, b) => String(b.updatedAt || b.at || b.recordedAt || "").localeCompare(String(a.updatedAt || a.at || a.recordedAt || "")));
@@ -3419,6 +3459,20 @@
         if (k === "stage" && r.stage) td.dataset.weight = String(((COLLAB.meta.codes.stages.find(s => s.name === r.stage) || {}).weight) || 0);
         tr.appendChild(td);
       });
+      if (table === "members" && isAdminMode()) {
+        const td = el("td", null);
+        const del = elText("button", "btn-danger2 small2", "삭제(퇴사)"); del.type = "button";
+        del.addEventListener("click", async e => {
+          e.stopPropagation();
+          if (!confirm(`${r.name}님을 팀원 명단에서 삭제할까요? (퇴사 처리)\n\n· 이름 선택 목록에서 빠지고, 이 이름으로는 더 이상 입력·저장할 수 없습니다.\n· 이미 입력한 기록의 작성자 이름은 그대로 남습니다.\n· 잠시 쉬는 경우라면 삭제 대신 '사용여부'를 '중지'로 바꾸세요.\n· 실수로 지웠다면 변경 이력에서 [복원]할 수 있습니다.`)) return;
+          const res = await callDb("delete", { table: "members", id: r.id });
+          if (!res.ok) { alert("삭제 실패: " + (res.message || res.error)); return; }
+          await refreshMeta();
+          renderDataView(COLLAB.view);
+        });
+        td.appendChild(del);
+        tr.appendChild(td);
+      }
       if (table === "log") {
         const td = el("td", null);
         if (r.action === "삭제") {
