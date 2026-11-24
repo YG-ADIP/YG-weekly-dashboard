@@ -686,6 +686,21 @@
   .fx-half2 { font-size: 11px; font-weight: 700; color: var(--soft); width: 40px; flex-shrink: 0; }
   .sel-bar2 { position: sticky; left: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fff7f5; border-bottom: 1px solid #f3d3cc; font-size: 12px; }
   .sel-bar2[hidden] { display: none; }
+  .import-errbox2 { border: 1px solid #f3d3cc; background: #fff7f5; border-radius: 12px; padding: 8px 14px; margin: 8px 0 12px; }
+  .import-errbox2 p { margin: 0 0 4px; }
+  .import-errbox2 ul { margin: 0; padding-left: 18px; font-size: 12px; color: #6b3a33; max-height: 180px; overflow: auto; }
+  .up-steps2 { border: 1px solid var(--hairline); border-radius: 12px; padding: 8px 12px; margin-bottom: 12px; background: #fafbfd; }
+  .up-step2 { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; font-size: 12.5px; color: var(--faint); }
+  .up-step2 .up-ico2 { width: 16px; text-align: center; flex-shrink: 0; }
+  .up-step2 .up-txt2 { font-weight: 700; flex-shrink: 0; }
+  .up-step2 .up-sub2 { color: var(--soft); }
+  .up-step2 .up-time2 { margin-left: auto; color: var(--soft); font-size: 11.5px; text-align: right; }
+  .up-step2.run2 { color: var(--accent-700); }
+  .up-step2.run2 .up-ico2 { animation: upPulse 1s ease-in-out infinite; }
+  .up-step2.ok2 { color: var(--good); }
+  .up-step2.hold2 { color: #8a6420; }
+  .up-step2.fail2 { color: var(--bad); }
+  @keyframes upPulse { 50% { opacity: .35; } }
   .sel-bar2 b { color: var(--bad); }
   .sel-col2 { width: 30px; text-align: center !important; }
   .sel-col2 input { width: 15px; height: 15px; cursor: pointer; }
@@ -853,13 +868,58 @@
   function storedPw() { try { return sessionStorage.getItem("dashPw") || ""; } catch { return ""; } }
   function setStoredPw(pw) { try { sessionStorage.setItem("dashPw", pw); } catch {} }
 
-  // 같은 Apps Script 프로젝트의 api()를 직접 호출 — 응답 모양은 기존 JSON API와 동일.
-  function callBackend(section, extraParams) {
+  // ---- 서버 호출(동시 접속 대비) ----
+  // 1) 읽기 요청은 20ms 안에 모인 것을 한 번의 서버 실행(apiBatch)으로 묶음 → 접속당 서버 실행 수를 크게 줄임
+  // 2) 일시 오류(동시 실행 초과·서버 일시 장애·잠금 대기 초과)는 1→2→4초 간격으로 최대 3번 자동 재시도
+  function gsRun(fn, ...args) {
     return new Promise((resolve, reject) => {
       google.script.run
-        .withSuccessHandler(text => { try { resolve(JSON.parse(text)); } catch (e) { reject(e); } })
-        .withFailureHandler(err => reject(err instanceof Error ? err : new Error(String((err && err.message) || err))))
-        .api(section, storedPw(), JSON.stringify(Object.assign({ viewYear: CFG_YEAR }, extraParams || {})));
+        .withSuccessHandler(resolve)
+        .withFailureHandler(err => reject(err instanceof Error ? err : new Error(String((err && err.message) || err))))[fn](...args);
+    });
+  }
+  const TRANSIENT_RE = /too many|simultaneous|invoked too many|unavailable|timed? ?out|timeout|exceeded|internal error|\b(429|500|502|503)\b|network|failed to fetch|서비스|일시/i;
+  const PRE_EXEC_RE = /too many|simultaneous|invoked too many|\b429\b/i; // 서버가 실행 전에 거절한 경우(저장 재시도해도 중복 없음)
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  function showRetry(n) { const el = document.getElementById("connState"); if (el) el.textContent = `접속이 몰려 다시 시도 중… (${n}/3)`; }
+  async function withRetry(run, canRetryError) {
+    for (let i = 0; ; i++) {
+      try {
+        const res = await run();
+        if (res && res.error === "busy" && i < 3) { showRetry(i + 1); await sleep(1000 * 2 ** i + Math.random() * 400); continue; }
+        return res;
+      } catch (err) {
+        if (i >= 3 || !canRetryError(err)) throw err;
+        showRetry(i + 1);
+        await sleep(1000 * 2 ** i + Math.random() * 400);
+      }
+    }
+  }
+  const BATCH_SECTIONS = new Set(["kpi", "insight", "agenda", "trend", "calendar", "businessCalendar", "teamCalendar", "upcomingSelection", "bizEventOverrides"]);
+  let apiQueue = [], apiTimer = null;
+  function flushApiQueue() {
+    const items = apiQueue; apiQueue = []; apiTimer = null;
+    const reqs = items.map(x => ({ section: x.section, params: x.params }));
+    withRetry(() => gsRun("apiBatch", storedPw(), JSON.stringify(reqs)).then(text => JSON.parse(text)), err => TRANSIENT_RE.test(err.message))
+      .then(results => {
+        items.forEach((x, i) => {
+          const r = results[i];
+          if (r && r.error === "not_batchable") callBackendDirect(x.section, x.params).then(x.resolve, x.reject);
+          else x.resolve(r);
+        });
+      })
+      .catch(err => items.forEach(x => x.reject(err)));
+  }
+  function callBackendDirect(section, params) {
+    return withRetry(() => gsRun("api", section, storedPw(), JSON.stringify(params)).then(text => JSON.parse(text)), err => TRANSIENT_RE.test(err.message));
+  }
+  // 같은 Apps Script 프로젝트의 api()를 호출 — 응답 모양은 기존 JSON API와 동일.
+  function callBackend(section, extraParams) {
+    const params = Object.assign({ viewYear: CFG_YEAR }, extraParams || {});
+    if (!BATCH_SECTIONS.has(section)) return callBackendDirect(section, params); // 저장 요청은 묶지 않음(같은 값으로 덮어쓰는 저장이라 재시도해도 안전)
+    return new Promise((resolve, reject) => {
+      apiQueue.push({ section, params, resolve, reject });
+      if (!apiTimer) apiTimer = setTimeout(flushApiQueue, 20);
     });
   }
 
@@ -2680,7 +2740,8 @@
     if (secVisible("bizcal")) tasks.push(loadCalSection(document.getElementById("calSlot")).then(() => markSectionsDone2(["사업 캘린더"])));
     if (secVisible("teamcal")) tasks.push(loadTeamCalSection(document.getElementById("teamCalSlot")).then(() => markSectionsDone2(["팀 일정 캘린더"])));
     await Promise.all(tasks);
-    document.getElementById("connState").textContent = "";
+    const now = new Date();
+    document.getElementById("connState").textContent = `최근 갱신 ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")} · 다른 분의 변경은 최대 1분 뒤 반영`;
     hideLoadingOverlay2();
   }
 
@@ -2802,13 +2863,18 @@
     return "확정 건 — 관리자가 실적 인정 기준을 고르고 [실적 반영]을 켜면 실적으로 집계됩니다. 입금되면 회계 확인 후 실입금액을 입력하세요.";
   }
 
-  function callDb(action, payload) {
-    return new Promise((resolve, reject) => {
-      google.script.run
-        .withSuccessHandler(text => { let res; try { res = JSON.parse(text); } catch (e) { reject(e); return; } if (res && res.error === "unknown_user") { alert(res.message || "팀원 명단에 없는 이름입니다. 이름을 다시 골라 주세요."); setUser(""); refreshMeta().then(() => openUserPicker(false)); } resolve(res); }) // 퇴사 처리 등으로 명단에서 빠진 이름이면 다시 선택
-        .withFailureHandler(err => reject(err instanceof Error ? err : new Error(String((err && err.message) || err))))
-        .dbApi(action, storedPw(), COLLAB.user, JSON.stringify(Object.assign({}, payload || {}, COLLAB.adminPw ? { adminPw: COLLAB.adminPw } : {})));
-    });
+  // 협업 DB 호출: 읽기는 일시 오류면 재시도, 저장은 '서버가 실행 전에 거절'했거나 'busy'(잠금 대기 초과·아무것도 안 씀)일 때만 재시도
+  const DB_READ_ACTIONS = new Set(["meta", "list", "adminCheck"]);
+  async function callDb(action, payload) {
+    const body = JSON.stringify(Object.assign({}, payload || {}, COLLAB.adminPw ? { adminPw: COLLAB.adminPw } : {}));
+    const canRetry = err => (DB_READ_ACTIONS.has(action) ? TRANSIENT_RE : PRE_EXEC_RE).test(err.message);
+    const res = await withRetry(() => gsRun("dbApi", action, storedPw(), COLLAB.user, body).then(text => JSON.parse(text)), canRetry);
+    if (res && res.error === "unknown_user") { // 퇴사 처리 등으로 명단에서 빠진 이름이면 다시 선택
+      alert(res.message || "팀원 명단에 없는 이름입니다. 이름을 다시 골라 주세요.");
+      setUser(""); refreshMeta().then(() => openUserPicker(false));
+    }
+    if (res && res.error === "busy" && !res.message) res.message = "다른 분이 큰 작업을 하고 있어요. 잠시 후 다시 시도해 주세요.";
+    return res;
   }
   function tableDef(key) { return COLLAB.meta.tables.find(t => t.key === key); }
   function colDef(table, key) { return tableDef(table).cols.find(c => c.key === key); }
@@ -2859,7 +2925,7 @@
   function updateAdminChip() {
     const chip = document.getElementById("adminChip");
     if (!chip) return;
-    chip.textContent = isAdminMode() ? "🔓 관리자 모드 (끄기)" : "🔒 관리자 모드";
+    chip.textContent = isAdminMode() ? "\u{1F513} 관리자 모드 (끄기)" : "\u{1F512} 관리자 모드";
     chip.classList.toggle("on2", isAdminMode());
     document.body.classList.toggle("admin-mode2", isAdminMode());
   }
@@ -2919,7 +2985,7 @@
   }
   function updateUserChip() {
     const chip = document.getElementById("userChip");
-    if (chip) chip.textContent = "👤 " + (COLLAB.user || "이름 선택");
+    if (chip) chip.textContent = "\u{1F464} " + (COLLAB.user || "이름 선택");
   }
   function switchView(key) {
     COLLAB.view = key;
@@ -3016,7 +3082,7 @@
     if (!isAdminMode()) {
       const adm = el("div", "user-admin2");
       adm.appendChild(elText("span", null, "관리자이신가요? 명단에 이름이 없어도 관리자 비밀번호로 들어가 팀원을 등록할 수 있어요."));
-      const go = elText("button", "btn-line2", "🔒 관리자 모드로 시작"); go.type = "button";
+      const go = elText("button", "btn-line2", "\u{1F512} 관리자 모드로 시작"); go.type = "button";
       go.addEventListener("click", () => { m.close(); openAdminLogin({ onCancel: () => { if (!COLLAB.user) openUserPicker(false); } }); });
       adm.appendChild(go);
       m.body.appendChild(adm);
@@ -3212,7 +3278,7 @@
     const box = el("div", "start-box2");
     box.appendChild(elText("h3", null, "플랫폼 시작하기"));
     box.appendChild(elText("p", null, "협업 DB(구글 시트)를 만들고, 기존 시트의 팀 AGENDA·트렌드 리포트 지난 주차와 KPI 주차 기록·목표를 한 번에 가져옵니다. 처음 한 번만 하면 됩니다."));
-    if (!isAdminMode()) { box.appendChild(elText("p", "err2", "관리자 모드에서 시작할 수 있어요. 오른쪽 위 [🔒 관리자 모드]를 눌러 주세요.")); return box; }
+    if (!isAdminMode()) { box.appendChild(elText("p", "err2", "관리자 모드에서 시작할 수 있어요. 오른쪽 위 [\u{1F512} 관리자 모드]를 눌러 주세요.")); return box; }
     const go = elText("button", "btn-primary2", "플랫폼 시작하기"); go.type = "button";
     const out = el("div", "form-msg2");
     go.addEventListener("click", async () => {
@@ -3972,15 +4038,33 @@
 
   // ---------------- 엑셀 ----------------
   let xlsxLoading = null;
-  function loadXlsx() {
+  const XLSX_SOURCES = [
+    ["cdnjs", "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"],
+    ["jsDelivr", "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"],
+    ["unpkg", "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"],
+  ];
+  function loadXlsx(onStatus) {
     if (window.XLSX) return Promise.resolve(window.XLSX);
-    if (!xlsxLoading) xlsxLoading = new Promise((resolve, reject) => {
-      const s = document.createElement("script");
-      s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-      s.onload = () => resolve(window.XLSX);
-      s.onerror = () => { xlsxLoading = null; reject(new Error("엑셀 도구를 불러오지 못했어요(네트워크 확인)")); };
-      document.head.appendChild(s);
-    });
+    if (!xlsxLoading) xlsxLoading = (async () => {
+      const tried = [];
+      for (const [name, url] of XLSX_SOURCES) {
+        if (onStatus) onStatus(`엑셀 도구 불러오는 중 (${name})…`);
+        const ok = await new Promise(resolve => {
+          const sc = document.createElement("script");
+          let settled = false;
+          const fin = v => { if (!settled) { settled = true; clearTimeout(t); resolve(v); } };
+          const t = setTimeout(() => fin(false), 15000);
+          sc.src = url;
+          sc.onload = () => fin(!!window.XLSX);
+          sc.onerror = () => fin(false);
+          document.head.appendChild(sc);
+        });
+        if (ok && window.XLSX) return window.XLSX;
+        tried.push(name);
+      }
+      xlsxLoading = null;
+      throw new Error("엑셀 도구를 불러오지 못했어요(" + tried.join(", ") + " 모두 응답 없음). 회사 네트워크에서 외부 사이트가 막혔을 수 있어요 — 다른 네트워크(휴대폰 테더링 등)에서 다시 시도하거나 관리자에게 알려 주세요.");
+    })();
     return xlsxLoading;
   }
   function sheetFor(XLSX, table, rows) {
@@ -4058,6 +4142,41 @@
 
   // 엑셀 업로드(관리자): 파일 선택 즉시 진행 창을 띄워 "읽는 중 → 서버 확인 중 → 미리보기 → 반영 결과"를 단계별로 보여줌.
   // 어느 단계에서 실패해도 창 안에 원인을 표시(멈춘 듯 보이지 않게).
+  // 업로드 진행 상황: ① 읽기 ② 서버 확인 ③ 미리보기 ④ 반영 — 각 단계 상태와 경과 시간을 실시간 표시
+  function uploadProgress() {
+    const steps = [["read", "① 엑셀 파일 읽기"], ["check", "② 서버에서 내용 확인"], ["preview", "③ 미리보기 확인"], ["commit", "④ 반영"]];
+    const box = el("div", "up-steps2"), rows = {};
+    steps.forEach(([k, t]) => {
+      const r = el("div", "up-step2 wait2");
+      r.append(elText("span", "up-ico2", "○"), elText("span", "up-txt2", t), elText("span", "up-sub2", ""), elText("span", "up-time2", ""));
+      rows[k] = r; box.appendChild(r);
+    });
+    let timer = null;
+    const stopTimer = () => { if (timer) clearInterval(timer); timer = null; };
+    const mark = (k, state, sub) => {
+      const r = rows[k]; if (!r) return;
+      r.className = "up-step2 " + state + "2";
+      r.querySelector(".up-ico2").textContent = { wait: "○", run: "⏳", ok: "✔", fail: "✖", hold: "●" }[state];
+      if (sub !== undefined) r.querySelector(".up-sub2").textContent = sub;
+    };
+    return {
+      box,
+      start(k, sub) {
+        stopTimer(); mark(k, "run", sub);
+        const t0 = Date.now(), tm = rows[k].querySelector(".up-time2");
+        timer = setInterval(() => {
+          const sec = Math.round((Date.now() - t0) / 1000);
+          tm.textContent = sec + "초" + (sec >= 40 ? " · 오래 걸리고 있어요(행이 많거나 연결이 느림) — 창을 닫지 말고 기다려 주세요" : "");
+        }, 1000);
+      },
+      sub(k, text) { rows[k].querySelector(".up-sub2").textContent = text; },
+      done(k, sub) { stopTimer(); mark(k, "ok", sub); },
+      hold(k, sub) { stopTimer(); mark(k, "hold", sub); },
+      fail(k, sub) { stopTimer(); mark(k, "fail", sub); },
+      stop: stopTimer,
+    };
+  }
+
   function pickExcel(table, onDone) {
     const input = document.createElement("input");
     input.type = "file"; input.accept = ".xlsx,.xls,.csv";
@@ -4065,11 +4184,15 @@
       const file = input.files && input.files[0];
       if (!file) return;
       if (!COLLAB.user) { openUserPicker(false); return; }
-      const m = openModal("엑셀 업로드 — " + file.name, true, true);
-      const step = text => { m.body.innerHTML = ""; m.body.appendChild(elText("p", "state-msg2", text)); };
-      step("① 엑셀 파일 읽는 중…");
+      const modal = openModal("엑셀 업로드 — " + file.name, true, true);
+      const prog = uploadProgress();
+      const content = el("div", "up-content2");
+      modal.body.append(prog.box, content);
+      const m = { body: content, close: () => { prog.stop(); modal.close(); }, prog };
+      prog.start("read", "파일 여는 중…");
       try {
-        const XLSX = await loadXlsx();
+        const XLSX = await loadXlsx(t => prog.sub("read", t));
+        prog.sub("read", "시트 읽는 중…");
         const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
         const want = tableDef(table).sheet;
         const ws = wb.Sheets[want] || wb.Sheets[wb.SheetNames[0]];
@@ -4084,8 +4207,10 @@
         const rows = aoa.slice(hIdx + 1).filter(r => r.some(v => v !== "" && v != null))
           .map(r => { const o = {}; header.forEach((h, j) => { if (h) o[h] = toCell(r[j]); }); return o; });
         if (!rows.length) throw new Error("머리글 아래에 데이터 행이 없어요.");
+        prog.done("read", `${rows.length}행 · 머리글 ${hIdx + 1}번째 줄`);
         await previewImport(table, rows, m, onDone, hIdx + 1);
       } catch (err) {
+        prog.fail("read", "실패");
         showUploadError(m, table, err.message);
       }
     });
@@ -4115,13 +4240,17 @@
   }
 
   async function previewImport(table, rows, m, onDone, headerLine) {
+    const prog = m.prog || uploadProgress();
     m.body.innerHTML = "";
-    m.body.appendChild(elText("p", "state-msg2", `② ${rows.length}행을 서버에서 확인하는 중… (행이 많으면 수십 초 걸릴 수 있어요)`));
+    prog.start("check", `${rows.length}행 확인 중…`);
     let res;
     try { res = await callDb("importPreview", { table, rows }); }
-    catch (err) { showUploadError(m, table, "서버 확인 중 오류 — " + err.message); return; }
-    if (!res.ok) { showUploadError(m, table, res.message || res.error); return; }
+    catch (err) { prog.fail("check", "오류"); showUploadError(m, table, "서버 확인 중 오류 — " + err.message); return; }
+    if (!res.ok) { prog.fail("check", "오류"); showUploadError(m, table, res.message || res.error); return; }
     const r = res.result;
+    prog.done("check", `신규 ${r.added} · 변경 ${r.updated} · 변경 없음 ${r.unchanged} · 오류 ${r.errors}`);
+    if (r.added + r.updated) prog.hold("preview", "아래 내용을 확인한 뒤 [반영하기]를 눌러 주세요 — 아직 반영 전");
+    else prog.hold("preview", "반영할 내용이 없어요");
     m.body.innerHTML = "";
     m.body.appendChild(elText("p", "modal-desc2", `③ 미리보기 — 아직 반영 전입니다. 머리글: ${headerLine}번째 줄`));
     const cols = el("div", "import-colmap2");
@@ -4134,6 +4263,16 @@
       const b = el("span", "import-pill2 " + c); b.appendChild(elText("b", null, String(n))); b.appendChild(document.createTextNode(" " + k)); sum.appendChild(b);
     });
     m.body.appendChild(sum);
+    // 오류 행 요약: 어떤 행이 왜 빠지는지 맨 위에 모아서(나머지는 반영 가능)
+    const errRows = r.rows.filter(x => x.status === "error");
+    if (errRows.length && errRows.length < r.rows.length) {
+      const eb = el("div", "import-errbox2");
+      eb.appendChild(elText("p", "err2", `오류 ${errRows.length}건은 반영되지 않아요 — 나머지 ${r.added + r.updated}건은 [반영하기]로 저장됩니다. 오류 행은 엑셀에서 고쳐 다시 올리면 됩니다.`));
+      const ul = el("ul", null);
+      errRows.slice(0, 30).forEach(x => ul.appendChild(elText("li", null, `${x.line - 1 + headerLine}행 · ${x.summary.split(" · ").slice(1, 4).join(" · ")} → ${x.errors.join(" / ")}`)));
+      eb.appendChild(ul);
+      m.body.appendChild(eb);
+    }
     if (r.errors && r.errors === r.rows.length) {
       m.body.appendChild(elText("p", "err2", "모든 행에 오류가 있어 반영할 수 없어요. 아래 오류 내용과 필요한 머리글을 확인해 주세요."));
       m.body.appendChild(templateHelp(table));
@@ -4160,15 +4299,18 @@
     const wrap = el("div", "data-table-wrap2"); wrap.appendChild(t);
     m.body.appendChild(wrap);
     const actions = el("div", "form-actions2");
-    const go = elText("button", "btn-primary2", `반영하기 (신규 ${r.added} · 변경 ${r.updated})`); go.type = "button";
+    const go = elText("button", "btn-primary2", `반영하기 (신규 ${r.added} · 변경 ${r.updated}${r.errors ? ` · 오류 ${r.errors}건 제외` : ""})`); go.type = "button";
     go.disabled = !(r.added + r.updated);
     const cancel = elText("button", "btn-line2", "취소"); cancel.type = "button"; cancel.addEventListener("click", m.close);
     go.addEventListener("click", async () => {
       go.disabled = true; cancel.disabled = true; go.textContent = "④ 반영 중… (창을 닫지 마세요)";
+      prog.done("preview", "확인 완료");
+      prog.start("commit", `신규 ${r.added} · 변경 ${r.updated} 저장 중…`);
       let done;
       try { done = await callDb("importCommit", { table, rows }); }
       catch (err) { done = { ok: false, message: err.message }; }
-      if (!done.ok) { go.disabled = false; cancel.disabled = false; go.textContent = "다시 반영하기"; m.body.appendChild(elText("p", "err2", "반영 실패: " + (done.message || done.error))); return; }
+      if (!done.ok) { prog.fail("commit", "실패 — 아래 내용 확인"); go.disabled = false; cancel.disabled = false; go.textContent = "다시 반영하기"; m.body.appendChild(elText("p", "err2", "반영 실패: " + (done.message || done.error))); return; }
+      prog.done("commit", `신규 ${done.result.added} · 변경 ${done.result.updated} 저장 완료`);
       COLLAB.dashDirty = true;
       if (table === "members") await refreshMeta();
       m.body.innerHTML = "";

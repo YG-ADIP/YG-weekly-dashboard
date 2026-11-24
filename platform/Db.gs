@@ -451,7 +451,7 @@ function nextId_(key, rec, rows) {
 
 function withLock_(fn) {
   var lock = LockService.getScriptLock();
-  lock.waitLock(20000);
+  waitLockOrBusy_(lock, 30000); // 30초 넘게 기다려야 하면 'busy'로 안내(아무것도 저장하지 않음)
   try { return fn(); } finally { lock.releaseLock(); }
 }
 
@@ -856,7 +856,9 @@ function upsertSnapshot_(year, week, status) {
   var cache = CacheService.getScriptCache(), ck = 'snap_' + year + '_' + week;
   var sig = JSON.stringify([status.annual, status.h1, status.h2, status.pipeline]);
   if (cache.get(ck) === sig) return;
-  withLock_(function () {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(0)) return; // 다른 저장이 진행 중이면 이번엔 건너뜀(다음 조회 때 기록)
+  try {
     var rows = readTable_('snapshots');
     var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.snapshots.sheet);
     var lines = [];
@@ -876,7 +878,7 @@ function upsertSnapshot_(year, week, status) {
       if (ex) sh.getRange(ex._row, 1, 1, row.length).setValues([row]);
       else sh.getRange(sh.getLastRow() + 1, 1, 1, row.length).setValues([row]);
     });
-  });
+  } finally { lock.releaseLock(); }
   cache.put(ck, sig, 600);
 }
 
@@ -1568,7 +1570,7 @@ function setOperatingYear_(year, user) {
   var before = c.general.year;
   c.general.year = y;
   saveConfig_(sanitizeConfig_(c), user, '운영 연도 전환: ' + before + ' → ' + y);
-  if (dbReady_()) appendLogs_([{ user: user, table: '기준 정보', recordId: '', action: '운영 연도 전환', field: '운영 연도', before: before, after: y }]);
+  if (dbReady_()) withLock_(function () { appendLogs_([{ user: user, table: '기준 정보', recordId: '', action: '운영 연도 전환', field: '운영 연도', before: before, after: y }]); });
   return y;
 }
 
@@ -1578,8 +1580,10 @@ function saveCodes_(codes, user) {
   c.codes = codes || {};
   saveConfig_(sanitizeConfig_(c), user, '기준 정보(코드) 변경');
   if (dbReady_()) {
-    appendLogs_([{ user: user, table: '기준 정보', recordId: '', action: '기준 정보 변경', field: '진행 단계 등', before: before, after: JSON.stringify(dbCodes_().stages) }]);
-    withLock_(function () { recalcDeals_(user); }); // 가중치가 바뀌었을 수 있으므로 다시 계산
+    withLock_(function () {
+      appendLogs_([{ user: user, table: '기준 정보', recordId: '', action: '기준 정보 변경', field: '진행 단계 등', before: before, after: JSON.stringify(dbCodes_().stages) }]);
+      recalcDeals_(user); // 가중치가 바뀌었을 수 있으므로 다시 계산
+    });
   }
   return dbCodes_();
 }
@@ -1656,6 +1660,7 @@ function dbApi(action, password, user, payloadJson) {
     }
     return JSON.stringify(res);
   } catch (err) {
+    if (err && err.busy) return JSON.stringify({ ok: false, error: 'busy', message: String(err.message).replace(/^BUSY:\s*/, '') });
     return JSON.stringify({ ok: false, error: 'server_error', message: String(err && err.message || err) });
   }
 }
