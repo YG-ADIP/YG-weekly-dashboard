@@ -35,6 +35,7 @@ var DEFAULT_CONFIG = {
     agendaFolder: '1Au_nUt3pQ7nVStq-oITUGTAgwZkprWiP',               // 팀 AGENDA 폴더(가장 최근 수정 시트 사용)
     trendFolder: '1Yqn8wrnsTePtN9OMIaEgBgBIqr1QEmc6',                // 트렌드 리포트 폴더(가장 최근 수정 시트 사용)
     bizCalSheet: '1hS_eFCaFaVo-shSL3oZiGgG1IEsKc5VnNa8oH6vcPig',     // 사업 캘린더(main) 시트
+    masterSheet: '1HlGmNBPK69IWX3OqfVV6Q-MezsXQAG6rC6tdi7cgJmA',     // 광고IP사업 마스터 데이터('1. 실적관리' → 사업 원장 이관 원천)
     teamCalendar: 'c_ba39a76170dcab8c99022cc72144d5706bda1be2cfd589a88eabe857259799a3@group.calendar.google.com',
     teamCalendarLabel: '광고 IP 사업팀 캘린더',
     dbSheet: '', // 협업 DB(구글 시트) — 관리자 설정 [협업 DB 만들기]로 생성. 연결되면 KPI·AGENDA·트렌드·계약 알림을 DB에서 읽음
@@ -148,6 +149,7 @@ function sanitizeConfig_(input) {
       agendaFolder: extractId_(src.agendaFolder) || d.sources.agendaFolder,
       trendFolder: extractId_(src.trendFolder) || d.sources.trendFolder,
       bizCalSheet: extractId_(src.bizCalSheet) || d.sources.bizCalSheet,
+      masterSheet: extractId_(src.masterSheet) || d.sources.masterSheet,
       teamCalendar: extractId_(src.teamCalendar) || d.sources.teamCalendar,
       teamCalendarLabel: cleanText_(src.teamCalendarLabel, 40, d.sources.teamCalendarLabel),
       dbSheet: extractId_(src.dbSheet),
@@ -454,6 +456,14 @@ function testConnections_(config) {
       return findBusinessCalendarRows_(ss)
         ? { ok: true, detail: ss.getName() + ' · 계약 ' + data.items.length + '건(종료일 미정 포함) 확인' }
         : { ok: false, detail: ss.getName() + ' — "프로젝트·계약 종료일·D-DAY" 머리글 표를 찾지 못했습니다.' };
+    });
+    add('마스터 데이터 시트', function () {
+      var ss = SpreadsheetApp.openById(config.sources.masterSheet);
+      var sh = masterLedgerSheet_(ss);
+      if (!sh) return { ok: false, detail: ss.getName() + ' — "실적관리" 탭을 찾지 못했습니다.' };
+      var n = readMasterLedger_(sh).rows.length;
+      return n ? { ok: true, detail: ss.getName() + ' › ' + sh.getName() + ' · 사업 ' + n + '건 확인' }
+        : { ok: false, detail: sh.getName() + ' — "상태 · 광고/사업명" 머리글 표를 찾지 못했습니다.' };
     });
     add('팀 구글 캘린더', function () {
       var cal = CalendarApp.getCalendarById(config.sources.teamCalendar);
