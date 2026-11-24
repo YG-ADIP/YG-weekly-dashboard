@@ -686,6 +686,11 @@
   .fx-half2 { font-size: 11px; font-weight: 700; color: var(--soft); width: 40px; flex-shrink: 0; }
   .sel-bar2 { position: sticky; left: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fff7f5; border-bottom: 1px solid #f3d3cc; font-size: 12px; }
   .sel-bar2[hidden] { display: none; }
+  .up-drop2 { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 26px 16px; border: 2px dashed var(--accent-300); border-radius: 14px; background: var(--accent-tint); color: var(--accent-700); cursor: pointer; text-align: center; }
+  .up-drop2:hover, .up-drop2.over2 { background: #e2ebff; border-color: var(--accent); }
+  .up-drop2 span { font-size: 11.5px; color: var(--soft); }
+  .up-drop2 .up-file2 { margin-top: 6px; font-size: 12px; }
+  .err-toast2 { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 9999; max-width: 680px; background: #3b1e1a; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
   .import-errbox2 { border: 1px solid #f3d3cc; background: #fff7f5; border-radius: 12px; padding: 8px 14px; margin: 8px 0 12px; }
   .import-errbox2 p { margin: 0 0 4px; }
   .import-errbox2 ul { margin: 0; padding-left: 18px; font-size: 12px; color: #6b3a33; max-height: 180px; overflow: auto; }
@@ -867,6 +872,16 @@
   // ---- 비밀번호 게이트 + 데이터 레이어 ----
   function storedPw() { try { return sessionStorage.getItem("dashPw") || ""; } catch { return ""; } }
   function setStoredPw(pw) { try { sessionStorage.setItem("dashPw", pw); } catch {} }
+
+  // ---- 화면 오류 알림 ----
+  function showErrorToast(text) {
+    let t = document.getElementById("errToast");
+    if (!t) { t = el("div", "err-toast2"); t.id = "errToast"; document.body.appendChild(t); }
+    t.textContent = "화면 오류: " + text + " — 새로고침 후 다시 시도해 주세요. 계속되면 이 문구를 관리자에게 알려 주세요.";
+    clearTimeout(t._h); t._h = setTimeout(() => t.remove(), 15000);
+  }
+  window.addEventListener("error", e => showErrorToast((e && e.message) || "알 수 없는 오류"));
+  window.addEventListener("unhandledrejection", e => showErrorToast((e && e.reason && (e.reason.message || String(e.reason))) || "알 수 없는 오류"));
 
   // ---- 서버 호출(동시 접속 대비) ----
   // 1) 읽기 요청은 20ms 안에 모인 것을 한 번의 서버 실행(apiBatch)으로 묶음 → 접속당 서버 실행 수를 크게 줄임
@@ -4177,19 +4192,28 @@
     };
   }
 
+  // 엑셀 업로드: [엑셀 업로드]를 누르면 업로드 창이 바로 열리고(진행 단계 표시), 창 안의 파일 칸으로 고르거나 끌어다 놓음.
+  // (화면에 붙지 않은 파일 칸은 일부 브라우저에서 파일을 골라도 반응이 없어, 파일 칸을 창 안에 실제로 둠)
   function pickExcel(table, onDone) {
+    if (!COLLAB.user) { openUserPicker(false); return; }
+    const modal = openModal("엑셀 업로드 — " + tableDef(table).sheet.replace(/_/g, " "), true, true);
+    const prog = uploadProgress();
+    const content = el("div", "up-content2");
+    const drop = el("label", "up-drop2");
     const input = document.createElement("input");
-    input.type = "file"; input.accept = ".xlsx,.xls,.csv";
-    input.addEventListener("change", async () => {
-      const file = input.files && input.files[0];
-      if (!file) return;
-      if (!COLLAB.user) { openUserPicker(false); return; }
-      const modal = openModal("엑셀 업로드 — " + file.name, true, true);
-      const prog = uploadProgress();
-      const content = el("div", "up-content2");
-      modal.body.append(prog.box, content);
-      const m = { body: content, close: () => { prog.stop(); modal.close(); }, prog };
-      prog.start("read", "파일 여는 중…");
+    input.type = "file"; input.accept = ".xlsx,.xls,.csv"; input.className = "up-file2";
+    drop.append(elText("b", null, "여기를 눌러 엑셀 파일을 고르거나, 파일을 이 칸에 끌어다 놓으세요"), elText("span", null, ".xlsx · .xls · .csv  ·  간편 양식·BIS 엑셀 모두 가능"), input);
+    content.appendChild(drop);
+    modal.body.append(prog.box, content);
+    prog.hold("read", "파일을 골라 주세요");
+    const m = { body: content, close: () => { prog.stop(); modal.close(); }, prog };
+    let started = false;
+    const handle = async file => {
+      if (!file || started) return;
+      started = true;
+      const head = modal.box.querySelector(".modal-head2 h3"); if (head) head.textContent = "엑셀 업로드 — " + file.name;
+      content.innerHTML = "";
+      prog.start("read", file.name + " 여는 중…");
       try {
         const XLSX = await loadXlsx(t => prog.sub("read", t));
         prog.sub("read", "시트 읽는 중…");
@@ -4211,10 +4235,14 @@
         await previewImport(table, rows, m, onDone, hIdx + 1);
       } catch (err) {
         prog.fail("read", "실패");
-        showUploadError(m, table, err.message);
+        showUploadError(m, table, (err && err.message) || String(err));
       }
-    });
-    input.click();
+    };
+    input.addEventListener("change", () => handle(input.files && input.files[0]));
+    ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over2"); }));
+    ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, () => drop.classList.remove("over2")));
+    drop.addEventListener("drop", e => { e.preventDefault(); handle(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]); });
+    input.click(); // 창과 함께 파일 선택도 바로 열기(취소해도 창 안에서 다시 고를 수 있음)
   }
 
   function showUploadError(m, table, message) {
