@@ -680,6 +680,20 @@
   .fx-head2 { display: flex; align-items: center; gap: 10px; }
   .fx-head2 .data-table-title2 { margin: 0; }
   .fx-panel2 > .data-desc2 { margin: 8px 0 0; }
+  .fx-cur2 { display: flex; align-items: center; gap: 6px; }
+  .fx-cur2 .fx-unit2 { width: 56px; font: inherit; font-size: 12px; padding: 4px 6px; border: 1px solid rgba(20,32,66,0.16); border-radius: 8px; text-align: right; }
+  .fx-row2 + .fx-row2 { margin-top: 6px; }
+  .fx-half2 { font-size: 11px; font-weight: 700; color: var(--soft); width: 40px; flex-shrink: 0; }
+  .sel-bar2 { position: sticky; left: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fff7f5; border-bottom: 1px solid #f3d3cc; font-size: 12px; }
+  .sel-bar2[hidden] { display: none; }
+  .sel-bar2 b { color: var(--bad); }
+  .sel-col2 { width: 30px; text-align: center !important; }
+  .sel-col2 input { width: 15px; height: 15px; cursor: pointer; }
+  .data-table2 .freeze2 { position: sticky; z-index: 2; background: #fff; }
+  .data-table2 th.freeze2 { z-index: 3; background: #f7f9fc; }
+  .data-table2 .freeze-last2 { box-shadow: 6px 0 8px -6px rgba(20,32,66,0.18); }
+  .data-table2 tr.clickable2:hover td.freeze2 { background: #f5f8ff; }
+  .hscroll-hint2 { font-size: 11px; color: var(--faint); margin: 0 0 6px; }
   .bulk-table2 input, .bulk-table2 select { font: inherit; font-size: 12px; padding: 6px 8px; border: 1px solid rgba(20,32,66,0.16); border-radius: 8px; width: 100%; min-width: 0; box-sizing: border-box; }
   .bulk-table2 td { padding: 4px 6px; white-space: normal; }
   .bulk-table2 td.dup2 input { border-color: #f1c88a; background: #fffaf0; }
@@ -2725,7 +2739,7 @@
   const LIST_COLS = {
     deals: ["part", "group", "artist", "brand", "name", "stage", "approval", "todo", "cur", "amount", "kpiKrw", "kpiHalf", "endDate"],
     kpiGoals: ["year", "part", "period", "goalS", "goalB", "note", "updatedBy"],
-    fx: ["year", "cur", "unit", "rate", "note", "updatedBy"],
+    fx: ["year", "half", "cur", "unit", "rate", "note", "updatedBy"],
     snapshots: ["week", "part", "period", "goalS", "goalB", "actual", "pipeline", "weighted", "source", "recordedAt"],
     agenda: ["week", "kind", "team", "project", "content", "updatedBy", "updatedAt"],
     trend: ["week", "kind", "artist", "brand", "content", "updatedBy", "updatedAt"],
@@ -3139,7 +3153,7 @@
     yearSel.addEventListener("change", () => { box.dataset.year = yearSel.value; renderFxPanel(box); });
     head.appendChild(yearSel);
     box.appendChild(head);
-    box.appendChild(elText("p", "data-desc2", admin ? "통화별로 '기준 단위당 원화'를 입력하고 [환율 저장]을 누르세요(예: USD 1 = 1,350 · JPY 100 = 900). 저장하면 해당 연도 사업의 KPI 추산금액이 자동으로 다시 계산됩니다." : "관리자가 입력한 KPI 고정환율입니다. 수정은 관리자 모드에서 할 수 있습니다."));
+    box.appendChild(elText("p", "data-desc2", admin ? "통화별로 상반기·하반기 '기준 단위당 원화'를 입력하고 [환율 저장]을 누르세요(예: USD 1 = 상반기 1,400 / 하반기 1,450 · JPY는 기준 100). 사업마다 실적 반영 반기에 맞는 환율이 적용되고, 저장하면 KPI 추산금액이 자동으로 다시 계산됩니다." : "관리자가 입력한 KPI 고정환율(상반기·하반기)입니다. 수정은 관리자 모드에서 할 수 있습니다."));
     let fx = [], deals = [];
     try { [fx, deals] = await Promise.all([loadRows("fx", true), loadRows("deals")]); } catch (e) { box.appendChild(elText("p", "err2", "불러오지 못했어요: " + e.message)); return; }
     const year = parseInt(yearSel.value, 10);
@@ -3148,17 +3162,28 @@
     deals.forEach(d => { if (Number(d.year) === year && d.kpiKrw === "KPI 환율 없음") missing[d.cur] = (missing[d.cur] || 0) + 1; });
     const grid = el("div", "fx-grid2");
     curs.forEach(cur => {
-      const ex = fx.find(r => Number(r.year) === year && r.cur === cur) || {};
+      const mine = fx.filter(r => Number(r.year) === year && r.cur === cur);
+      const of = h => mine.find(r => String(r.half || "") === h) || null;
+      const common = of(""), latest = mine.slice().sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))[0] || {};
       const card = el("div", "fx-card2" + (missing[cur] ? " miss2" : ""));
       card.dataset.cur = cur;
-      card.appendChild(elText("div", "fx-cur2", cur));
-      const row = el("div", "fx-row2");
-      const unit = document.createElement("input"); unit.type = "text"; unit.inputMode = "decimal"; unit.className = "fx-unit2"; unit.value = ex.unit || (cur === "JPY" ? 100 : 1); unit.disabled = !admin; unit.title = "기준 단위";
-      const rate = document.createElement("input"); rate.type = "text"; rate.inputMode = "decimal"; rate.className = "fx-rate2"; rate.value = ex.rate === undefined ? "" : ex.rate; rate.disabled = !admin;
-      rate.placeholder = admin ? "예) " + ({ USD: "1350", CNY: "190", JPY: "900", EUR: "1450" }[cur] || "원화 금액") : "미입력";
-      row.append(unit, elText("span", "fx-eq2", cur + " ="), rate, elText("span", "fx-eq2", "원"));
-      card.appendChild(row);
-      card.appendChild(elText("div", "fx-meta2", missing[cur] ? `환율이 없어 KPI 계산 안 된 사업 ${missing[cur]}건` : (ex.updatedAt ? `${ex.updatedBy || ""} · ${String(ex.updatedAt).slice(0, 10)}` : "")));
+      const head = el("div", "fx-cur2");
+      head.appendChild(document.createTextNode(cur + " "));
+      const unit = document.createElement("input"); unit.type = "text"; unit.inputMode = "decimal"; unit.className = "fx-unit2"; unit.disabled = !admin; unit.title = "기준 단위";
+      unit.value = (of("상반기") || of("하반기") || common || {}).unit || (cur === "JPY" ? 100 : 1);
+      head.append(unit, elText("span", "fx-eq2", cur + " 기준"));
+      card.appendChild(head);
+      ["상반기", "하반기"].forEach(h => {
+        const ex = of(h);
+        const row = el("div", "fx-row2");
+        row.appendChild(elText("span", "fx-half2", h));
+        const rate = document.createElement("input"); rate.type = "text"; rate.inputMode = "decimal"; rate.className = "fx-rate2"; rate.dataset.half = h;
+        rate.value = ex ? ex.rate : ""; rate.disabled = !admin;
+        rate.placeholder = common ? `공통 ${fmtNum(common.rate)}` : (admin ? "예) " + ({ USD: "1350", CNY: "190", JPY: "900", EUR: "1450" }[cur] || "원화 금액") : "미입력");
+        row.append(rate, elText("span", "fx-eq2", "원"));
+        card.appendChild(row);
+      });
+      card.appendChild(elText("div", "fx-meta2", missing[cur] ? `환율이 없어 KPI 계산 안 된 사업 ${missing[cur]}건` : (latest.updatedAt ? `${latest.updatedBy || ""} · ${String(latest.updatedAt).slice(0, 10)}` + (common ? " · 반기 빈칸은 공통 환율 적용" : "") : "")));
       grid.appendChild(card);
     });
     box.appendChild(grid);
@@ -3168,7 +3193,8 @@
     const msg = el("span", "form-meta2");
     save.addEventListener("click", async () => {
       if (!COLLAB.user) { openUserPicker(false); return; }
-      const rates = Array.from(grid.querySelectorAll(".fx-card2")).map(c => ({ cur: c.dataset.cur, unit: c.querySelector(".fx-unit2").value, rate: c.querySelector(".fx-rate2").value }));
+      const rates = [];
+      grid.querySelectorAll(".fx-card2").forEach(c => c.querySelectorAll(".fx-rate2").forEach(r => rates.push({ cur: c.dataset.cur, half: r.dataset.half, unit: c.querySelector(".fx-unit2").value, rate: r.value })));
       save.disabled = true; save.textContent = "저장 중…";
       const res = await callDb("saveFx", { year, rates });
       save.disabled = false; save.textContent = "환율 저장";
@@ -3412,6 +3438,10 @@
     down.addEventListener("click", () => downloadExcel([table], filteredRows(table, rows)));
     toolbar.appendChild(down);
     if (table === "deals") {
+      const simple = elText("button", "btn-line2", "간편 양식 엑셀"); simple.type = "button";
+      simple.title = "사업 원장을 16칸 간편 양식으로 내려받아 정리한 뒤, 관리자 모드 [엑셀 업로드]로 올리면 반영됩니다.";
+      simple.addEventListener("click", () => downloadSimpleDeals(filteredRows(table, rows)));
+      toolbar.appendChild(simple);
       const all = elText("button", "btn-line2", "전체 DB 엑셀"); all.type = "button";
       all.addEventListener("click", () => downloadAllDb());
       toolbar.appendChild(all);
@@ -3462,8 +3492,47 @@
     summary.appendChild(elText("span", "data-count2", `${list.length}건${list.length !== rows.length ? ` / 전체 ${rows.length}건` : ""}`));
     wrap.innerHTML = "";
     if (!list.length) { wrap.appendChild(elText("p", "state-msg2", "조건에 맞는 항목이 없어요." + (def.editable ? " [＋ 새로 추가]로 입력하세요." : ""))); return; }
+    // 선택(관리자 모드 · 사업 원장): 체크한 건 일괄 삭제
+    const selectable = table === "deals" && isAdminMode();
+    const sel = COLLAB.sel || (COLLAB.sel = {});
+    const selSet = sel[table] || (sel[table] = new Set());
+    Array.from(selSet).forEach(id => { if (!list.some(r => r.id === id)) selSet.delete(id); }); // 필터로 안 보이는 건은 선택 해제
+    const selBar = el("div", "sel-bar2");
+    const updateSelBar = () => {
+      selBar.innerHTML = "";
+      selBar.hidden = !selSet.size;
+      if (!selSet.size) return;
+      const picked = list.filter(r => selSet.has(r.id));
+      const sum = picked.reduce((a, r) => a + (typeof r.kpiCounted === "number" ? r.kpiCounted : typeof r.kpiKrw === "number" ? r.kpiKrw : 0), 0);
+      selBar.appendChild(elText("b", null, `${selSet.size}건 선택됨`));
+      selBar.appendChild(elText("span", null, ` · 금액 합계 ${(sum / 1e8).toFixed(2)}억`));
+      const del = elText("button", "btn-danger2 small2", "선택 삭제"); del.type = "button";
+      del.addEventListener("click", async () => {
+        if (!confirm(`선택한 ${selSet.size}건(금액 합계 ${(sum / 1e8).toFixed(2)}억)을 삭제할까요?\n삭제한 건은 변경 이력에서 하나씩 [복원]할 수 있습니다.`)) return;
+        del.disabled = true; del.textContent = "삭제 중…";
+        const res = await callDb("deleteMany", { table, ids: Array.from(selSet) });
+        if (!res.ok) { alert("삭제 실패: " + (res.message || res.error)); del.disabled = false; del.textContent = "선택 삭제"; return; }
+        selSet.clear(); COLLAB.dashDirty = true;
+        alert(`${res.done}건 삭제했습니다.`);
+        renderDataView(COLLAB.view);
+      });
+      const clear = elText("button", "btn-line2 small2", "선택 해제"); clear.type = "button";
+      clear.addEventListener("click", () => { selSet.clear(); wrap.querySelectorAll(".sel-cb2").forEach(c => { c.checked = false; }); updateSelBar(); });
+      selBar.append(del, clear);
+    };
+    if (selectable) wrap.appendChild(selBar);
     const t = el("table", "data-table2");
     const thead = el("thead", null), hr = el("tr", null);
+    if (selectable) {
+      const th = el("th", "sel-col2");
+      const all = document.createElement("input"); all.type = "checkbox"; all.className = "sel-all2"; all.title = "지금 목록 전체 선택";
+      all.addEventListener("change", () => {
+        list.slice(0, 500).forEach(r => { if (all.checked) selSet.add(r.id); else selSet.delete(r.id); });
+        wrap.querySelectorAll(".sel-cb2").forEach(c => { c.checked = all.checked; });
+        updateSelBar();
+      });
+      th.appendChild(all); hr.appendChild(th);
+    }
     LIST_COLS[table].forEach(k => hr.appendChild(elText("th", null, k === "todo" ? "다음 할 일" : (table === "deals" && k === "approval") ? "실적 반영 · 기준" : colDef(table, k).label)));
     if (table === "log" || (table === "members" && isAdminMode())) hr.appendChild(elText("th", null, ""));
     thead.appendChild(hr); t.appendChild(thead);
@@ -3472,6 +3541,14 @@
     sorted.slice(0, 500).forEach(r => {
       const tr = el("tr", canEdit(table) ? "clickable2" : null);
       if (r.id) tr.title = "ID " + r.id;
+      if (selectable) {
+        const td = el("td", "sel-col2");
+        const cb = document.createElement("input"); cb.type = "checkbox"; cb.className = "sel-cb2"; cb.checked = selSet.has(r.id);
+        cb.addEventListener("click", e => e.stopPropagation());
+        cb.addEventListener("change", () => { if (cb.checked) selSet.add(r.id); else selSet.delete(r.id); updateSelBar(); });
+        td.addEventListener("click", e => { e.stopPropagation(); if (e.target !== cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event("change")); } });
+        td.appendChild(cb); tr.appendChild(td);
+      }
       LIST_COLS[table].forEach(k => {
         if (k === "todo") { const td = el("td", "todo-cell2"); todoChips(td, dealTodos(r)); tr.appendChild(td); return; }
         if (table === "deals" && k === "approval") { const td = el("td", "count-cell2"); countCell(td, r); tr.appendChild(td); return; }
@@ -3514,6 +3591,8 @@
     });
     t.appendChild(tbody);
     wrap.appendChild(t);
+    if (selectable) updateSelBar();
+    enableWideTable(wrap, t, table === "deals" ? (selectable ? 5 : 4) : 1);
     if (sorted.length > 500) wrap.appendChild(elText("p", "state-msg2", "최근 500건만 표시합니다. 검색·필터로 좁혀 보세요."));
   }
 
@@ -3582,6 +3661,37 @@
       td.appendChild(elText("span", "count-basis2", " " + basisText + " 기준"));
     }
     td.appendChild(elText("div", "count-amt2", `${r.year || ""}년 ${r.kpiHalf || "반기 미정"} · 인정 ${amt}`));
+  }
+  // 넓은 표: Shift + 휠로 좌우 이동, 앞쪽 열(사업 원장 = 파트·그룹·아티스트·브랜드)은 고정
+  function enableWideTable(wrap, table, freezeCount) {
+    if (!wrap.dataset.hscroll) {
+      wrap.dataset.hscroll = "1";
+      wrap.addEventListener("wheel", e => {
+        if (wrap.scrollWidth <= wrap.clientWidth + 1) return;
+        const d = e.shiftKey ? (Math.abs(e.deltaY) > Math.abs(e.deltaX) ? e.deltaY : e.deltaX) : 0;
+        if (!d) return;
+        const before = wrap.scrollLeft;
+        wrap.scrollLeft += d;
+        if (wrap.scrollLeft !== before) e.preventDefault(); // 끝에 닿으면 페이지 스크롤로 넘김
+      }, { passive: false });
+    }
+    requestAnimationFrame(() => {
+      const wide = wrap.scrollWidth > wrap.clientWidth + 1;
+      wrap.classList.toggle("wide2", wide);
+      let hint = wrap.parentNode && wrap.parentNode.querySelector(":scope > .hscroll-hint2");
+      if (wide && !hint && wrap.parentNode) { hint = elText("div", "hscroll-hint2", "⇆ 표가 넓어요 — Shift + 마우스 휠로 좌우 이동 (앞쪽 열은 고정)"); wrap.before(hint); }
+      if (hint) hint.hidden = !wide;
+      if (!wide) return;
+      const headRow = table.querySelector("thead tr");
+      if (!headRow) return;
+      let left = 0;
+      Array.from(headRow.children).slice(0, freezeCount).forEach((th, i) => {
+        const w = th.getBoundingClientRect().width;
+        table.querySelectorAll(`tr > :nth-child(${i + 1})`).forEach(c => { c.classList.add("freeze2"); c.style.left = left + "px"; });
+        left += w;
+      });
+      table.querySelectorAll(`tr > :nth-child(${freezeCount})`).forEach(c => c.classList.add("freeze-last2"));
+    });
   }
   function todoChips(box, todos) {
     box.innerHTML = "";
@@ -3902,6 +4012,48 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   }
+  // 사업 원장 간편 양식(A안): 정리용 16칸 + 사업ID. 그대로 다시 올리면 '변경 없음'.
+  const SIMPLE_DEAL_HEAD = ["사업ID", "파트", "아티스트 그룹", "아티스트", "브랜드", "사업명", "계약구분", "진행 단계", "계약통화", "계약금액", "계약 시작일", "계약 종료일", "비고", "실적 반영", "실적 연도", "반기", "KPI 인정 금액(원)"];
+  async function downloadSimpleDeals(rows) {
+    try {
+      const XLSX = await loadXlsx();
+      const data = rows.map(r => [r.id, r.part, r.group, r.artist, r.brand, r.name, r.ckind, r.stage, r.cur, r.amount, r.startDate, r.endDate, r.note,
+        r.approval === "승인" ? "O" : (r.approval ? "X" : ""), r.year, r.kpiHalfManual || (String(r.kpiHalf || "").startsWith("미정") ? "" : (r.kpiHalf || "")),
+        r.kpiBasis === "확정 금액" ? r.kpiFixedKrw : ""]);
+      const ws = XLSX.utils.aoa_to_sheet([SIMPLE_DEAL_HEAD].concat(data));
+      ws["!cols"] = [10, 6, 13, 12, 18, 30, 9, 13, 8, 14, 12, 12, 24, 8, 8, 7, 16].map(w => ({ wch: w }));
+      const codes = COLLAB.meta.codes;
+      const guide = [
+        ["칸", "필수", "적는 법 / 고를 수 있는 값"],
+        ["사업ID", "", "다운로드한 행은 그대로 두세요(이 ID로 같은 사업을 갱신). 새 사업은 비워 둡니다."],
+        ["파트", "●", "광고 / IP"],
+        ["아티스트 그룹", "●", codeNames("groups").join(" / ") + "  (약칭 BM·TR·WN·BB·YG도 됨)"],
+        ["아티스트", "", "멤버 이름(예: 아현,로라). 비우면 그룹명"],
+        ["브랜드", "●", "광고주·파트너 이름"],
+        ["사업명", "", "자유롭게(예: 광고 모델 1년)"],
+        ["계약구분", "●", codeNames("ckinds").join(" / ")],
+        ["진행 단계", "●", "제안 / 협의 / 최종 압축 / 계약 중 / 확정 / 불발 / 보류  (" + codeNames("stages").join(", ") + "도 됨)"],
+        ["계약통화", "△", codeNames("currencies").join(" / ") + "  — 최종 압축부터 필수"],
+        ["계약금액", "△", "숫자만(계약통화 기준) — 최종 압축부터 필수"],
+        ["계약 시작일 · 종료일", "", "2026-07-21(일자) · 2026-07(월만) · 비우면 미정"],
+        ["비고", "", "자유롭게"],
+        ["실적 반영", "관리자", "O = KPI 실적에 집계, X = 제외, 빈칸 = 지금 상태 유지"],
+        ["실적 연도", "관리자", "몇 년도 실적인지(예: 2026). 빈칸 = 운영 연도"],
+        ["반기", "관리자", "상반기 / 하반기. 빈칸 = 계약 시작일 월로 자동"],
+        ["KPI 인정 금액(원)", "관리자", "실적으로 인정할 원화 금액. 적으면 '확정 금액' 기준, 비우면 계약금액 × KPI 고정환율(반기별)"],
+        [],
+        ["올리는 법", "", "관리자 모드 → 사업 원장 → [엑셀 업로드] → 미리보기에서 신규·변경 확인 → [반영하기]"],
+        ["빈 칸", "", "기존 값을 지우지 않고 그대로 둡니다(지우려면 화면에서 수정)."],
+        ["행 삭제", "", "엑셀에서 행을 지워도 플랫폼에서는 삭제되지 않습니다 → 플랫폼에서 체크 후 [선택 삭제]."],
+      ];
+      const ws2 = XLSX.utils.aoa_to_sheet(guide);
+      ws2["!cols"] = [{ wch: 20 }, { wch: 7 }, { wch: 110 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "사업원장_간편");
+      XLSX.utils.book_append_sheet(wb, ws2, "작성 안내");
+      saveWorkbook(XLSX, wb, `사업원장_간편양식_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (err) { alert("다운로드 실패: " + err.message); }
+  }
   function downloadAllDb() { downloadExcel(COLLAB.meta.tables.map(t => t.key)); }
 
   // 엑셀 업로드(관리자): 파일 선택 즉시 진행 창을 띄워 "읽는 중 → 서버 확인 중 → 미리보기 → 반영 결과"를 단계별로 보여줌.
@@ -3988,7 +4140,7 @@
     } else if (!(r.added + r.updated)) {
       m.body.appendChild(elText("p", "modal-desc2", "새로 들어가거나 바뀌는 내용이 없어요(이미 같은 내용이 저장되어 있음)."));
     }
-    if (table === "deals") m.body.appendChild(elText("p", "modal-desc2", "같은 사업 판단: 사업ID가 있으면 ID로, 없으면 '브랜드 + 아티스트 그룹 + 계약구분 + 시작 월'로 찾습니다. 엑셀의 빈 칸은 기존 값을 유지합니다."));
+    if (table === "deals") m.body.appendChild(elText("p", "modal-desc2", "같은 사업 판단: 사업ID가 있으면 ID로, 없으면 '브랜드 + 아티스트 그룹 + 계약구분 + 시작 월'로 찾습니다. 엑셀의 빈 칸은 기존 값을 유지합니다. 간편 양식의 '실적 반영(O/X)·실적 연도·반기·KPI 인정 금액'도 반영됩니다."));
     const t = el("table", "data-table2 import-table2");
     const hr = el("tr", null);
     ["엑셀 행", "결과", "내용", "변경·오류"].forEach(h => hr.appendChild(elText("th", null, h)));
@@ -4001,7 +4153,7 @@
       tr.appendChild(elText("td", null, label[x.status] + (x.id ? ` (${x.id})` : "")));
       tr.appendChild(elText("td", "long2", x.summary));
       const detail = x.errors.length ? x.errors.join(" / ") : x.changes.map(c => `${c.field}: ${c.before || "(빈칸)"} → ${c.after}`).join(" / ") + (x.changeCount > x.changes.length ? ` 외 ${x.changeCount - x.changes.length}건` : "");
-      tr.appendChild(elText("td", "long2", detail));
+      tr.appendChild(elText("td", "long2", detail + (x.notes && x.notes.length ? (detail ? " / " : "") + "※ " + x.notes.join(" / ") : "")));
       tbody.appendChild(tr);
     });
     t.appendChild(tbody);
