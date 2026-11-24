@@ -526,6 +526,8 @@
   .user-part2 { font-size: 11px; font-weight: 700; color: var(--soft); letter-spacing: 0.04em; margin: 4px 0 6px; }
   .user-pick2 { border-radius: 10px; }
   .user-pick2.recent2 { background: var(--accent-tint); border-color: var(--accent); }
+  .user-admin2 { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--hairline); font-size: 11.5px; color: var(--soft); }
+  .user-admin2 .btn-line2 { flex-shrink: 0; }
   .user-search2 { width: 100%; margin-bottom: 10px; box-sizing: border-box; }
   .btn-danger2.small2 { padding: 3px 9px; font-size: 11px; border-radius: 8px; }
   .user-free2 input { flex: 1; font: inherit; padding: 7px 10px; border: 1px solid rgba(29,31,32,0.25); }
@@ -2863,8 +2865,9 @@
     Object.keys(COLLAB.filters).forEach(k => { COLLAB.filters[k].year = String(y); COLLAB.filters[k].week = ""; });
     if (COLLAB.view === "dashboard") loadAll(); else { COLLAB.dashDirty = true; renderDataView(COLLAB.view); }
   }
-  function openAdminLogin() {
-    const m = openModal("관리자 모드");
+  function openAdminLogin(opts) {
+    opts = opts || {};
+    const m = openModal("관리자 모드", true, false, opts.onCancel || null);
     m.body.appendChild(elText("p", "modal-desc2", "관리자 비밀번호를 입력하면 이 창에서 KPI 목표·고정환율, 실적 반영(기준 선택·ON/OFF), 엑셀 업로드, 팀원, 기준 정보(운영 연도·진행 단계)를 바꿀 수 있습니다. 5회 틀리면 30분 잠깁니다."));
     const row = el("div", "user-free2");
     const input = document.createElement("input");
@@ -2878,7 +2881,9 @@
       if (!res.ok) { COLLAB.adminPw = ""; msg.textContent = res.message || "관리자 비밀번호가 틀렸습니다."; return; }
       try { sessionStorage.setItem("dashAdminPw", COLLAB.adminPw); } catch (e) {}
       m.close();
+      ensureAdminUser();
       updateAdminChip();
+      if (opts.onSuccess) opts.onSuccess();
       if (COLLAB.view !== "dashboard") renderDataView(COLLAB.view);
     });
     input.addEventListener("keydown", e => { if (e.key === "Enter") ok.click(); });
@@ -2886,9 +2891,15 @@
     m.body.append(row, msg);
     setTimeout(() => input.focus(), 50);
   }
+  // 관리자 모드인데 이름이 없거나(명단 미등록) 명단에 없으면 임시 이름 '관리자'로 작업(저장 기록에 '관리자'로 남음, 브라우저에 기억하지 않음)
+  const ADMIN_TEMP_USER = "관리자";
+  function ensureAdminUser() {
+    if (isAdminMode() && !rememberedUserValid(COLLAB.user)) { COLLAB.user = ADMIN_TEMP_USER; updateUserChip(); }
+  }
   function exitAdminMode() {
     COLLAB.adminPw = "";
     try { sessionStorage.removeItem("dashAdminPw"); } catch (e) {}
+    if (COLLAB.user === ADMIN_TEMP_USER && !rememberedUserValid(ADMIN_TEMP_USER)) { COLLAB.user = ""; updateUserChip(); openUserPicker(false); }
     updateAdminChip();
     if (COLLAB.view !== "dashboard") renderDataView(COLLAB.view);
   }
@@ -2930,6 +2941,7 @@
     updateUserChip();
     updateAdminChip();
     renderYearOptions();
+    ensureAdminUser();
     if (!COLLAB.meta.error && !COLLAB.user) openUserPicker(false); // 첫 입장: 이름 선택(저장·승인 기록의 작성자)
   }
 
@@ -2987,6 +2999,14 @@
     if (search) search.addEventListener("input", draw);
     draw();
     m.body.appendChild(wrap);
+    if (!isAdminMode()) {
+      const adm = el("div", "user-admin2");
+      adm.appendChild(elText("span", null, "관리자이신가요? 명단에 이름이 없어도 관리자 비밀번호로 들어가 팀원을 등록할 수 있어요."));
+      const go = elText("button", "btn-line2", "🔒 관리자 모드로 시작"); go.type = "button";
+      go.addEventListener("click", () => { m.close(); openAdminLogin({ onCancel: () => { if (!COLLAB.user) openUserPicker(false); } }); });
+      adm.appendChild(go);
+      m.body.appendChild(adm);
+    }
     setTimeout(() => { const f = search || wrap.querySelector("button"); if (f) f.focus(); }, 50);
   }
   function setUser(name) {
@@ -2996,17 +3016,18 @@
   }
 
   // ---------------- 모달 ----------------
-  function openModal(title, closable = true, wide = false) {
+  function openModal(title, closable = true, wide = false, onDismiss = null) {
     const back = el("div", "modal-back2");
     const box = el("div", "modal-box2" + (wide ? " wide2" : ""));
     const head = el("div", "modal-head2");
     head.appendChild(elText("h3", null, title));
     const close = () => back.remove();
+    const dismiss = () => { close(); if (onDismiss) onDismiss(); }; // ×·바깥 클릭으로 닫을 때만
     if (closable) {
       const x = elText("button", "modal-x2", "×"); x.type = "button";
-      x.addEventListener("click", close);
+      x.addEventListener("click", dismiss);
       head.appendChild(x);
-      back.addEventListener("click", e => { if (e.target === back) close(); });
+      back.addEventListener("click", e => { if (e.target === back) dismiss(); });
     }
     const body = el("div", "modal-body2");
     box.append(head, body);
