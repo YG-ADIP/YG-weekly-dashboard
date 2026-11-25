@@ -174,13 +174,17 @@ var DB_TABLE_ORDER = ['deals', 'kpiGoals', 'fx', 'agenda', 'trend', 'members', '
 // 코드(드롭다운) 기본값 — 진행 단계·아티스트 그룹 등은 관리자 설정에서 바꿀 수 있음(cfg_().codes).
 var DEFAULT_CODES = {
   stages: [
-    { name: '01 제안 중', weight: 10, desc: '브랜드에 제안서·단가 전달, 회신 대기' },
-    { name: '02 협의 중', weight: 30, desc: '브랜드 관심 표명, 금액·범위 등 조건 협의' },
-    { name: '03 최종 압축', weight: 70, desc: '경영진 승인 완료 — 계약통화·금액을 입력하면 KPI가 자동 계산됩니다' },
-    { name: '04 계약 진행 중', weight: 90, desc: '계약서 검토·서명 단계(조건 확정)' },
-    { name: '05 진행 확정', weight: 100, desc: '계약 체결·진행 확정 → KPI 실적 인정' },
-    { name: '06 진행 불발', weight: 0, desc: '진행 무산 — 불발 사유 입력' },
-    { name: '07 보류', weight: 0, desc: '일시 중단·재개 시점 미정' },
+    // 보고 진행 체계(2026-11). weight는 가중치가 아니라 내부 구분값: 50 = 진행 중, 100 = 확정, 0 = 종료(불발·보류)
+    { name: '제안·논의 중', weight: 50, desc: '브랜드 제안·내부 논의' },
+    { name: '부문대표 보고 진행 중', weight: 50, desc: '부문대표 보고 준비·진행' },
+    { name: '부문대표 승인 완료', weight: 50, desc: '부문대표 승인' },
+    { name: '브랜드 협의 중', weight: 50, desc: '금액·범위 등 조건 협의' },
+    { name: '총괄님 보고 진행 중', weight: 50, desc: '총괄님 보고 준비·진행' },
+    { name: '총괄님 승인 완료', weight: 50, desc: '총괄님 승인 — 계약통화·금액을 입력해 주세요(KPI 자동 계산)' },
+    { name: '진행 확정', weight: 100, desc: '진행 결정(계약서 작업 중)' },
+    { name: '계약 체결 완료', weight: 100, desc: '계약서 서명 완료' },
+    { name: '진행 불발', weight: 0, desc: '진행 무산 — 불발 사유 입력' },
+    { name: '보류', weight: 0, desc: '일시 중단·재개 시점 미정' },
   ],
   groups: ['BABYMONSTER', 'TREASURE', 'WINNER', 'BIGBANG', '기타'],
   ctypes: ['신규계약', '재계약', '추가계약'],
@@ -203,10 +207,12 @@ function countedKrw_(d) {
   return typeof v === 'number' ? v : '';
 }
 
+var OLD_STAGE_NAMES = ['01 제안 중', '02 협의 중', '03 최종 압축', '04 계약 진행 중', '05 진행 확정', '06 진행 불발', '07 보류'];
 function dbCodes_() {
   var c = cfg_().codes || {};
   var out = {};
   Object.keys(DEFAULT_CODES).forEach(function (k) { out[k] = c[k] && c[k].length ? c[k] : DEFAULT_CODES[k]; });
+  if (out.stages !== DEFAULT_CODES.stages && out.stages.some(function (x) { return OLD_STAGE_NAMES.indexOf(x.name || x) >= 0; })) out.stages = DEFAULT_CODES.stages; // 예전 단계 체계 → 새 보고 진행 체계
   Object.keys(FIXED_CODES).forEach(function (k) { out[k] = FIXED_CODES[k]; });
   out.weeks = weekKeysOfYear_();
   return out;
@@ -224,7 +230,7 @@ function stageInfo_(name) {
   return { name: name, weight: 0 };
 }
 function isConfirmedStage_(name) { return stageInfo_(name).weight >= 100; }
-var MONEY_REQUIRED_WEIGHT = 70; // 이 가중치(최종 압축) 이상 단계부터 계약통화·금액 필수
+// 통화·금액은 저장을 막지 않음 — '총괄님 승인 완료' 이후는 화면 '다음 할 일'로 입력 요청
 
 // KPI 실적 승인제: '진행 확정'이어도 관리자가 승인해야 그 연도 KPI 실적에 집계된다.
 // 승인 뒤 아래 칸이 바뀌면(관리자가 아닌 사람이 고친 경우) 승인이 풀리고 다시 승인 대기가 된다.
@@ -387,7 +393,7 @@ function computeDeal_(rec, fxRows) {
   var krw = rate && rec.amount !== '' ? Math.round(Number(rec.amount) * rate) : '';
   rec.weight = info.weight / 100;
   rec.kpiKrw = krw === '' ? (rec.cur && rec.cur !== 'KRW' ? 'KPI 환율 없음' : '') : krw;
-  rec.weighted = krw === '' ? '' : Math.round(krw * rec.weight);
+  rec.weighted = ''; // 가중치 없음(보고 진행 단계는 순서·확률이 아님)
   if ((rec.months === '' || rec.months === undefined) && flexMonth_(rec.startDate) && flexMonth_(rec.endDate)) {
     var a = flexMonth_(rec.startDate), b = flexMonth_(rec.endDate);
     rec.months = Math.max(0, (b.y - a.y) * 12 + (b.m - a.m));
@@ -426,11 +432,7 @@ function cleanRecord_(key, input, errors) {
     if (c.required && (rec[c.key] === '' || rec[c.key] === undefined)) errors.push(c.label + ': 필수 입력');
   });
   if (key === 'deals' && rec.stage && stageInfo_(rec.stage).weight === 0 && /불발/.test(rec.stage) && !rec.reason) errors.push('불발·보류 사유: 진행 불발이면 사유를 입력해 주세요');
-  // 최종 압축(경영진 승인 완료) 이후 단계는 KPI 자동 계산을 위해 통화·금액 필수
-  if (key === 'deals' && rec.stage && stageInfo_(rec.stage).weight >= MONEY_REQUIRED_WEIGHT) {
-    if (!rec.cur) errors.push('계약통화: ' + rec.stage + ' 단계부터는 필수입니다(KPI 자동 계산)');
-    if (rec.amount === '' || rec.amount === undefined) errors.push('계약금액: ' + rec.stage + ' 단계부터는 필수입니다(KPI 자동 계산)');
-  }
+
   return rec;
 }
 
@@ -595,21 +597,32 @@ var DEAL_ALIASES = {
 };
 // 간편 양식 머리글 순서(다운로드·안내에 사용)
 var SIMPLE_DEAL_COLS = ['사업ID', '파트', '아티스트 그룹', '아티스트', '브랜드', '사업명', '계약구분', '진행 단계', '계약통화', '계약금액', '계약 시작일', '계약 종료일', '비고', '실적 반영', '실적 연도', '반기', 'KPI 인정 금액(원)'];
-// '확정'·'계약 중'·'계약 완료'·'조건 협의 중'처럼 짧거나 다른 이름의 단계 → 진행 단계 이름
+// 예전 단계·BIS·마스터 시트·짧은 표기 → 지금 보고 진행 단계 이름(관리자가 이름을 바꿨으면 같은 뜻의 단계로)
+var STAGE_ALIASES = {
+  '01 제안 중': '제안·논의 중', '02 협의 중': '브랜드 협의 중', '03 최종 압축': '총괄님 승인 완료', '04 계약 진행 중': '진행 확정', '05 진행 확정': '진행 확정', '06 진행 불발': '진행 불발', '07 보류': '보류',
+  '진행확정': '진행 확정', '진행불발': '진행 불발', '진행중': '브랜드 협의 중', '최종압축': '총괄님 승인 완료',
+  '제안/논의중': '제안·논의 중', '조건협의중': '브랜드 협의 중', '계약체결중': '진행 확정', '계약완료': '계약 체결 완료',
+};
 function stageFromText_(text) {
   var t = String(text || '').trim();
   if (!t) return '';
-  var names = dbCodes_().stages.map(function (x) { return x.name; });
+  var stages = dbCodes_().stages, names = stages.map(function (x) { return x.name; });
   if (names.indexOf(t) >= 0) return t;
-  var bis = BIS_STAGE_MAP[t.replace(/\s/g, '')];
-  if (bis) return bis;
-  var zero = function (re) { return dbCodes_().stages.filter(function (x) { return x.weight === 0 && re.test(x.name); }).map(function (x) { return x.name; })[0] || stageNameByWeight_(0); };
-  if (/불발|드랍|무산|drop/i.test(t)) return zero(/불발/);
-  if (/보류|홀드|hold/i.test(t)) return zero(/보류/);
-  var w = /완료|확정/.test(t) ? 100 : /계약\s*(진행|중)|체결/.test(t) ? 90 : /압축|승인/.test(t) ? 70 : /협의/.test(t) ? 30 : /제안|논의/.test(t) ? 10 : -1;
-  return w >= 0 ? (stageNameByWeight_(w) || t) : t;
+  var target = STAGE_ALIASES[t] || STAGE_ALIASES[t.replace(/\s/g, '')] || '';
+  if (!target) {
+    target = /불발|드랍|무산|drop/i.test(t) ? '진행 불발' : /보류|홀드|hold/i.test(t) ? '보류'
+      : /체결\s*완료|계약\s*완료/.test(t) ? '계약 체결 완료' : /확정|계약\s*(진행|중)|체결/.test(t) ? '진행 확정'
+      : /총괄.*승인|압축/.test(t) ? '총괄님 승인 완료' : /총괄.*보고/.test(t) ? '총괄님 보고 진행 중'
+      : /부문.*승인/.test(t) ? '부문대표 승인 완료' : /부문.*보고/.test(t) ? '부문대표 보고 진행 중'
+      : /협의/.test(t) ? '브랜드 협의 중' : /제안|논의/.test(t) ? '제안·논의 중' : '';
+  }
+  if (!target) return t;
+  if (names.indexOf(target) >= 0) return target;
+  // 관리자가 이름을 바꾼 경우: 같은 구분(확정·종료)의 첫 단계로
+  var w = /확정|체결/.test(target) ? 100 : /불발|보류/.test(target) ? 0 : 50;
+  return stageNameByWeight_(w) || t;
 }
-var BIS_STAGE_MAP = { '진행확정': '05 진행 확정', '진행불발': '06 진행 불발', '진행중': '02 협의 중', '최종압축': '03 최종 압축' };
+var BIS_STAGE_MAP = { '진행확정': '진행 확정', '진행불발': '진행 불발', '진행중': '브랜드 협의 중', '최종압축': '총괄님 승인 완료' };
 
 // rows: [{머리글: 값}] (화면에서 SheetJS로 읽은 것)
 // 팀원·AGENDA·트렌드 엑셀에서 흔히 쓰는 다른 머리글
@@ -955,7 +968,7 @@ function kpiStatusFromDeals_(year, deals, goals) {
     var est = typeof d.kpiKrw === 'number' ? d.kpiKrw : (typeof d.kpiFixedKrw === 'number' ? d.kpiFixedKrw : null);
     if (est === null) return;
     if (isConfirmedStage_(d.stage)) { pipe.pending += est; pipe.pendingCount++; return; }
-    if (isActiveStage_(d.stage)) { pipe.active += est; pipe.weighted += est * stageInfo_(d.stage).weight / 100; pipe.activeCount++; }
+    if (isActiveStage_(d.stage)) { pipe.active += est; pipe.activeCount++; }
   });
   return {
     annual: rec('전체', '연간'), h1: rec('전체', '상반기'), h2: rec('전체', '하반기'),
@@ -1185,7 +1198,8 @@ function readMasterLedger_(sh) {
   }
   return { header: h, rows: rows };
 }
-function masterStage_(status) {
+function masterStage_(status) { return stageFromText_(status) || dbCodes_().stages[0].name; }
+function masterStageOld_(status) {
   var w = /불발|드랍|drop|무산/i.test(status) ? 0 : /보류|홀드|hold/i.test(status) ? -1 : /완료|확정/.test(status) ? 100 : /체결/.test(status) ? 90 : /압축|승인/.test(status) ? 70 : /협의/.test(status) ? 30 : 10;
   if (w === -1) return dbCodes_().stages.filter(function (x) { return x.weight === 0 && /보류/.test(x.name); }).map(function (x) { return x.name; })[0] || stageNameByWeight_(0);
   if (w === 0) return dbCodes_().stages.filter(function (x) { return x.weight === 0 && /불발/.test(x.name); }).map(function (x) { return x.name; })[0] || stageNameByWeight_(0);
@@ -1711,6 +1725,28 @@ function startPlatform_(user) {
   return report;
 }
 
+// 진행 단계 체계 변경(2026-11): 예전 단계 이름으로 저장된 사업을 새 단계로 한 번 변환
+function ensureStagesV2_() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('STAGES_V2') === '1' || !dbReady_()) return;
+  withLock_(function () {
+    if (props.getProperty('STAGES_V2') === '1') return;
+    var names = dbCodes_().stages.map(function (x) { return x.name; });
+    var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.deals.sheet), fxRows = readTable_('fx'), logs = [];
+    readTable_('deals').forEach(function (d) {
+      if (!d.stage || names.indexOf(d.stage) >= 0) return;
+      var to = stageFromText_(d.stage);
+      if (!to || to === d.stage) return;
+      logs.push({ user: '시스템', table: 'deals', recordId: d.id, action: '수정', field: '진행 단계(체계 변경)', before: d.stage, after: to });
+      d.stage = to;
+      var row = recordToRow_('deals', computeDeal_(d, fxRows));
+      sh.getRange(d._row, 1, 1, row.length).setValues([row]);
+    });
+    if (logs.length) appendLogs_(logs);
+    props.setProperty('STAGES_V2', '1');
+  });
+}
+
 function dbYears_() {
   var set = {};
   set[cfg_().general.year] = true;
@@ -1823,6 +1859,7 @@ function dbApi(action, password, user, payloadJson) {
   // 관리자 모드: 화면이 관리자 비밀번호를 함께 보내면 확인(틀리면 잠금 횟수에 포함)
   var adminDenied = payload.adminPw ? checkAdminPassword_(payload.adminPw) : { error: 'forbidden' };
   var isAdmin = !adminDenied;
+  try { ensureStagesV2_(); } catch (e) {} // 진행 단계 체계 변경 — 한 번만
   var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, deleteMany: 1, parseFile: 1, bisPreview: 1, bisCommit: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
   // 입력·저장은 팀원 명단(사용)에 있는 이름만. 관리자 모드는 예외, 명단이 비어 있으면(최초 설정) 허용.
   var WRITE_ACTIONS = { save: 1, delete: 1, restore: 1 };

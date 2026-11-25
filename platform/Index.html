@@ -686,6 +686,19 @@
   .fx-half2 { font-size: 11px; font-weight: 700; color: var(--soft); width: 40px; flex-shrink: 0; }
   .sel-bar2 { position: sticky; left: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fff7f5; border-bottom: 1px solid #f3d3cc; font-size: 12px; }
   .sel-bar2[hidden] { display: none; }
+  .report-chips2 { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .report-chip2 { font: inherit; font-size: 12px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--hairline); background: #fff; color: var(--soft); cursor: pointer; }
+  .report-chip2 b { color: var(--ink); margin-left: 2px; }
+  .report-chip2.on2 { background: var(--accent-tint); border-color: var(--accent); color: var(--accent-700); }
+  .report-chip2.zero2 { opacity: .55; }
+  .report-h2 { font-size: 14px; margin: 16px 0 8px; }
+  .report-sub2 { font-size: 11.5px; color: var(--soft); white-space: normal; max-width: 280px; }
+  .report-table2 td { white-space: nowrap; }
+  .stage-badge2 { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+  .stage-badge2.s02 { background: #eef1f6; color: #4b5563; } .stage-badge2.s12 { background: #e6eeff; color: #2a4fb0; } .stage-badge2.s22 { background: #dde7ff; color: #1f45a8; }
+  .stage-badge2.s32 { background: #fff2dc; color: #8a5a12; } .stage-badge2.s42 { background: #f1e6ff; color: #5b2ea6; } .stage-badge2.s52 { background: #e9ddff; color: #4a1f96; }
+  .stage-badge2.done2 { background: #e3f1e6; color: #24553a; } .stage-badge2.closed2 { background: #f1f1f1; color: #8a8a8a; }
+  .report-closed2 { margin-top: 12px; font-size: 12.5px; } .report-closed2 summary { cursor: pointer; color: var(--soft); margin-bottom: 8px; }
   .paid-badge2 { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
   .paid-badge2.none2 { background: #eef0f4; color: #6b7280; } .paid-badge2.part2 { background: #fdecc8; color: #6b4d18; } .paid-badge2.full2 { background: #e3f1e6; color: #24553a; }
   .v-counted2 { font-weight: 700; color: var(--ink); }
@@ -793,6 +806,7 @@
   <!-- 섹션 순서·표시 여부·이름은 관리자 설정값대로 applySectionLayout()이 다시 배치 -->
   <div id="sectionsRoot">
     <div id="kpiSlot"></div>
+    <div id="reportSlot"></div>
     <div id="agendaSlot"></div>
     <div id="calSlot"></div>
     <div id="trendSlot"></div>
@@ -812,7 +826,7 @@
   const KPI_RAW_URL = PLATFORM_UI.sources.kpiSourceUrl;
 
   // 섹션 구성 — 설정의 순서대로 번호(01, 02…)를 매기고, 숨긴 섹션은 번호에서 빠짐.
-  const SECTION_SLOT = { kpi: "kpiSlot", agenda: "agendaSlot", bizcal: "calSlot", trend: "trendSlot", teamcal: "teamCalSlot" };
+  const SECTION_SLOT = { kpi: "kpiSlot", report: "reportSlot", agenda: "agendaSlot", bizcal: "calSlot", trend: "trendSlot", teamcal: "teamCalSlot" };
   const VISIBLE_SECTIONS = PLATFORM_UI.sections.filter(sec => sec.visible);
   function secVisible(key) { return VISIBLE_SECTIONS.some(sec => sec.key === key); }
   function secNum(key) { return String(VISIBLE_SECTIONS.findIndex(sec => sec.key === key) + 1).padStart(2, "0"); }
@@ -881,6 +895,110 @@
   // ---- 비밀번호 게이트 + 데이터 레이어 ----
   function storedPw() { try { return sessionStorage.getItem("dashPw") || ""; } catch { return ""; } }
   function setStoredPw(pw) { try { sessionStorage.setItem("dashPw", pw); } catch {} }
+
+
+  // ============================================================
+  // 보고 진행 현황(대시보드): 진행 중 프로젝트를 보고 단계별로, 확정 건은 아래 표로
+  // ============================================================
+  let reportFilter = "";
+  async function loadReportSection(slot) {
+    slot.innerHTML = "";
+    const card = sectionShell(false, "report-sec2");
+    card.appendChild(sectionHead(secNum("report"), secTitle("report"), false, null, null));
+    const body = el("div", "report-body2");
+    card.appendChild(body);
+    slot.appendChild(card);
+    body.appendChild(elText("p", "state-msg2", "불러오는 중…"));
+    try {
+      if (!COLLAB.meta || !COLLAB.meta.codes) { const meta = await callDb("meta"); if (meta.ok) COLLAB.meta = Object.assign(COLLAB.meta || {}, meta); }
+      if (!COLLAB.meta || !COLLAB.meta.ready) { body.innerHTML = ""; body.appendChild(elText("p", "state-msg2", "협업 DB를 시작하면 사업 원장의 진행 단계가 여기에 프로젝트별로 표시됩니다.")); return; }
+      const res = await callDb("list", { table: "deals" });
+      if (!res.ok) throw new Error(res.message || res.error);
+      COLLAB.rows.deals = res.rows;
+      renderReport(body, res.rows, slot);
+    } catch (e) {
+      body.innerHTML = "";
+      body.appendChild(elText("p", "state-msg2 err2", "불러오지 못했어요: " + e.message));
+    }
+  }
+  function stageBadge(name) {
+    const stages = (COLLAB.meta && COLLAB.meta.codes && COLLAB.meta.codes.stages) || [];
+    const active = stages.filter(x => x.weight > 0 && x.weight < 100);
+    const i = active.findIndex(x => x.name === name);
+    const kind = stageKind(name);
+    const b = elText("span", "stage-badge2 " + (kind === "확정" ? "done2" : kind === "종료" ? "closed2" : "s" + Math.min(5, Math.max(0, i)) + "2"), name || "—");
+    return b;
+  }
+  function reportTable(cols, list, rowFn, slot) {
+    const t = el("table", "data-table2 report-table2");
+    const hr = el("tr", null); cols.forEach(c => hr.appendChild(elText("th", null, c)));
+    const th = el("thead", null); th.appendChild(hr); t.appendChild(th);
+    const tb = el("tbody", null);
+    list.forEach(r => {
+      const tr = el("tr", "clickable2");
+      rowFn(r).forEach(cell => { const td = el("td", null); if (cell instanceof Node) td.appendChild(cell); else td.textContent = cell == null ? "" : String(cell); tr.appendChild(td); });
+      tr.title = "누르면 사업 원장 입력 양식이 열립니다";
+      tr.addEventListener("click", () => { if (!COLLAB.user) { openUserPicker(false); return; } openRecordForm("deals", r, () => loadReportSection(slot)); });
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    const w = el("div", "data-table-wrap2"); w.appendChild(t);
+    return w;
+  }
+  function renderReport(body, rows, slot) {
+    body.innerHTML = "";
+    const stages = COLLAB.meta.codes.stages;
+    const order = name => { const i = stages.findIndex(x => x.name === name); return i < 0 ? 99 : i; };
+    const artistOf = r => (r.artist && r.artist !== r.group ? `${r.group} · ${r.artist}` : (r.group || r.artist || ""));
+    const titleOf = r => { const box = el("div", null); box.appendChild(elText("b", null, r.brand || "")); if (r.name) box.appendChild(elText("div", "report-sub2", r.name)); return box; };
+    const money = r => (r.amount === "" || r.amount == null ? "—" : `${r.cur || ""} ${fmtNum(r.amount)}`.trim());
+    const active = rows.filter(r => stageKind(r.stage) === "진행 중" && Number(r.year) >= CFG_YEAR)
+      .sort((a, b) => order(a.stage) - order(b.stage) || String(b.stageDate || b.updatedAt || "").localeCompare(String(a.stageDate || a.updatedAt || "")));
+    const done = rows.filter(r => stageKind(r.stage) === "확정" && Number(r.year) === CFG_YEAR)
+      .sort((a, b) => String(b.stageDate || b.updatedAt || "").localeCompare(String(a.stageDate || a.updatedAt || "")));
+    const closed = rows.filter(r => stageKind(r.stage) === "종료" && Number(r.year) === CFG_YEAR);
+
+    // 단계별 건수(누르면 그 단계만)
+    const chips = el("div", "report-chips2");
+    const activeStages = stages.filter(x => x.weight > 0 && x.weight < 100);
+    [{ name: "", label: "진행 중 전체", n: active.length }].concat(activeStages.map(x => ({ name: x.name, label: x.name, n: active.filter(r => r.stage === x.name).length }))).forEach(c => {
+      const b = el("button", "report-chip2" + (reportFilter === c.name ? " on2" : "") + (c.n ? "" : " zero2"));
+      b.type = "button";
+      b.appendChild(document.createTextNode(c.label + " "));
+      b.appendChild(elText("b", null, String(c.n)));
+      b.addEventListener("click", () => { reportFilter = reportFilter === c.name ? "" : c.name; renderReport(body, rows, slot); });
+      chips.appendChild(b);
+    });
+    body.appendChild(chips);
+
+    const shown = reportFilter ? active.filter(r => r.stage === reportFilter) : active;
+    body.appendChild(elText("h3", "report-h2", `진행 중 프로젝트 ${shown.length}건` + (reportFilter ? ` — ${reportFilter}` : "")));
+    if (shown.length) {
+      body.appendChild(reportTable(["진행 단계", "구분", "아티스트", "브랜드 · 사업명", "계약금액", "단계 변경일", "담당자", "다음 할 일"], shown, r => {
+        const todo = el("div", null); todoChips(todo, dealTodos(r));
+        return [stageBadge(r.stage), r.part, artistOf(r), titleOf(r), money(r), r.stageDate || "—", r.owner || "—", todo];
+      }, slot));
+    } else body.appendChild(elText("p", "state-msg2", "진행 중인 프로젝트가 없어요."));
+
+    body.appendChild(elText("h3", "report-h2", `진행 확정 · 계약 체결 완료 ${done.length}건 (${CFG_YEAR}년)`));
+    if (done.length) {
+      body.appendChild(reportTable(["진행 단계", "구분", "아티스트", "브랜드 · 사업명", "계약금액", "실입금", "계약기간", "KPI 인정 시기", "인정 실적(KRW)", "실적 반영"], done, r => {
+        const paid = el("div", null); dealVirtualCell(paid, "paid", r);
+        const period = el("div", null); dealVirtualCell(period, "period", r);
+        const when = el("div", null); dealVirtualCell(when, "kpiWhen", r);
+        const cnt = el("div", "v-counted2"); dealVirtualCell(cnt, "counted", r);
+        const on = elText("span", "count-badge2" + (r.approval === "승인" ? " on2" : ""), r.approval === "승인" ? "반영 ON" : "반영 OFF");
+        return [stageBadge(r.stage), r.part, artistOf(r), titleOf(r), money(r), paid, period, when, cnt, on];
+      }, slot));
+    } else body.appendChild(elText("p", "state-msg2", "확정된 건이 없어요."));
+
+    if (closed.length) {
+      const det = document.createElement("details"); det.className = "report-closed2";
+      det.appendChild(elText("summary", null, `진행 불발 · 보류 ${closed.length}건 보기`));
+      det.appendChild(reportTable(["진행 단계", "구분", "아티스트", "브랜드 · 사업명", "계약금액", "사유"], closed, r => [stageBadge(r.stage), r.part, artistOf(r), titleOf(r), money(r), r.reason || "—"], slot));
+      body.appendChild(det);
+    }
+  }
 
   // ---- 화면 오류 알림 ----
   function showErrorToast(text) {
@@ -1479,13 +1597,10 @@
       const latestKey = GLOBAL_WEEKS.length ? GLOBAL_WEEKS[0].key : null;
       if (pipe && key === latestKey) {
         const box = el("div", "kpi-pipe2");
-        const forecast = annual.actual + pipe.weighted;
         const add = (label, value) => { const sp = el("span", null); sp.appendChild(document.createTextNode(label + " ")); sp.appendChild(elText("b", null, value)); box.appendChild(sp); };
         add("실적 반영", `${pipe.confirmedCount}건`);
         if (pipe.pendingCount) add("실적 반영 대기", `${pipe.pendingCount}건 · ${fmtAmt(pipe.pending)}억`);
-        add("진행 중 파이프라인", `${pipe.activeCount}건 · ${fmtAmt(pipe.active)}억`);
-        add("가중 예상", `${fmtAmt(pipe.weighted)}억`);
-        add("연간 전망(확정+가중)", `${fmtAmt(forecast)}억` + (annual.goal ? ` · 목표 대비 ${fmtAch(forecast / annual.goal * 100)}%` : ""));
+        add("진행 중 파이프라인", `${pipe.activeCount}건 · 추산 ${fmtAmt(pipe.active)}억`);
         card.appendChild(box);
       }
     }
@@ -2672,7 +2787,7 @@
   // 채우므로 그 작업 하나가 끝나면 체크리스트 4칸이 동시에 켜진다(실제로 그 넷이 같은 순간에
   // 준비되는 게 맞아서 오해 소지 없음).
   // ============================================================
-  const LOADING_NAME_BY_KEY = { kpi: "KPI 실적", agenda: "팀 AGENDA", bizcal: "사업 캘린더", trend: "트렌드 리포트", teamcal: "팀 일정 캘린더" };
+  const LOADING_NAME_BY_KEY = { kpi: "KPI 실적", report: "보고 진행 현황", agenda: "팀 AGENDA", bizcal: "사업 캘린더", trend: "트렌드 리포트", teamcal: "팀 일정 캘린더" };
   const LOADING_SECTIONS2 = ["인사이트"].concat(VISIBLE_SECTIONS.map(sec => LOADING_NAME_BY_KEY[sec.key]));
   const CHECK_SVG2 = '<svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg>';
   let loadingOverlayEl2 = null;
@@ -2762,6 +2877,7 @@
       }
     })());
     if (secVisible("bizcal")) tasks.push(loadCalSection(document.getElementById("calSlot")).then(() => markSectionsDone2(["사업 캘린더"])));
+    if (secVisible("report")) tasks.push(loadReportSection(document.getElementById("reportSlot")).then(() => markSectionsDone2(["보고 진행 현황"])));
     if (secVisible("teamcal")) tasks.push(loadTeamCalSection(document.getElementById("teamCalSlot")).then(() => markSectionsDone2(["팀 일정 캘린더"])));
     await Promise.all(tasks);
     const now = new Date();
@@ -2841,7 +2957,18 @@
   ];
   // 사업명은 필수가 아니므로 [추가 정보]로. KPI 기준연도·인정 반기는 관리자 영역(실적 반영)에서만.
   const DEAL_EXTRA_KEYS = ["name", "ctype", "item", "country", "cond", "shortDate", "decidedDate", "startStatus", "endStatus", "months", "owner", "note"];
-  const MONEY_REQUIRED_WEIGHT = 70; // 03 최종 압축(경영진 승인 완료)부터 통화·금액 필수 — 서버(Db.gs)와 같은 값
+  // 진행 단계 구분(가중치 아님): 진행 중 / 확정 / 종료(불발·보류)
+  function stageKind(name) { const w = stageWeight(name); return w >= 100 ? "확정" : w <= 0 ? "종료" : "진행 중"; }
+  // 통화·금액 입력 요청: '총괄님 승인 완료'(예전 최종 압축) 이후 단계와 확정 단계 — 저장은 막지 않고 '다음 할 일'로 안내
+  function stageNeedsMoney(name) {
+    const stages = (COLLAB.meta && COLLAB.meta.codes && COLLAB.meta.codes.stages) || [];
+    const i = stages.findIndex(x => x.name === name);
+    if (i < 0) return false;
+    if (stages[i].weight >= 100) return true;
+    if (stages[i].weight <= 0) return false;
+    const from = stages.findIndex(x => /총괄.*승인|압축/.test(x.name));
+    return from >= 0 && i >= from;
+  }
   function stageWeight(name) { const s = (COLLAB.meta.codes.stages || []).find(x => x.name === name); return s ? s.weight : 0; }
   // 칸에 무엇을 적을지 모를 때 보여 줄 회색 예시: 기존 입력값에서 자주 쓰인 값 2개, 없으면 기본 예시
   const STATIC_EXAMPLES = {
@@ -2866,7 +2993,7 @@
     if (r.group === "기타" && !r.artist) add("아티스트 확인 필요");
     if (w === 0 && /불발/.test(r.stage || "") && !r.reason) add("불발 사유 입력 필요");
     if (w === 0 && /보류/.test(r.stage || "") && !r.reason) add("보류 사유 입력 필요");
-    if (w >= MONEY_REQUIRED_WEIGHT && (!r.cur || r.amount === "" || r.amount == null)) add("계약통화·금액 입력 필요");
+    if (stageNeedsMoney(r.stage) && (!r.cur || r.amount === "" || r.amount == null)) add("계약통화·금액 입력 필요");
     else if (r.kpiKrw === "KPI 환율 없음" && !r.kpiBasis) add(`KPI 고정환율 등록 필요(${r.cur})`, "관리자");
     if (w >= 90 && !r.startDate) add("계약 시작일 확인 필요");
     if (w >= 90 && !r.endDate) add("계약 종료일 확인 필요");
@@ -2880,13 +3007,13 @@
   }
   // 단계별 안내(할 일이 없을 때 다음 단계로 가려면 무엇을 하면 되는지)
   function stageGuide(stage) {
-    const w = stageWeight(stage);
-    if (w === 0) return "종료된 건입니다. 사유만 남겨 두면 됩니다.";
-    if (w < MONEY_REQUIRED_WEIGHT) return "경영진 보고·승인이 끝나면 '03 최종 압축'으로 바꾸고 계약통화·금액을 입력하세요.";
-    if (w < 90) return "경영진 승인 완료 건 — 계약통화·금액을 넣으면 KPI가 자동 계산됩니다. 계약서 작업이 시작되면 '04 계약 진행 중'으로.";
-    if (w < 100) return "계약 체결되면 '05 진행 확정'으로 바꾸고 계약 시작일·종료일을 확인하세요.";
-    return "확정 건 — 관리자가 실적 인정 기준을 고르고 [실적 반영]을 켜면 실적으로 집계됩니다. 입금되면 회계 확인 후 실입금액을 입력하세요.";
+    const kind = stageKind(stage);
+    if (kind === "종료") return "종료된 건입니다. 사유만 남겨 두면 됩니다.";
+    if (kind === "확정") return "확정 건 — 관리자가 실적 인정 기준을 고르고 [실적 반영]을 켜면 실적으로 집계됩니다. 입금되면 회계 확인 후 실입금액을 입력하세요.";
+    if (stageNeedsMoney(stage)) return "총괄님 승인 완료 — 계약통화·금액을 입력해 주세요(KPI 자동 계산). 진행이 결정되면 '진행 확정'으로 바꿔 주세요.";
+    return "보고·협의가 진행되면 단계를 바꿔 주세요. 대시보드 '보고 진행 현황'에 프로젝트별로 표시됩니다.";
   }
+
 
   // 협업 DB 호출: 읽기는 일시 오류면 재시도, 저장은 '서버가 실행 전에 거절'했거나 'busy'(잠금 대기 초과·아무것도 안 씀)일 때만 재시도
   const DB_READ_ACTIONS = new Set(["meta", "list", "adminCheck"]);
@@ -3368,13 +3495,13 @@
     }
     // 진행 단계
     const stageBox = el("div", "settings-block2");
-    stageBox.appendChild(elText("h3", "data-table-title2", "진행 단계 · 가중치"));
-    stageBox.appendChild(elText("p", "data-desc2", "가중치 100 = 진행 확정(관리자가 실적 반영을 켜면 실적 집계) · 1~99 = 진행 중(가중 예상) · 0 = 불발·보류"));
+    stageBox.appendChild(elText("h3", "data-table-title2", "진행 단계 (보고 진행 체계)"));
+    stageBox.appendChild(elText("p", "data-desc2", "구분: 진행 중 = 보고 진행 현황에 프로젝트별 표시 · 확정 = 확정 표·실적 반영 대상(관리자 승인) · 종료 = 불발·보류. 가중치는 쓰지 않습니다."));
     const t = el("table", "data-table2");
-    const hr = el("tr", null); ["단계", "가중치", "설명"].forEach(h => hr.appendChild(elText("th", null, h)));
+    const hr = el("tr", null); ["단계", "구분", "설명"].forEach(h => hr.appendChild(elText("th", null, h)));
     const th = el("thead", null); th.appendChild(hr); t.appendChild(th);
     const tb = el("tbody", null);
-    codes.stages.forEach(st => { const tr = el("tr", null); tr.append(elText("td", null, st.name), elText("td", null, st.weight + "%"), elText("td", "long2", st.desc || "")); tb.appendChild(tr); });
+    codes.stages.forEach(st => { const tr = el("tr", null); tr.append(elText("td", null, st.name), elText("td", null, stageKind(st.name)), elText("td", "long2", st.desc || "")); tb.appendChild(tr); });
     t.appendChild(tb);
     const tw = el("div", "data-table-wrap2"); tw.appendChild(t); stageBox.appendChild(tw);
     wrap.appendChild(stageBox);
@@ -3391,16 +3518,16 @@
       inputs[k] = ta; f.appendChild(ta); grid.appendChild(f);
     });
     const stageField = el("label", "form-field2 full2");
-    stageField.appendChild(elText("span", "form-label2", "진행 단계 (한 줄에 이름|가중치|설명)"));
+    stageField.appendChild(elText("span", "form-label2", "진행 단계 (한 줄에 이름|구분|설명 — 구분은 진행 중 / 확정 / 종료)"));
     const stageTa = document.createElement("textarea"); stageTa.rows = 8; stageTa.disabled = !admin;
-    stageTa.value = codes.stages.map(st => `${st.name}|${st.weight}|${st.desc || ""}`).join("\n");
+    stageTa.value = codes.stages.map(st => `${st.name}|${stageKind(st.name)}|${st.desc || ""}`).join("\n");
     stageField.appendChild(stageTa);
     if (admin) grid.appendChild(stageField);
     listBox.appendChild(grid);
     if (admin) {
       const save = elText("button", "btn-primary2", "기준 정보 저장"); save.type = "button";
       save.addEventListener("click", async () => {
-        if (!confirm("기준 정보를 저장할까요? 진행 단계 가중치가 바뀌면 사업 원장의 가중 예상금액이 다시 계산됩니다.")) return;
+        if (!confirm("기준 정보를 저장할까요? 진행 단계 이름을 바꾸면 그 단계로 저장된 사업도 함께 확인해 주세요.")) return;
         const payload = { stages: stageTa.value.split("\n").map(x => x.trim()).filter(Boolean) };
         lists.forEach(([k]) => { payload[k] = inputs[k].value.split(/[,\n]/).map(x => x.trim()).filter(Boolean); });
         const res = await callDb("saveCodes", { codes: payload });
@@ -3904,7 +4031,7 @@
     if (col.key === "kpiHalfManual") wrap.appendChild(elText("span", "form-hint2", "계약 시작일이 미정일 때 KPI를 인정할 반기"));
     if (col.key === "stage") {
       const hint = elText("span", "form-hint2", "");
-      const upd = () => { const s = COLLAB.meta.codes.stages.find(x => x.name === input.value); hint.textContent = s ? `${s.desc || ""} (가중치 ${s.weight}%)` : ""; };
+      const upd = () => { const s = COLLAB.meta.codes.stages.find(x => x.name === input.value); hint.textContent = s ? `${s.desc || ""} · ${stageKind(s.name)}` : ""; };
       input.addEventListener("change", upd); upd();
       wrap.appendChild(hint);
     }
@@ -3918,7 +4045,6 @@
       if (rec.id) parts.push("사업ID " + rec.id);
       if (typeof rec.kpiKrw === "number") parts.push(`KPI 추산 ${(rec.kpiKrw / 1e8).toFixed(2)}억원` + (rec.kpiHalf ? ` (${rec.kpiHalf})` : ""));
       else if (rec.kpiKrw) parts.push("KPI: " + rec.kpiKrw);
-      if (typeof rec.weighted === "number" && stageWeight(rec.stage) < 100) parts.push(`가중 예상 ${(rec.weighted / 1e8).toFixed(2)}억원`);
       if (rec.approval) parts.push("실적 반영 " + (rec.approval === "승인" ? "ON" : "OFF") + ` · ${rec.kpiBasis || "KPI 고정환율"} 기준` + (typeof rec.kpiCounted === "number" ? ` ${(rec.kpiCounted / 1e8).toFixed(2)}억원` : "") + (rec.approvedBy ? ` (${rec.approvedBy})` : ""));
       if (rec.year) parts.push(`실적 반영 연도·반기: ${rec.year}년 ${rec.kpiHalf || "미정"}` + (isAdminMode() ? "" : " (관리자 지정)"));
       if (rec.source) parts.push("출처: " + rec.source);
@@ -4005,7 +4131,7 @@
       show("paidKrw", w >= 100); show("paidDate", w >= 100);
       ["cur", "amount"].forEach(k => {
         if (!fields[k]) return;
-        const need = w >= MONEY_REQUIRED_WEIGHT;
+        const need = stageNeedsMoney(stage);
         fields[k].querySelector(".req2").textContent = need ? " *" : "";
         fields[k].classList.toggle("need2", need && !val(k));
       });
@@ -4177,9 +4303,9 @@
         ["브랜드", "●", "광고주·파트너 이름"],
         ["사업명", "", "자유롭게(예: 광고 모델 1년)"],
         ["계약구분", "●", codeNames("ckinds").join(" / ")],
-        ["진행 단계", "●", "제안 / 협의 / 최종 압축 / 계약 중 / 확정 / 불발 / 보류  (" + codeNames("stages").join(", ") + "도 됨)"],
-        ["계약통화", "△", codeNames("currencies").join(" / ") + "  — 최종 압축부터 필수"],
-        ["계약금액", "△", "숫자만(계약통화 기준) — 최종 압축부터 필수"],
+        ["진행 단계", "●", codeNames("stages").join(" / ") + "  (예전 표기 '최종 압축'·'확정'·'협의'도 자동 변환)"],
+        ["계약통화", "△", codeNames("currencies").join(" / ") + "  — 총괄님 승인 완료부터 입력 요청"],
+        ["계약금액", "△", "숫자만(계약통화 기준) — 총괄님 승인 완료부터 입력 요청"],
         ["계약 시작일 · 종료일", "", "2026-07-21(일자) · 2026-07(월만) · 비우면 미정"],
         ["비고", "", "자유롭게"],
         ["실적 반영", "관리자", "O = KPI 실적에 집계, X = 제외, 빈칸 = 지금 상태 유지"],
@@ -4257,7 +4383,7 @@
     const go = elText("button", "btn-primary2", "대조하기"); go.type = "button"; go.disabled = true;
     const cancel = elText("button", "btn-line2", "닫기"); cancel.type = "button"; cancel.addEventListener("click", m.close);
     const actions = el("div", "form-actions2"); actions.append(go, cancel);
-    content.append(elText("p", "modal-desc2", "매출현황에 있는 건은 진행 단계와 관계없이 '진행 확정'으로, 진행현황은 최종 압축·진행 중·불발 기준으로 반영합니다. 운영 연도 이전에 확정·불발된 진행현황 건은 제외합니다."), drop, status, actions);
+    content.append(elText("p", "modal-desc2", "매출현황에 있는 건은 진행 단계와 관계없이 '진행 확정'으로, 진행현황은 BIS 단계 기준(최종압축 → 총괄님 승인 완료 · 진행중 → 브랜드 협의 중 · 진행불발 → 진행 불발)으로 반영합니다. 운영 연도 이전에 확정·불발된 진행현황 건은 제외합니다."), drop, status, actions);
     prog.hold("read", "매출현황·진행현황 파일을 골라 주세요");
     const renderStatus = () => {
       status.innerHTML = "";
