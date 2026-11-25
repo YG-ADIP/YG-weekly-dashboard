@@ -26,7 +26,7 @@ var MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP',
 // ============================================================
 // 플랫폼 설정 — 관리자 설정 화면에서 바꾸는 값들의 기본값(2026 운영값)
 // ============================================================
-var PLATFORM_SECTION_KEYS = ['kpi', 'agenda', 'bizcal', 'trend', 'teamcal']; // 월별 트래킹은 2026-11 삭제
+var PLATFORM_SECTION_KEYS = ['kpi', 'report', 'agenda', 'bizcal', 'trend', 'teamcal']; // 월별 트래킹은 2026-11 삭제, 보고 진행 현황 2026-11 추가
 var DEFAULT_CONFIG = {
   general: { title: '주간회의 대시보드', teamName: '광고IP사업팀', teamNameEn: 'AD/IP BUSINESS', year: 2026 },
   sources: {
@@ -50,6 +50,7 @@ var DEFAULT_CONFIG = {
   teamCal: { upcomingKeywords: ['출장', '촬영', '업로드'], upcomingDays: 10 }, // "차주엔~" 배지
   sections: [
     { key: 'kpi', title: '{year} KPI 현황', visible: true },
+    { key: 'report', title: '보고 진행 현황', visible: true },
     { key: 'agenda', title: '팀 AGENDA', visible: true },
     { key: 'bizcal', title: '사업 캘린더', visible: true },
     { key: 'trend', title: '트렌드 리포트', visible: true },
@@ -133,8 +134,12 @@ function sanitizeConfig_(input) {
     var def = d.sections.filter(function (x) { return x.key === s.key; })[0];
     sections.push({ key: s.key, title: cleanText_(s.title, 40, def.title), visible: s.visible !== false });
   });
-  d.sections.forEach(function (def) { // 빠진 섹션은 기본 순서대로 뒤에 붙임
-    if (!sections.some(function (x) { return x.key === def.key; })) sections.push({ key: def.key, title: def.title, visible: def.visible });
+  d.sections.forEach(function (def, i) { // 빠진 섹션(새로 생긴 섹션 등)은 기본 순서상 바로 앞 섹션 뒤에 끼움
+    if (sections.some(function (x) { return x.key === def.key; })) return;
+    var prev = i > 0 ? d.sections[i - 1].key : null, at = -1;
+    sections.forEach(function (x, j) { if (x.key === prev) at = j; });
+    var item = { key: def.key, title: def.title, visible: def.visible };
+    if (at >= 0) sections.splice(at + 1, 0, item); else sections.push(item); // 앞 섹션이 없으면 예전처럼 맨 뒤
   });
   return {
     general: {
@@ -182,8 +187,11 @@ function sanitizeCodes_(codes) {
     else { var p = String(x || '').split('|'); name = p[0]; weight = p[1]; desc = p[2]; }
     name = String(name || '').trim();
     if (!name || stages.some(function (s) { return s.name === name; }) || stages.length >= 12) return;
-    var w = parseFloat(weight);
-    stages.push({ name: name.slice(0, 20), weight: isNaN(w) ? 0 : Math.max(0, Math.min(100, w)), desc: String(desc || '').trim().slice(0, 60) });
+    // 구분: '진행 중' / '확정' / '종료'(불발·보류) — 예전 숫자(가중치)도 받아서 구분으로 바꿈
+    var k = String(weight === undefined ? '' : weight).trim(), w;
+    if (/확정/.test(k)) w = 100; else if (/종료|불발|보류/.test(k)) w = 0; else if (/진행/.test(k) || k === '') w = 50;
+    else { var n = parseFloat(k); w = isNaN(n) ? 50 : n >= 100 ? 100 : n <= 0 ? 0 : 50; }
+    stages.push({ name: name.slice(0, 20), weight: w, desc: String(desc || '').trim().slice(0, 60) });
   });
   if (stages.length) out.stages = stages;
   ['groups', 'ctypes', 'ckinds', 'items', 'currencies'].forEach(function (k) {
