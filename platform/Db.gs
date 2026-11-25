@@ -1918,6 +1918,57 @@ function parseXlsxBase64_(b64) {
   return sheets;
 }
 
+// ---- BIS 드라이브에서 가져오기: 회사 보안 프로그램이 브라우저 파일 업로드를 막을 때, 드라이브 폴더의 파일을 서버가 직접 읽음 ----
+var BIS_DRIVE_SCAN = 15; // 최근 수정 순으로 살펴볼 파일 수
+function bisKindOfAoa_(aoa) {
+  var top = (aoa || []).slice(0, 10).map(function (r) { return (r || []).join('|'); }).join('|');
+  if (/최종입금금액|KPI 기준년도|광고 시작일/.test(top)) return 'sales';
+  if (/진행\s*상태/.test(top)) return 'pipe';
+  return '';
+}
+function readDriveSheets_(file) {
+  var mime = file.getMimeType();
+  if (mime === MimeType.GOOGLE_SHEETS) {
+    var tz = Session.getScriptTimeZone();
+    return SpreadsheetApp.openById(file.getId()).getSheets().slice(0, 1).map(function (sh) {
+      return { name: sh.getName(), aoa: sh.getDataRange().getValues().map(function (r) {
+        return r.map(function (v) { return Object.prototype.toString.call(v) === '[object Date]' ? Utilities.formatDate(v, tz, 'yyyy-MM-dd') : v; });
+      }) };
+    });
+  }
+  return parseXlsxBase64_(Utilities.base64Encode(file.getBlob().getBytes()));
+}
+function bisDriveFiles_(folderId) {
+  var folder = DriveApp.getFolderById(folderId), list = [], it = folder.getFiles();
+  while (it.hasNext()) {
+    var f = it.next(), name = f.getName(), mime = f.getMimeType();
+    if (mime === MimeType.GOOGLE_SHEETS || /\.xlsx$/i.test(name)) list.push(f);
+  }
+  list.sort(function (a, b) { return b.getLastUpdated().getTime() - a.getLastUpdated().getTime(); });
+  var tz = Session.getScriptTimeZone(), cache = {};
+  var files = list.slice(0, BIS_DRIVE_SCAN).map(function (f) {
+    var kind = '', err = '';
+    try { var sheets = readDriveSheets_(f); kind = bisKindOfAoa_(sheets[0].aoa); cache[f.getId()] = sheets; } catch (e) { err = String(e.message || e); }
+    return { id: f.getId(), name: f.getName(), updated: Utilities.formatDate(f.getLastUpdated(), tz, 'yyyy-MM-dd HH:mm'), kind: kind, error: err };
+  });
+  return { folder: folder.getName(), url: folder.getUrl(), files: files, cache: cache };
+}
+// 폴더 목록 + 고른 파일(없으면 종류별 최신) 내용
+function dbBisDrive_(payload) {
+  var folderId = cfg_().sources.bisFolder;
+  if (!folderId) return { ok: false, error: 'no_folder', message: '관리자 설정 → 데이터 연결에서 "BIS 업로드 폴더"를 먼저 지정해 주세요.' };
+  var r;
+  try { r = bisDriveFiles_(folderId); } catch (e) { return { ok: false, error: 'folder', message: 'BIS 업로드 폴더를 열 수 없어요(주소·공유 권한 확인): ' + (e.message || e) }; }
+  var pick = function (kind) {
+    var want = payload[kind];
+    var f = r.files.filter(function (x) { return want ? x.id === want : x.kind === kind; })[0];
+    if (!f) return null;
+    var sheets = r.cache[f.id];
+    return sheets ? { id: f.id, name: f.name, updated: f.updated, aoa: sheets[0].aoa } : null;
+  };
+  return { ok: true, folder: r.folder, url: r.url, files: r.files, sales: pick('sales'), pipe: pick('pipe') };
+}
+
 function dbApi(action, password, user, payloadJson) {
   var pw = getPassword_();
   if (!pw || password !== pw) return JSON.stringify({ ok: false, error: 'unauthorized' });
@@ -1928,7 +1979,7 @@ function dbApi(action, password, user, payloadJson) {
   var adminDenied = payload.adminPw ? checkAdminPassword_(payload.adminPw) : { error: 'forbidden' };
   var isAdmin = !adminDenied;
   try { ensureStagesV2_(); } catch (e) {} // 진행 단계 체계 변경 — 한 번만
-  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, deleteMany: 1, parseFile: 1, bisPreview: 1, bisCommit: 1, clearCheck: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
+  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, deleteMany: 1, parseFile: 1, bisDrive: 1, bisPreview: 1, bisCommit: 1, clearCheck: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
   // 입력·저장은 팀원 명단(사용)에 있는 이름만. 관리자 모드는 예외, 명단이 비어 있으면(최초 설정) 허용.
   var WRITE_ACTIONS = { save: 1, delete: 1, restore: 1 };
   if (WRITE_ACTIONS[action] && !isAdmin && dbReady_()) {
@@ -1949,6 +2000,7 @@ function dbApi(action, password, user, payloadJson) {
       case 'deleteMany': res = dbDeleteMany_(payload.table, payload.ids, user); break;
       case 'parseFile': res = { ok: true, sheets: parseXlsxBase64_(String(payload.b64 || '')) }; break;
       case 'clearCheck': res = dbClearCheck_(payload.ids, user); break;
+      case 'bisDrive': res = dbBisDrive_(payload); break;
       case 'bisPreview': res = { ok: true, result: dbBisImport_(payload, user, false) }; break;
       case 'bisCommit': res = { ok: true, result: dbBisImport_(payload, user, true) }; break;
       case 'setYear': res = { ok: true, year: setOperatingYear_(payload.year, user) }; break;
@@ -1960,6 +2012,7 @@ function dbApi(action, password, user, payloadJson) {
           stageDefaults: DEFAULT_CODES.stages,
           codes: dbReady_() ? dbCodes_() : null,
           members: dbReady_() ? readTable_('members').filter(function (m) { return m.active !== '중지'; }).map(function (m) { return { name: m.name, role: m.role, part: m.part }; }) : [],
+          bisFolder: !!cfg_().sources.bisFolder,
           dbUrl: dbReady_() ? 'https://docs.google.com/spreadsheets/d/' + cfg_().sources.dbSheet + '/edit' : '' };
         break;
       case 'list': res = { ok: true, rows: readTable_(payload.table).map(stripRow_) }; break;

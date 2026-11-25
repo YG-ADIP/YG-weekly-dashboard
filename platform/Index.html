@@ -709,6 +709,12 @@
   .v-counted2 { font-weight: 700; color: var(--ink); }
   .bis-files2 { margin: 10px 0; display: flex; flex-direction: column; gap: 4px; }
   .bis-file2 { font-size: 12.5px; font-weight: 700; }
+  .drive-box2 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 14px 16px; border: 1px solid var(--hairline); border-radius: 14px; background: #fafbfd; margin-bottom: 12px; }
+  .drive-box2 a { color: var(--accent-700); font-weight: 700; }
+  .drive-pick2 { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; }
+  .drive-pick2:empty { display: none; }
+  .drive-sel2 { display: flex; align-items: center; gap: 10px; font-size: 12.5px; }
+  .drive-sel2 b { width: 64px; } .drive-sel2 select { flex: 1; min-width: 0; }
   .bis-file2.ok2 { color: var(--good); } .bis-file2.wait2 { color: var(--faint); }
   .import-pill2.warn-pill2 { border-color: #f1c88a; background: #fffaf0; color: #6b4d18; }
   .warn-box2 { border-color: #f1c88a; background: #fffaf0; } .warn-box2 p { color: #6b4d18; font-weight: 700; } .warn-box2 ul { color: #5b4520; }
@@ -4457,8 +4463,50 @@
     drop.append(elText("b", null, "BIS 매출현황·진행현황 엑셀 2개를 함께 고르거나 끌어다 놓으세요"), elText("span", null, "머리글로 자동 구분합니다 · 하나씩 따로 올려도 됩니다"), input);
     const go = elText("button", "btn-primary2", "대조하기"); go.type = "button"; go.disabled = true;
     const cancel = elText("button", "btn-line2", "닫기"); cancel.type = "button"; cancel.addEventListener("click", m.close);
+    // 드라이브에서 가져오기: 'BIS 업로드 폴더'의 최신 매출현황·진행현황을 서버가 직접 읽음(브라우저 파일 업로드 불필요)
+    const driveBox = el("div", "drive-box2");
+    const driveBtn = elText("button", "btn-primary2", "드라이브에서 가져오기"); driveBtn.type = "button";
+    const driveMsg = elText("span", "form-hint2", "BIS 업로드 폴더의 최신 매출현황·진행현황을 자동으로 찾아요");
+    const drivePick = el("div", "drive-pick2");
+    driveBox.append(driveBtn, driveMsg, drivePick);
+    const loadDrive = async (want) => {
+      driveBtn.disabled = true;
+      prog.start("read", "드라이브 BIS 업로드 폴더 읽는 중…");
+      driveMsg.textContent = "드라이브 폴더를 읽는 중… (파일 수에 따라 10~20초)";
+      try {
+        const res = await callDb("bisDrive", want || {});
+        if (!res.ok) throw new Error(res.message || res.error);
+        const take = (k, f) => { if (f) { const { rows } = rowsFromAoa(f.aoa); got[k] = { name: f.name, rows, id: f.id }; } else got[k] = null; };
+        take("sales", res.sales); take("pipe", res.pipe);
+        driveMsg.innerHTML = "";
+        const link = elText("a", null, "\u{1F4C1} " + res.folder); link.href = res.url; link.target = "_blank"; link.rel = "noopener";
+        driveMsg.append(link, document.createTextNode(` · 엑셀 ${res.files.length}개`));
+        drivePick.innerHTML = "";
+        [["sales", "매출현황"], ["pipe", "진행현황"]].forEach(([k, t]) => {
+          const opts = res.files.filter(f => f.kind === k);
+          const lab = el("label", "drive-sel2");
+          lab.appendChild(elText("b", null, t));
+          const sel = document.createElement("select");
+          if (!opts.length) sel.appendChild(new Option("폴더에 " + t + " 파일 없음", ""));
+          opts.forEach(f => sel.appendChild(new Option(`${f.name} · ${f.updated}`, f.id, false, got[k] && got[k].id === f.id)));
+          sel.disabled = !opts.length;
+          sel.addEventListener("change", () => loadDrive({ sales: k === "sales" ? sel.value : got.sales && got.sales.id, pipe: k === "pipe" ? sel.value : got.pipe && got.pipe.id }));
+          lab.appendChild(sel);
+          drivePick.appendChild(lab);
+        });
+        const other = res.files.filter(f => !f.kind);
+        if (other.length) drivePick.appendChild(elText("p", "form-hint2", "BIS 머리글이 아니라 제외한 파일: " + other.map(f => f.name).join(", ")));
+        if (!got.sales) prog.fail("read", "매출현황 없음");
+      } catch (err) {
+        prog.fail("read", "실패");
+        driveMsg.textContent = "";
+        status.appendChild(elText("p", "err2", "드라이브에서 읽지 못했어요: " + err.message));
+      } finally { driveBtn.disabled = false; }
+      renderStatus();
+    };
+    driveBtn.addEventListener("click", () => loadDrive());
     const actions = el("div", "form-actions2"); actions.append(go, cancel);
-    content.append(elText("p", "modal-desc2", "매출현황에 있는 건은 진행 단계와 관계없이 '진행 확정'으로, 진행현황은 BIS 단계 기준(최종압축 → 총괄님 승인 완료 · 진행중 → 브랜드 협의 중 · 진행불발 → 진행 불발)으로 반영합니다. 운영 연도 이전에 확정·불발된 진행현황 건은 제외합니다."), drop, status, actions);
+    content.append(elText("p", "modal-desc2", "매출현황에 있는 건은 진행 단계와 관계없이 '진행 확정'으로, 진행현황은 BIS 단계 기준(최종압축 → 총괄님 승인 완료 · 진행중 → 브랜드 협의 중 · 진행불발 → 진행 불발)으로 반영합니다. 운영 연도 이전에 확정·불발된 진행현황 건은 제외합니다."), driveBox, drop, status, actions);
     prog.hold("read", "매출현황·진행현황 파일을 골라 주세요");
     const renderStatus = () => {
       status.innerHTML = "";
@@ -4491,7 +4539,8 @@
     drop.addEventListener("drop", e => { e.preventDefault(); handle(e.dataTransfer && e.dataTransfer.files); });
     go.addEventListener("click", () => previewImport("deals", [], m, onDone, 1, { bis: true, payload: { sales: got.sales.rows, pipe: got.pipe ? got.pipe.rows : [] } }));
     renderStatus();
-    input.click();
+    if (COLLAB.meta && COLLAB.meta.bisFolder) loadDrive(); // 폴더가 지정돼 있으면 바로 드라이브에서 가져옴
+    else { driveMsg.textContent = "관리자 설정 → 데이터 연결에서 'BIS 업로드 폴더'를 지정하면 드라이브에서 바로 가져올 수 있어요"; input.click(); }
   }
 
   function readAsBase64(file) {
@@ -4506,6 +4555,8 @@
   function dateCell(v) { return v instanceof Date ? new Date(Math.round(v.getTime() / 864e5) * 864e5).toISOString().slice(0, 10) : v; }
   // 엑셀 파일 → [{name, aoa}] : .xlsx는 서버가 직접 읽고(브라우저·네트워크 영향 없음), 실패하거나 .xls·.csv면 브라우저 엑셀 도구로
   async function readSheetsFromFile(file, onStatus) {
+    // 회사 문서보안 프로그램(OfficeKeeper 등)이 업로드를 막으면 실제 파일 대신 차단 안내 파일이 들어옴
+    if (/OfficeKeeper|File\s*Block/i.test(file.name || "")) throw new Error("회사 보안 프로그램(OfficeKeeper)이 브라우저 파일 업로드를 막았어요. BIS 파일은 드라이브의 'BIS 업로드 폴더'에 넣고 [BIS 업로드] → [드라이브에서 가져오기]를 이용해 주세요.");
     let serverErr = null;
     if (/\.xlsx$/i.test(file.name)) {
       try {
