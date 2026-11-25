@@ -1026,7 +1026,7 @@
     if (tab && n) tab.appendChild(elText("span", "tab-badge2", String(n)));
     if (!n && !pending.length) return;
     const bar = el("div", "admin-alert2" + (n ? "" : " info2"));
-    bar.appendChild(elText("b", null, n ? `⚠ 관리자 확인 필요 ${n}건` : "관리자 알림"));
+    bar.appendChild(elText("b", null, n ? `\u26A0 관리자 확인 필요 ${n}건` : "관리자 알림"));
     const parts = [];
     if (dup.length) parts.push(`중복 의심 ${dup.length}건`);
     if (miss.length) parts.push(`BIS 매출현황 누락 ${miss.length}건`);
