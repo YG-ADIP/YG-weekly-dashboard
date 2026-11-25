@@ -686,6 +686,11 @@
   .fx-half2 { font-size: 11px; font-weight: 700; color: var(--soft); width: 40px; flex-shrink: 0; }
   .sel-bar2 { position: sticky; left: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fff7f5; border-bottom: 1px solid #f3d3cc; font-size: 12px; }
   .sel-bar2[hidden] { display: none; }
+  .admin-alert2 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; border: 1px solid #f3c9c1; background: #fff6f4; border-radius: 14px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; }
+  .admin-alert2 > b { color: var(--bad); }
+  .admin-alert2.info2 { border-color: #dfe7ff; background: #f3f6ff; } .admin-alert2.info2 > b { color: var(--accent-700); }
+  .admin-alert2 ul { flex-basis: 100%; margin: 4px 0 0; padding-left: 18px; font-size: 12px; color: #6b3a33; }
+  .tab-badge2 { display: inline-block; min-width: 16px; margin-left: 5px; padding: 0 5px; border-radius: 999px; background: var(--bad); color: #fff; font-size: 10px; line-height: 16px; text-align: center; }
   .report-chips2 { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
   .report-chip2 { font: inherit; font-size: 12px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--hairline); background: #fff; color: var(--soft); cursor: pointer; }
   .report-chip2 b { color: var(--ink); margin-left: 2px; }
@@ -916,6 +921,7 @@
       if (!res.ok) throw new Error(res.message || res.error);
       COLLAB.rows.deals = res.rows;
       renderReport(body, res.rows, slot);
+      renderAdminAlerts(res.rows);
     } catch (e) {
       body.innerHTML = "";
       body.appendChild(elText("p", "state-msg2 err2", "불러오지 못했어요: " + e.message));
@@ -998,6 +1004,48 @@
       det.appendChild(reportTable(["진행 단계", "구분", "아티스트", "브랜드 · 사업명", "계약금액", "사유"], closed, r => [stageBadge(r.stage), r.part, artistOf(r), titleOf(r), money(r), r.reason || "—"], slot));
       body.appendChild(det);
     }
+  }
+
+  // ---- 관리자 알림: 중복 의심·BIS 매출현황 누락 등 관리자가 봐야 할 건 ----
+  function needsAdminCheck(r) { return !!r.dupCheck || /매출현황 누락/.test(r.source || ""); }
+  function isAdminUser() {
+    if (isAdminMode()) return true;
+    const me = ((COLLAB.meta && COLLAB.meta.members) || []).find(m => m.name === COLLAB.user);
+    return !!(me && me.role === "관리자");
+  }
+  function renderAdminAlerts(rows) {
+    const slot = document.getElementById("adminAlertSlot");
+    const tab = document.querySelector('.app-tab2[data-view="deals"]');
+    if (tab) { const old = tab.querySelector(".tab-badge2"); if (old) old.remove(); }
+    if (!slot) return;
+    slot.innerHTML = "";
+    if (!isAdminUser() || !rows) return;
+    const dup = rows.filter(r => r.dupCheck), miss = rows.filter(r => /매출현황 누락/.test(r.source || ""));
+    const pending = rows.filter(r => r.approval === "승인 대기" && stageWeight(r.stage) >= 100 && Number(r.year) === CFG_YEAR);
+    const flagged = rows.filter(needsAdminCheck), n = flagged.length; // 한 건이 두 사유에 해당해도 1건
+    if (tab && n) tab.appendChild(elText("span", "tab-badge2", String(n)));
+    if (!n && !pending.length) return;
+    const bar = el("div", "admin-alert2" + (n ? "" : " info2"));
+    bar.appendChild(elText("b", null, n ? `⚠ 관리자 확인 필요 ${n}건` : "관리자 알림"));
+    const parts = [];
+    if (dup.length) parts.push(`중복 의심 ${dup.length}건`);
+    if (miss.length) parts.push(`BIS 매출현황 누락 ${miss.length}건`);
+    if (pending.length) parts.push(`실적 반영 대기(확정 건) ${pending.length}건`);
+    bar.appendChild(elText("span", null, parts.join(" · ")));
+    const go = elText("button", "btn-line2 small2", n ? "확인하러 가기" : "사업 원장 보기"); go.type = "button";
+    go.addEventListener("click", () => { const f = defaultFilters("deals"); f.todo = n ? "관리자 확인" : ""; f.approval = n ? "" : "승인 대기"; switchView("deals"); });
+    bar.appendChild(go);
+    if (n) {
+      const ul = el("ul", null);
+      flagged.slice(0, 5).forEach(r => ul.appendChild(elText("li", null, `${r.id} · ${r.group} · ${r.brand} — ${r.dupCheck || "진행현황은 진행확정인데 매출현황에 없음"}`)));
+      if (n > 5) ul.appendChild(elText("li", null, `외 ${n - 5}건`));
+      bar.appendChild(ul);
+    }
+    slot.appendChild(bar);
+  }
+  async function loadAdminAlerts() {
+    if (!isAdminUser()) { renderAdminAlerts(null); return; }
+    try { const res = await callDb("list", { table: "deals" }); if (res.ok) { COLLAB.rows.deals = res.rows; renderAdminAlerts(res.rows); } } catch (e) {}
   }
 
   // ---- 화면 오류 알림 ----
@@ -2878,6 +2926,7 @@
     })());
     if (secVisible("bizcal")) tasks.push(loadCalSection(document.getElementById("calSlot")).then(() => markSectionsDone2(["사업 캘린더"])));
     if (secVisible("report")) tasks.push(loadReportSection(document.getElementById("reportSlot")).then(() => markSectionsDone2(["보고 진행 현황"])));
+    else tasks.push(loadAdminAlerts());
     if (secVisible("teamcal")) tasks.push(loadTeamCalSection(document.getElementById("teamCalSlot")).then(() => markSectionsDone2(["팀 일정 캘린더"])));
     await Promise.all(tasks);
     const now = new Date();
@@ -2989,7 +3038,8 @@
     const w = stageWeight(r.stage), out = [];
     const add = (t, who) => out.push({ t, who: who || "작성자" });
     if (/확인 필요/.test(r.note || "")) add("브랜드 확인 필요(시트 이관)");
-    if (/매출현황 누락/.test(r.source || "")) add("매출현황 누락 확인(BIS 진행확정)");
+    if (/매출현황 누락/.test(r.source || "")) add("매출현황 누락 확인(BIS 진행확정)", "관리자");
+    if (r.dupCheck) add("중복 의심 확인", "관리자");
     if (r.group === "기타" && !r.artist) add("아티스트 확인 필요");
     if (w === 0 && /불발/.test(r.stage || "") && !r.reason) add("불발 사유 입력 필요");
     if (w === 0 && /보류/.test(r.stage || "") && !r.reason) add("보류 사유 입력 필요");
@@ -3068,6 +3118,8 @@
     const dash = el("div", null); dash.id = "dashView";
     const insight = document.getElementById("insightSlot");
     insight.before(dash);
+    const alertSlot = el("div", null); alertSlot.id = "adminAlertSlot";
+    dash.appendChild(alertSlot);
     dash.appendChild(insight);
     dash.appendChild(document.getElementById("sectionsRoot"));
     const data = el("div", null); data.id = "dataView"; data.hidden = true;
@@ -3075,6 +3127,7 @@
     updateUserChip();
   }
   function updateAdminChip() {
+    if (COLLAB.rows && COLLAB.rows.deals) setTimeout(() => renderAdminAlerts(COLLAB.rows.deals), 0);
     const chip = document.getElementById("adminChip");
     if (!chip) return;
     chip.textContent = isAdminMode() ? "\u{1F513} 관리자 모드 (끄기)" : "\u{1F512} 관리자 모드";
@@ -3245,6 +3298,7 @@
     COLLAB.user = name;
     try { if (name) localStorage.setItem("dashUser", name); } catch (e) {}
     updateUserChip();
+    if (name) setTimeout(() => (COLLAB.rows && COLLAB.rows.deals ? renderAdminAlerts(COLLAB.rows.deals) : loadAdminAlerts()), 0); // 이름이 정해진 뒤 관리자 알림
   }
 
   // ---------------- 모달 ----------------
@@ -3567,7 +3621,10 @@
       if (f.part && r.part !== f.part) return false;
       if (f.stage && r.stage !== f.stage) return false;
       if (f.approval && r.approval !== f.approval) return false;
-      if (f.todo && table === "deals") { const need = dealTodos(r).some(x => x.who === "작성자"); if ((f.todo === "확인 필요") !== need) return false; }
+      if (f.todo && table === "deals") {
+        if (f.todo === "관리자 확인") { if (!needsAdminCheck(r)) return false; }
+        else { const need = dealTodos(r).some(x => x.who === "작성자"); if ((f.todo === "확인 필요") !== need) return false; }
+      }
       if (q && !Object.values(r).some(v => String(v).toLowerCase().includes(q))) return false;
       return true;
     });
@@ -3619,7 +3676,7 @@
       addSelect("파트", codeNames("parts"), f.part, v => { f.part = v; });
       addSelect("단계", codeNames("stages"), f.stage, v => { f.stage = v; });
       addSelect("실적 반영", [{ value: "승인 대기", label: "OFF(반영 대기)" }, { value: "승인", label: "ON(반영)" }], f.approval || "", v => { f.approval = v; });
-      addSelect("다음 할 일", ["확인 필요", "없음"], f.todo || "", v => { f.todo = v; });
+      addSelect("다음 할 일", [{ value: "확인 필요", label: "확인 필요(작성자)" }, { value: "관리자 확인", label: "관리자 확인 필요" }, { value: "없음", label: "없음" }], f.todo || "", v => { f.todo = v; });
     }
     const spacer = el("span", "data-spacer2");
     toolbar.appendChild(spacer);
@@ -3674,6 +3731,7 @@
   }
 
   function drawTable(wrap, summary, table, rows) {
+    if (table === "deals") renderAdminAlerts(rows);
     const def = tableDef(table);
     const list = filteredRows(table, rows);
     summary.innerHTML = "";
@@ -4050,6 +4108,22 @@
       if (rec.source) parts.push("출처: " + rec.source);
       form.appendChild(elText("div", "deal-auto2", parts.join(" · ") || "자동 계산 값 없음"));
     }
+    if (!isNew && rec.dupCheck) {
+      const box = el("div", "import-errbox2 warn-box2 dup-box2");
+      box.appendChild(elText("p", null, "관리자 확인 사항: " + rec.dupCheck));
+      if (isAdminMode()) {
+        const ok = elText("button", "btn-line2 small2", "확인 완료(중복 아님)"); ok.type = "button";
+        ok.addEventListener("click", async () => {
+          const res = await callDb("clearCheck", { ids: [rec.id] });
+          if (!res.ok) { alert("실패: " + (res.message || res.error)); return; }
+          rec.dupCheck = ""; box.remove(); COLLAB.dashDirty = true;
+          if (COLLAB.rows.deals) { const t = COLLAB.rows.deals.find(x => x.id === rec.id); if (t) t.dupCheck = ""; renderAdminAlerts(COLLAB.rows.deals); }
+        });
+        box.appendChild(ok);
+        box.appendChild(elText("span", "form-hint2", " 정말 중복이면 [삭제]로 한 건을 지우세요(변경 이력에서 복원 가능)."));
+      }
+      form.appendChild(box);
+    }
     const todoBox = el("div", "todo-box2");
     form.appendChild(todoBox);
     const fields = {};
@@ -4215,6 +4289,7 @@
         COLLAB.dashDirty = true;
         if (table === "members") refreshMeta();
         m.close();
+        if (res.dupCheck) alert("비슷한 사업이 이미 있어 '관리자 확인 필요(중복 의심)'로 표시했어요.\n" + res.dupCheck);
         if (res.approvalReset) alert("KPI 관련 내용(금액·연도·단계 등)이 바뀌어 실적 반영이 꺼졌습니다(OFF). 관리자가 다시 켜야 실적에 집계됩니다.");
         onDone && onDone();
       } catch (err) {
@@ -4568,7 +4643,7 @@
     if (r.columns.defaults.length) cols.appendChild(elText("span", null, "자동으로 채운 칸: " + r.columns.defaults.join(", ")));
     m.body.appendChild(cols);
     const sum = el("div", "import-sum2");
-    [["신규", r.added, "new2"], ["변경", r.updated, "upd2"], ["변경 없음", r.unchanged, "same2"], ["오류", r.errors, "err2"]].forEach(([k, n, c]) => {
+    [["신규", r.added, "new2"], ["변경", r.updated, "upd2"], ["변경 없음", r.unchanged, "same2"], ["오류", r.errors, "err2"]].concat(table === "deals" ? [["자동 인식(이름 표기 다름)", r.autoMatched || 0, "same2"], ["중복 의심 → 관리자 확인", r.suspects || 0, "warn-pill2"]] : []).filter(([k, n]) => n || !/자동 인식|중복 의심/.test(k)).forEach(([k, n, c]) => {
       const b = el("span", "import-pill2 " + c); b.appendChild(elText("b", null, String(n))); b.appendChild(document.createTextNode(" " + k)); sum.appendChild(b);
     });
     m.body.appendChild(sum);

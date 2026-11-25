@@ -63,6 +63,8 @@ var DB_TABLES = {
       { key: 'kpiCounted', label: '실적 인정금액(KRW)', type: 'auto' },
       // 기준이 '확정 금액'일 때의 원화 금액(관리자 입력 또는 마스터 시트의 KPI 인정 금액)
       { key: 'kpiFixedKrw', label: '확정 KPI 금액(KRW)', type: 'number', adminOnly: true },
+      // 관리자 확인 사항: 중복 의심 등(서버가 자동으로 채우고, 관리자가 [확인 완료]로 지움)
+      { key: 'dupCheck', label: '관리자 확인 사항', type: 'auto' },
     ],
   },
   kpiGoals: {
@@ -483,6 +485,7 @@ function dbSave_(key, input, user, baseUpdatedAt, isAdmin) {
     var approvalLog = null;
     if (key === 'deals') {
       rec.source = existing ? existing.source : (input.source || '화면 입력');
+      rec.dupCheck = existing ? (existing.dupCheck || '') : dupSuspect_(rec, rows, '');
       if (!isAdmin) { // 실적 인정 기준·확정 금액은 관리자만
         rec.kpiBasis = existing ? (existing.kpiBasis || '') : '';
         rec.kpiFixedKrw = existing ? existing.kpiFixedKrw : '';
@@ -513,7 +516,7 @@ function dbSave_(key, input, user, baseUpdatedAt, isAdmin) {
     if (approvalLog) logs.push(approvalLog);
     appendLogs_(logs);
     if (key === 'fx') recalcDeals_(user);
-    return { ok: true, record: rec, approvalReset: !!approvalLog };
+    return { ok: true, record: rec, approvalReset: !!approvalLog, dupCheck: key === 'deals' && !existing ? (rec.dupCheck || '') : '' };
   });
 }
 
@@ -701,6 +704,42 @@ function stageNameByWeight_(w) { var s = dbCodes_().stages.filter(function (x) {
 //  · 진행현황의 최종 압축·진행 중은 진행현황 기준, 불발은 운영 연도 건만
 //  · 진행현황의 과거 건(운영 연도 이전에 확정·불발)은 제외, '진행확정'인데 매출현황에 없으면 확인 필요
 // ============================================================
+// 기존 사업 중 '이름은 조금 달라도 같은 사업'인 1건 찾기(같은 그룹 안에서):
+//  ① 비슷한 브랜드 + 같은 계약구분  ② 비슷한 브랜드 + (같은 금액 또는 같은 시작 월)  ③ 같은 통화·금액 + (같은 시작 월 또는 같은 계약구분)
+//  후보가 여럿이면 금액 → 사업명 단어로 하나를 고름. 하나로 안 좁혀지면 null(새 사업 + 중복 의심 표시)
+function sameMonth_(a, b) { var x = flexMonth_(a), y = flexMonth_(b); return !!(x && y && x.y === y.y && x.m === y.m); }
+function findSameDeal_(rec, pool) {
+  // 같은 그룹 안에서 점수로 판단: 비슷한 브랜드 2 · 같은 계약구분 1 · 같은 통화·금액 3 · 같은 시작 월 2 · 사업명 단어 겹침 1
+  // 인정 조건: (비슷한 브랜드 + 계약구분·금액·시작 월 중 하나) 또는 (같은 금액 + 시작 월·계약구분 중 하나). 최고점이 하나일 때만.
+  var g = String(rec.group || '').toUpperCase(), amt = numOrBlank_(rec.amount), words = wordsOf_([rec.brand, rec.name, rec.cond].join(' '));
+  var scored = pool.filter(function (d) { return String(d.group || '').toUpperCase() === g; }).map(function (d) {
+    var b = sameBrand_(d.brand, rec.brand), k = d.ckind === rec.ckind;
+    var a = typeof amt === 'number' && amt > 0 && numOrBlank_(d.amount) === amt && String(d.cur || '') === String(rec.cur || '');
+    var m = sameMonth_(d.startDate, rec.startDate);
+    var dw = wordsOf_([d.brand, d.name, d.cond].join(' ')), w = Object.keys(words).filter(function (x) { return dw[x]; }).length;
+    var okd = (b && (k || a || m)) || (a && (m || k));
+    // 겹치는 사업명 단어 수는 동점을 가르는 데만 씀(예: KOTRA 하노이 ↔ 멜버른)
+    return { d: d, ok: okd, n: (b ? 2 : 0) + (k ? 1 : 0) + (a ? 3 : 0) + (m ? 2 : 0) + Math.min(w, 9) * 0.1, b: b, k: k, a: a };
+  }).filter(function (x) { return x.ok; }).sort(function (x, y) { return y.n - x.n; });
+  if (!scored.length || (scored.length > 1 && scored[0].n === scored[1].n)) return null;
+  var top = scored[0], d = top.d;
+  var how = !top.b ? '같은 금액·시기(' + d.brand + ' ↔ ' + rec.brand + ')'
+    : brandKey_(d.brand) !== brandKey_(rec.brand) ? '브랜드 표기 다름(' + d.brand + ' ↔ ' + rec.brand + ')'
+    : !top.k ? '계약구분 표기 다름(' + d.ckind + ' ↔ ' + rec.ckind + ')' : '브랜드·계약 일치';
+  return { deal: d, how: how };
+}
+// 새로 들어가는 사업이 기존 사업과 겹쳐 보이면 관리자 확인 사항 문구(아니면 '')
+function dupSuspect_(rec, deals, selfId) {
+  var g = String(rec.group || '').toUpperCase(), amt = numOrBlank_(rec.amount);
+  var hits = deals.filter(function (d) {
+    if (d.id === selfId || String(d.group || '').toUpperCase() !== g || stageInfo_(d.stage).weight === 0) return false;
+    var sameAmt = typeof amt === 'number' && amt > 0 && numOrBlank_(d.amount) === amt && String(d.cur || '') === String(rec.cur || '');
+    var month = sameMonth_(d.startDate, rec.startDate), noDates = !d.startDate || !rec.startDate;
+    return (sameBrand_(d.brand, rec.brand) && (sameAmt || month || (noDates && d.ckind === rec.ckind))) || (sameAmt && month);
+  });
+  return hits.length ? '중복 의심: ' + hits.slice(0, 3).map(function (d) { return d.id + '(' + [d.brand, String(d.name || '').slice(0, 20)].filter(Boolean).join(' ') + ')'; }).join(', ') + '과 같은 사업인지 확인' : '';
+}
+
 function wordsOf_(text) {
   var set = {};
   (String(text || '').toLowerCase().match(/[a-z0-9]{2,}|[가-힣]{2,}/g) || []).forEach(function (w) { set[w] = true; });
@@ -728,7 +767,7 @@ function bisReconcile_(salesRaw, pipeRaw) {
     var sig = JSON.stringify([m.group, m.brand, m.ckind, m.name, m.cur, m.amount, m.startDate, m.endDate]);
     var twin = sales.filter(function (x) { return x._sig === sig; })[0];
     m._sig = sig;
-    if (twin) { m._note = '매출현황 ' + twin._line + '행과 내용이 완전히 같음 — 중복 입력인지 확인'; twin._note = twin._note || '매출현황 ' + (i + 2) + '행과 내용이 완전히 같음 — 중복 입력인지 확인'; }
+    if (twin) { m._note = '매출현황 ' + twin._line + '행과 내용이 완전히 같음 — 중복 입력인지 확인'; twin._note = twin._note || '매출현황 ' + (i + 2) + '행과 내용이 완전히 같음 — 중복 입력인지 확인'; m._dup = '중복 의심: 매출현황 ' + twin._line + '행과 ' + (i + 2) + '행이 완전히 같음 — BIS 중복 입력인지 확인'; }
     sales.push(m); (byKey[keyOf(m)] = byKey[keyOf(m)] || []).push(m);
   });
   // 같은 사업 찾기(두 파일의 표기가 달라도): ① 그룹·브랜드·계약구분 일치 → ② 비슷한 브랜드·같은 계약구분
@@ -842,8 +881,16 @@ function dbImport_(key, rawRows, user, commit, opts) {
         if (c && c.length) match = pickOne(c, rec);
         // 시작일이 없는 엑셀(예: BIS 진행현황)은 브랜드+아티스트 그룹+계약구분으로
         if (!match) { var c2 = (byFp2[dealFingerprint2_(rec)] || []).filter(function (x) { return !rec.startDate || !x.startDate; }); if (c2.length === 1 && !claimed[c2[0].id]) match = c2[0]; }
+        var how = '';
+        if (!match && !errors.length) { var fz = findSameDeal_(rec, existing.filter(function (d) { return !claimed[d.id]; })); if (fz) { match = fz.deal; how = fz.how; } }
       }
       if (match) claimed[match.id] = true;
+      if (opts.bis && match && rec.stage) {
+        var wm = stageInfo_(match.stage).weight, wr = stageInfo_(rec.stage).weight;
+        if ((wm >= 100 && wr >= 100) || (wm > 0 && wm < 100 && wr > 0 && wr < 100)) rec.stage = match.stage; // BIS는 보고 단계를 모름 → 플랫폼 단계 유지
+      }
+      var autoNote = key === 'deals' && how ? '기존 ' + match.id + '과 같은 사업으로 자동 인식 — ' + how : '';
+      var suspect = key === 'deals' && !match && !errors.length ? (mapped._dup || dupSuspect_(rec, existing, '')) : ''; // 같은 파일 안의 다른 행끼리는 비교하지 않음(따로 적은 계약)
       if (match && key === 'deals') {
         (mapped._defaulted || []).forEach(function (k) { rec[k] = ''; }); // 자동 채움 값으로 기존 값을 덮어쓰지 않음
         // 간편 양식으로 내려받은 '반기'(자동 계산값)를 그대로 올린 경우는 변경 아님
@@ -877,13 +924,18 @@ function dbImport_(key, rawRows, user, commit, opts) {
       var notes = [];
       if (flagNote) notes.push(flagNote);
       if (mapped._note) notes.push(mapped._note);
-      result.rows.push({ line: mapped._line || i + 2, file: mapped._src || '', category: mapped._cat || '', status: status, id: match ? match.id : '', summary: summaryOf_(key, rec), errors: errors, changes: changes.slice(0, 6), changeCount: changes.length, notes: notes });
+      if (autoNote) notes.push(autoNote);
+      if (suspect) notes.push(suspect + ' → 관리자 확인 필요로 표시');
+      if (suspect) result.suspects = (result.suspects || 0) + 1;
+      if (autoNote) result.autoMatched = (result.autoMatched || 0) + 1;
+      result.rows.push({ line: mapped._line || i + 2, file: mapped._src || '', category: mapped._cat || '', suspect: suspect, autoMatched: !!autoNote, status: status, id: match ? match.id : '', summary: summaryOf_(key, rec), errors: errors, changes: changes.slice(0, 6), changeCount: changes.length, notes: notes });
       if (status === 'error') { result.errors++; return; }
       if (status === 'same') { result.unchanged++; return; }
       if (!commit) { status === 'new' ? result.added++ : result.updated++; return; }
       if (status === 'new') {
         rec.id = nextId_(key, rec, seq);
         rec.source = mapped._source || '엑셀 업로드 (' + nowStamp_().slice(0, 10) + ')';
+        if (key === 'deals') rec.dupCheck = suspect;
         // 엑셀로 들어온 사업은 '오늘 단계가 바뀐 것'이 아니므로 엑셀의 확정/불발일을 단계 변경일로 씀(없으면 빈칸)
         if (key === 'deals') { rec.stageDate = rec.decidedDate || ''; applyFlag(rec); computeDeal_(rec, fxRows); }
         rec.updatedBy = user; rec.updatedAt = nowStamp_();
@@ -895,7 +947,7 @@ function dbImport_(key, rawRows, user, commit, opts) {
         if (mapped._source) merged.source = mapped._source;
         if (key === 'deals') {
           if (merged.stage !== match.stage) merged.stageDate = nowStamp_().slice(0, 10);
-          if (match.approvedAt && kpiFieldsChanged_(match, merged)) {
+          if (match.approvedAt && !opts.bis && kpiFieldsChanged_(match, merged)) { // BIS 업로드는 실적 반영을 유지(플랫폼 값)
             merged.approvedBy = ''; merged.approvedAt = '';
             logs.push({ user: user, table: key, recordId: match.id, action: '승인 해제', field: 'KPI 승인', before: '승인', after: '엑셀 업로드로 KPI 관련 내용 변경 → 승인 대기' });
           }
@@ -1614,6 +1666,22 @@ function dbApprove_(ids, approve, user) {
   });
 }
 
+function dbClearCheck_(ids, user) {
+  return withLock_(function () {
+    var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.deals.sheet), logs = [], done = 0;
+    readTable_('deals').forEach(function (d) {
+      if ((ids || []).indexOf(d.id) < 0 || !d.dupCheck) return;
+      logs.push({ user: user, table: 'deals', recordId: d.id, action: '관리자 확인 완료', field: '관리자 확인 사항', before: d.dupCheck, after: '' });
+      d.dupCheck = '';
+      var row = recordToRow_('deals', d);
+      sh.getRange(d._row, 1, 1, row.length).setValues([row]);
+      done++;
+    });
+    appendLogs_(logs);
+    return { ok: true, done: done };
+  });
+}
+
 function dbSetBasis_(ids, basis, user) {
   if (FIXED_CODES.kpiBases.indexOf(basis) < 0) throw new Error('실적 인정 기준을 확인해 주세요.');
   return withLock_(function () {
@@ -1860,7 +1928,7 @@ function dbApi(action, password, user, payloadJson) {
   var adminDenied = payload.adminPw ? checkAdminPassword_(payload.adminPw) : { error: 'forbidden' };
   var isAdmin = !adminDenied;
   try { ensureStagesV2_(); } catch (e) {} // 진행 단계 체계 변경 — 한 번만
-  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, deleteMany: 1, parseFile: 1, bisPreview: 1, bisCommit: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
+  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, deleteMany: 1, parseFile: 1, bisPreview: 1, bisCommit: 1, clearCheck: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
   // 입력·저장은 팀원 명단(사용)에 있는 이름만. 관리자 모드는 예외, 명단이 비어 있으면(최초 설정) 허용.
   var WRITE_ACTIONS = { save: 1, delete: 1, restore: 1 };
   if (WRITE_ACTIONS[action] && !isAdmin && dbReady_()) {
@@ -1880,6 +1948,7 @@ function dbApi(action, password, user, payloadJson) {
       case 'addMembers': res = dbAddMembers_(payload.records, user); break;
       case 'deleteMany': res = dbDeleteMany_(payload.table, payload.ids, user); break;
       case 'parseFile': res = { ok: true, sheets: parseXlsxBase64_(String(payload.b64 || '')) }; break;
+      case 'clearCheck': res = dbClearCheck_(payload.ids, user); break;
       case 'bisPreview': res = { ok: true, result: dbBisImport_(payload, user, false) }; break;
       case 'bisCommit': res = { ok: true, result: dbBisImport_(payload, user, true) }; break;
       case 'setYear': res = { ok: true, year: setOperatingYear_(payload.year, user) }; break;
