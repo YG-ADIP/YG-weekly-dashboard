@@ -1969,6 +1969,19 @@ function dbBisDrive_(payload) {
   return { ok: true, folder: r.folder, url: r.url, files: r.files, sales: pick('sales'), pipe: pick('pipe') };
 }
 
+// 업로드 창에서 바로 BIS 업로드 폴더 지정(관리자) — 열 수 있는 폴더인지 확인 후 관리자 설정에 저장(변경 이력 남음)
+function dbSetBisFolder_(input, user) {
+  var id = extractId_(input);
+  if (!id) return { ok: false, error: 'invalid', message: '드라이브 폴더 주소를 붙여 넣어 주세요.' };
+  var folder;
+  try { folder = DriveApp.getFolderById(id); folder.getName(); }
+  catch (e) { return { ok: false, error: 'folder', message: '이 폴더를 열 수 없어요. 주소가 맞는지, 플랫폼을 배포한 구글 계정에 폴더가 공유(뷰어 이상)돼 있는지 확인해 주세요.' }; }
+  var config = JSON.parse(JSON.stringify(cfg_()));
+  config.sources.bisFolder = id;
+  saveConfig_(sanitizeConfig_(config), user, 'BIS 업로드 폴더 지정(업로드 창)');
+  return { ok: true, id: id, folder: folder.getName() };
+}
+
 function dbApi(action, password, user, payloadJson) {
   var pw = getPassword_();
   if (!pw || password !== pw) return JSON.stringify({ ok: false, error: 'unauthorized' });
@@ -1979,7 +1992,7 @@ function dbApi(action, password, user, payloadJson) {
   var adminDenied = payload.adminPw ? checkAdminPassword_(payload.adminPw) : { error: 'forbidden' };
   var isAdmin = !adminDenied;
   try { ensureStagesV2_(); } catch (e) {} // 진행 단계 체계 변경 — 한 번만
-  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, deleteMany: 1, parseFile: 1, bisDrive: 1, bisPreview: 1, bisCommit: 1, clearCheck: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
+  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, deleteMany: 1, parseFile: 1, bisDrive: 1, setBisFolder: 1, bisPreview: 1, bisCommit: 1, clearCheck: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
   // 입력·저장은 팀원 명단(사용)에 있는 이름만. 관리자 모드는 예외, 명단이 비어 있으면(최초 설정) 허용.
   var WRITE_ACTIONS = { save: 1, delete: 1, restore: 1 };
   if (WRITE_ACTIONS[action] && !isAdmin && dbReady_()) {
@@ -2001,6 +2014,7 @@ function dbApi(action, password, user, payloadJson) {
       case 'parseFile': res = { ok: true, sheets: parseXlsxBase64_(String(payload.b64 || '')) }; break;
       case 'clearCheck': res = dbClearCheck_(payload.ids, user); break;
       case 'bisDrive': res = dbBisDrive_(payload); break;
+      case 'setBisFolder': res = dbSetBisFolder_(payload.folder, user); break;
       case 'bisPreview': res = { ok: true, result: dbBisImport_(payload, user, false) }; break;
       case 'bisCommit': res = { ok: true, result: dbBisImport_(payload, user, true) }; break;
       case 'setYear': res = { ok: true, year: setOperatingYear_(payload.year, user) }; break;
