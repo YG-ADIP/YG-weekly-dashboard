@@ -686,6 +686,15 @@
   .fx-half2 { font-size: 11px; font-weight: 700; color: var(--soft); width: 40px; flex-shrink: 0; }
   .sel-bar2 { position: sticky; left: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fff7f5; border-bottom: 1px solid #f3d3cc; font-size: 12px; }
   .sel-bar2[hidden] { display: none; }
+  .paid-badge2 { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px; }
+  .paid-badge2.none2 { background: #eef0f4; color: #6b7280; } .paid-badge2.part2 { background: #fdecc8; color: #6b4d18; } .paid-badge2.full2 { background: #e3f1e6; color: #24553a; }
+  .v-counted2 { font-weight: 700; color: var(--ink); }
+  .bis-files2 { margin: 10px 0; display: flex; flex-direction: column; gap: 4px; }
+  .bis-file2 { font-size: 12.5px; font-weight: 700; }
+  .bis-file2.ok2 { color: var(--good); } .bis-file2.wait2 { color: var(--faint); }
+  .import-pill2.warn-pill2 { border-color: #f1c88a; background: #fffaf0; color: #6b4d18; }
+  .warn-box2 { border-color: #f1c88a; background: #fffaf0; } .warn-box2 p { color: #6b4d18; font-weight: 700; } .warn-box2 ul { color: #5b4520; }
+  .bis-ex2 { margin: 6px 0 10px; font-size: 12px; color: var(--soft); } .bis-ex2 summary { cursor: pointer; } .bis-ex2 ul { max-height: 160px; overflow: auto; }
   .up-drop2 { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 26px 16px; border: 2px dashed var(--accent-300); border-radius: 14px; background: var(--accent-tint); color: var(--accent-700); cursor: pointer; text-align: center; }
   .up-drop2:hover, .up-drop2.over2 { background: #e2ebff; border-color: var(--accent); }
   .up-drop2 span { font-size: 11.5px; color: var(--soft); }
@@ -2813,7 +2822,7 @@
   ];
   // 표에 보이는 열(나머지는 입력 양식에서 확인)
   const LIST_COLS = {
-    deals: ["part", "group", "artist", "brand", "name", "stage", "approval", "todo", "cur", "amount", "kpiKrw", "kpiHalf", "endDate"],
+    deals: ["part", "group", "artist", "brand", "name", "stage", "cur", "amount", "paid", "period", "kpiWhen", "counted", "approval", "todo"],
     kpiGoals: ["year", "part", "period", "goalS", "goalB", "note", "updatedBy"],
     fx: ["year", "half", "cur", "unit", "rate", "note", "updatedBy"],
     snapshots: ["week", "part", "period", "goalS", "goalB", "actual", "pipeline", "weighted", "source", "recordedAt"],
@@ -2853,6 +2862,7 @@
     const w = stageWeight(r.stage), out = [];
     const add = (t, who) => out.push({ t, who: who || "작성자" });
     if (/확인 필요/.test(r.note || "")) add("브랜드 확인 필요(시트 이관)");
+    if (/매출현황 누락/.test(r.source || "")) add("매출현황 누락 확인(BIS 진행확정)");
     if (r.group === "기타" && !r.artist) add("아티스트 확인 필요");
     if (w === 0 && /불발/.test(r.stage || "") && !r.reason) add("불발 사유 입력 필요");
     if (w === 0 && /보류/.test(r.stage || "") && !r.reason) add("보류 사유 입력 필요");
@@ -3496,6 +3506,12 @@
       bulk.addEventListener("click", () => openMembersBulk(rows, rerender));
       toolbar.appendChild(bulk);
     }
+    if (table === "deals" && isAdminMode()) {
+      const bis = elText("button", "btn-primary2", "BIS 업로드"); bis.type = "button";
+      bis.title = "광고팀: BIS 매출현황·진행현황 엑셀을 함께 올리면 확정/진행 기준으로 대조해 반영";
+      bis.addEventListener("click", () => openBisUpload(rerender));
+      toolbar.appendChild(bis);
+    }
     if (def.editable && isAdminMode()) {
       const up = elText("button", "btn-line2", "엑셀 업로드"); up.type = "button";
       up.addEventListener("click", () => pickExcel(table, rerender));
@@ -3614,7 +3630,7 @@
       });
       th.appendChild(all); hr.appendChild(th);
     }
-    LIST_COLS[table].forEach(k => hr.appendChild(elText("th", null, k === "todo" ? "다음 할 일" : (table === "deals" && k === "approval") ? "실적 반영 · 기준" : colDef(table, k).label)));
+    LIST_COLS[table].forEach(k => hr.appendChild(elText("th", null, VIRTUAL_COLS[k] || ((table === "deals" && k === "approval") ? "실적 반영 · 기준" : colDef(table, k).label))));
     if (table === "log" || (table === "members" && isAdminMode())) hr.appendChild(elText("th", null, ""));
     thead.appendChild(hr); t.appendChild(thead);
     const tbody = el("tbody", null);
@@ -3633,6 +3649,7 @@
       LIST_COLS[table].forEach(k => {
         if (k === "todo") { const td = el("td", "todo-cell2"); todoChips(td, dealTodos(r)); tr.appendChild(td); return; }
         if (table === "deals" && k === "approval") { const td = el("td", "count-cell2"); countCell(td, r); tr.appendChild(td); return; }
+        if (table === "deals" && VIRTUAL_COLS[k]) { const td = el("td", "v-" + k + "2"); dealVirtualCell(td, k, r); tr.appendChild(td); return; }
         const td = elText("td", ["content", "before", "after", "name"].includes(k) ? "long2" : null, cellText(table, k, r[k]));
         if (k === "approval" && r.approval) td.classList.add(r.approval === "승인" ? "appr-ok2" : "appr-wait2");
         if (k === "stage" && r.stage) td.dataset.weight = String(((COLLAB.meta.codes.stages.find(s => s.name === r.stage) || {}).weight) || 0);
@@ -3728,6 +3745,30 @@
     });
     return sel;
   }
+  // 사업 원장 목록의 계산 칸: 실입금(3단계) · 계약기간 · KPI 인정 시기 · 인정 실적
+  const VIRTUAL_COLS = { todo: "다음 할 일", paid: "실입금", period: "계약기간", kpiWhen: "KPI 인정 시기", counted: "인정 실적(KRW)" };
+  function paidStatus(r) {
+    const paid = typeof r.paidKrw === "number" ? r.paidKrw : 0;
+    const base = typeof r.kpiKrw === "number" ? r.kpiKrw : (r.cur === "KRW" && typeof r.amount === "number" ? r.amount : null);
+    if (!paid) return { t: "미입금", c: "none2" };
+    if (base && paid >= base * 0.98) return { t: "입금 완료", c: "full2" };
+    if (base) return { t: `부분 입금 ${Math.round(paid / base * 100)}%`, c: "part2" };
+    return { t: "입금", c: "full2" };
+  }
+  function dealVirtualCell(td, k, r) {
+    if (k === "paid") {
+      const st = paidStatus(r);
+      td.appendChild(elText("span", "paid-badge2 " + st.c, st.t));
+      if (typeof r.paidKrw === "number" && r.paidKrw) td.appendChild(elText("div", "count-amt2", fmtNum(r.paidKrw)));
+    } else if (k === "period") {
+      td.textContent = r.startDate || r.endDate ? `${r.startDate || "미정"} ~ ${r.endDate || "미정"}` : (r.months ? r.months + "개월" : "미정");
+    } else if (k === "kpiWhen") {
+      td.textContent = `${r.year || ""}년 ${String(r.kpiHalf || "").startsWith("미정") || !r.kpiHalf ? "반기 미정" : r.kpiHalf}`;
+    } else if (k === "counted") {
+      td.textContent = typeof r.kpiCounted === "number" ? fmtNum(r.kpiCounted) : "—";
+      if (r.kpiBasis) td.title = r.kpiBasis + " 기준";
+    }
+  }
   function countCell(td, r) {
     if (!r.approval) { td.appendChild(elText("span", "todo-none2", "—")); return; }
     const basisText = r.kpiBasis === "실입금액" ? "실입금액" : r.kpiBasis === "확정 금액" ? "확정 금액" : "고정환율";
@@ -3741,7 +3782,7 @@
       td.appendChild(elText("span", "count-badge2" + (r.approval === "승인" ? " on2" : ""), r.approval === "승인" ? "반영 ON" : "반영 OFF"));
       td.appendChild(elText("span", "count-basis2", " " + basisText + " 기준"));
     }
-    td.appendChild(elText("div", "count-amt2", `${r.year || ""}년 ${r.kpiHalf || "반기 미정"} · 인정 ${amt}`));
+    td.appendChild(elText("div", "count-amt2", basisText + " 기준"));
   }
   // 넓은 표: Shift + 휠로 좌우 이동, 앞쪽 열(사업 원장 = 파트·그룹·아티스트·브랜드)은 고정
   function enableWideTable(wrap, table, freezeCount) {
@@ -3970,6 +4011,11 @@
       });
       if (fields.reason) { fields.reason.querySelector(".req2").textContent = w === 0 ? " *" : ""; fields.reason.classList.toggle("need2", w === 0 && !val("reason")); }
       if (fields.kpiFixedKrw) fields.kpiFixedKrw.hidden = val("kpiBasis") !== "확정 금액";
+      if (fields.ckind) {
+        let h = fields.ckind.querySelector(".ip-hint2");
+        if (!h) { h = elText("span", "form-hint2 ip-hint2", ""); fields.ckind.appendChild(h); }
+        h.textContent = val("part") === "IP" ? "IP: MG(선급 보장금)와 로열티 초과분은 인정 시점·금액이 달라 행을 나눠 입력하세요 (계약구분 MG / 로열티)" : "";
+      }
       sections.forEach(s => { s.sec.hidden = s.keys.every(k => !fields[k] || fields[k].hidden); });
       const cur = Object.assign({}, rec);
       form.querySelectorAll("[data-key]").forEach(i => { cur[i.dataset.key] = i.value; });
@@ -4194,6 +4240,102 @@
 
   // 엑셀 업로드: [엑셀 업로드]를 누르면 업로드 창이 바로 열리고(진행 단계 표시), 창 안의 파일 칸으로 고르거나 끌어다 놓음.
   // (화면에 붙지 않은 파일 칸은 일부 브라우저에서 파일을 골라도 반응이 없어, 파일 칸을 창 안에 실제로 둠)
+  // BIS 통합 업로드(관리자·광고팀): 매출현황 + 진행현황 두 파일을 함께 올리면 판정 규칙으로 대조 → 미리보기 → 반영
+  function openBisUpload(onDone) {
+    if (!COLLAB.user) { openUserPicker(false); return; }
+    const modal = openModal("BIS 업로드 — 매출현황 + 진행현황", true, true);
+    const prog = uploadProgress();
+    const content = el("div", "up-content2");
+    modal.body.append(prog.box, content);
+    const m = { body: content, close: () => { prog.stop(); modal.close(); }, prog };
+    const got = { sales: null, pipe: null };
+    const status = el("div", "bis-files2");
+    const drop = el("label", "up-drop2");
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = ".xlsx,.xls,.csv"; input.multiple = true; input.className = "up-file2";
+    drop.append(elText("b", null, "BIS 매출현황·진행현황 엑셀 2개를 함께 고르거나 끌어다 놓으세요"), elText("span", null, "머리글로 자동 구분합니다 · 하나씩 따로 올려도 됩니다"), input);
+    const go = elText("button", "btn-primary2", "대조하기"); go.type = "button"; go.disabled = true;
+    const cancel = elText("button", "btn-line2", "닫기"); cancel.type = "button"; cancel.addEventListener("click", m.close);
+    const actions = el("div", "form-actions2"); actions.append(go, cancel);
+    content.append(elText("p", "modal-desc2", "매출현황에 있는 건은 진행 단계와 관계없이 '진행 확정'으로, 진행현황은 최종 압축·진행 중·불발 기준으로 반영합니다. 운영 연도 이전에 확정·불발된 진행현황 건은 제외합니다."), drop, status, actions);
+    prog.hold("read", "매출현황·진행현황 파일을 골라 주세요");
+    const renderStatus = () => {
+      status.innerHTML = "";
+      [["sales", "매출현황"], ["pipe", "진행현황"]].forEach(([k, t]) => {
+        const g = got[k];
+        status.appendChild(elText("div", "bis-file2 " + (g ? "ok2" : "wait2"), g ? `✔ ${t}: ${g.name} · ${g.rows.length}행` : `○ ${t}: 아직 없음`));
+      });
+      if (got.sales && !got.pipe) status.appendChild(elText("p", "modal-desc2", "진행현황 없이 매출현황만 올려도 됩니다(확정 건만 반영)."));
+      go.disabled = !got.sales;
+      if (got.sales) prog.done("read", [got.sales && "매출현황 " + got.sales.rows.length + "행", got.pipe && "진행현황 " + got.pipe.rows.length + "행"].filter(Boolean).join(" · "));
+    };
+    const handle = async files => {
+      for (const file of Array.from(files || [])) {
+        prog.start("read", file.name + " 읽는 중…");
+        try {
+          const sheets = await readSheetsFromFile(file, t => prog.sub("read", file.name + " — " + t));
+          const sh = sheets[0];
+          const { header, rows } = rowsFromAoa(sh.aoa);
+          const isSales = header.some(h => /최종입금금액|KPI 기준년도|광고 시작일/.test(h));
+          const isPipe = header.some(h => /진행\s*상태/.test(h));
+          if (!isSales && !isPipe) throw new Error(`${file.name}: BIS 매출현황(최종입금금액·KPI 기준년도)이나 진행현황(진행 상태) 머리글을 찾지 못했어요`);
+          got[isSales ? "sales" : "pipe"] = { name: file.name, rows };
+        } catch (err) { prog.fail("read", "실패"); status.appendChild(elText("p", "err2", "읽지 못했어요: " + err.message)); return; }
+      }
+      renderStatus();
+    };
+    input.addEventListener("change", () => handle(input.files));
+    ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over2"); }));
+    ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, () => drop.classList.remove("over2")));
+    drop.addEventListener("drop", e => { e.preventDefault(); handle(e.dataTransfer && e.dataTransfer.files); });
+    go.addEventListener("click", () => previewImport("deals", [], m, onDone, 1, { bis: true, payload: { sales: got.sales.rows, pipe: got.pipe ? got.pipe.rows : [] } }));
+    renderStatus();
+    input.click();
+  }
+
+  function readAsBase64(file) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(String(fr.result).split(",")[1] || "");
+      fr.onerror = () => reject(new Error("파일을 읽지 못했어요(파일이 열려 있거나 손상됐을 수 있어요)."));
+      fr.readAsDataURL(file);
+    });
+  }
+  // 날짜 셀 → 'YYYY-MM-DD' (시간대와 무관하게 가장 가까운 자정 기준)
+  function dateCell(v) { return v instanceof Date ? new Date(Math.round(v.getTime() / 864e5) * 864e5).toISOString().slice(0, 10) : v; }
+  // 엑셀 파일 → [{name, aoa}] : .xlsx는 서버가 직접 읽고(브라우저·네트워크 영향 없음), 실패하거나 .xls·.csv면 브라우저 엑셀 도구로
+  async function readSheetsFromFile(file, onStatus) {
+    let serverErr = null;
+    if (/\.xlsx$/i.test(file.name)) {
+      try {
+        onStatus && onStatus("서버로 파일 보내는 중…");
+        const b64 = await readAsBase64(file);
+        onStatus && onStatus("서버에서 엑셀 읽는 중…");
+        const res = await callDb("parseFile", { b64 });
+        if (res.ok && res.sheets && res.sheets.length) return res.sheets;
+        serverErr = new Error(res.message || res.error || "서버에서 읽지 못함");
+      } catch (e) { serverErr = e; }
+    }
+    try {
+      const XLSX = await loadXlsx(onStatus);
+      onStatus && onStatus("브라우저에서 엑셀 읽는 중…");
+      const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+      return wb.SheetNames.map(n => ({ name: n, aoa: XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: "" }).map(r => r.map(dateCell)) }));
+    } catch (e) {
+      throw new Error((serverErr ? "서버: " + serverErr.message + " / " : "") + e.message);
+    }
+  }
+  // 표(aoa) → 머리글 행 찾기 + 행 객체 (처음 10행 중 글자 칸이 가장 많은 행 = 머리글)
+  function rowsFromAoa(aoa) {
+    if (!aoa || !aoa.length) throw new Error("빈 시트예요.");
+    let hIdx = 0, best = -1;
+    aoa.slice(0, 10).forEach((r, i) => { const n = (r || []).filter(v => typeof v === "string" && v.trim()).length; if (n > best) { best = n; hIdx = i; } });
+    const header = (aoa[hIdx] || []).map(h => String(h).trim());
+    const rows = aoa.slice(hIdx + 1).filter(r => r && r.some(v => v !== "" && v != null))
+      .map(r => { const o = {}; header.forEach((h, j) => { if (h) o[h] = r[j] === undefined ? "" : r[j]; }); return o; });
+    return { header, rows, headerLine: hIdx + 1 };
+  }
+
   function pickExcel(table, onDone) {
     if (!COLLAB.user) { openUserPicker(false); return; }
     const modal = openModal("엑셀 업로드 — " + tableDef(table).sheet.replace(/_/g, " "), true, true);
@@ -4215,24 +4357,13 @@
       content.innerHTML = "";
       prog.start("read", file.name + " 여는 중…");
       try {
-        const XLSX = await loadXlsx(t => prog.sub("read", t));
-        prog.sub("read", "시트 읽는 중…");
-        const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+        const sheets = await readSheetsFromFile(file, t => prog.sub("read", t));
         const want = tableDef(table).sheet;
-        const ws = wb.Sheets[want] || wb.Sheets[wb.SheetNames[0]];
-        const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
-        // 머리글 행 찾기: 처음 10행 중 글자 칸이 가장 많은 행(BIS 엑셀처럼 위에 제목이 있어도 됨)
-        let hIdx = 0, best = -1;
-        aoa.slice(0, 10).forEach((r, i) => { const n = r.filter(v => typeof v === "string" && v.trim()).length; if (n > best) { best = n; hIdx = i; } });
-        if (!aoa.length) throw new Error("빈 파일이에요.");
-        const header = aoa[hIdx].map(h => String(h).trim());
-        const pad = n => String(n).padStart(2, "0");
-        const toCell = v => (v instanceof Date ? `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}` : v);
-        const rows = aoa.slice(hIdx + 1).filter(r => r.some(v => v !== "" && v != null))
-          .map(r => { const o = {}; header.forEach((h, j) => { if (h) o[h] = toCell(r[j]); }); return o; });
+        const sh = sheets.find(x => x.name === want) || sheets[0];
+        const { rows, headerLine } = rowsFromAoa(sh.aoa);
         if (!rows.length) throw new Error("머리글 아래에 데이터 행이 없어요.");
-        prog.done("read", `${rows.length}행 · 머리글 ${hIdx + 1}번째 줄`);
-        await previewImport(table, rows, m, onDone, hIdx + 1);
+        prog.done("read", `${rows.length}행 · 머리글 ${headerLine}번째 줄 · 시트 '${sh.name}'`);
+        await previewImport(table, rows, m, onDone, headerLine);
       } catch (err) {
         prog.fail("read", "실패");
         showUploadError(m, table, (err && err.message) || String(err));
@@ -4267,12 +4398,14 @@
     return box;
   }
 
-  async function previewImport(table, rows, m, onDone, headerLine) {
+  async function previewImport(table, rows, m, onDone, headerLine, opts) {
+    opts = opts || {};
     const prog = m.prog || uploadProgress();
+    const lineOf = x => (opts.bis ? `${x.file} ${x.line}행` : String(x.line - 1 + headerLine));
     m.body.innerHTML = "";
-    prog.start("check", `${rows.length}행 확인 중…`);
+    prog.start("check", opts.bis ? `매출현황 ${opts.payload.sales.length}행 · 진행현황 ${opts.payload.pipe.length}행 대조 중…` : `${rows.length}행 확인 중…`);
     let res;
-    try { res = await callDb("importPreview", { table, rows }); }
+    try { res = await callDb(opts.bis ? "bisPreview" : "importPreview", opts.bis ? opts.payload : { table, rows }); }
     catch (err) { prog.fail("check", "오류"); showUploadError(m, table, "서버 확인 중 오류 — " + err.message); return; }
     if (!res.ok) { prog.fail("check", "오류"); showUploadError(m, table, res.message || res.error); return; }
     const r = res.result;
@@ -4280,8 +4413,30 @@
     if (r.added + r.updated) prog.hold("preview", "아래 내용을 확인한 뒤 [반영하기]를 눌러 주세요 — 아직 반영 전");
     else prog.hold("preview", "반영할 내용이 없어요");
     m.body.innerHTML = "";
-    m.body.appendChild(elText("p", "modal-desc2", `③ 미리보기 — 아직 반영 전입니다. 머리글: ${headerLine}번째 줄`));
+    m.body.appendChild(elText("p", "modal-desc2", opts.bis ? "③ 미리보기 — 아직 반영 전입니다. 매출현황(확정 기준)과 진행현황(최종 압축·진행 중·불발 기준)을 대조한 결과예요." : `③ 미리보기 — 아직 반영 전입니다. 머리글: ${headerLine}번째 줄`));
+    if (opts.bis) {
+      const cats = el("div", "import-sum2 bis-cats2");
+      Object.entries(r.categories || {}).forEach(([k, n]) => { const b = el("span", "import-pill2 " + (/확인|정정/.test(k) ? "warn-pill2" : "same2")); b.appendChild(elText("b", null, String(n))); b.appendChild(document.createTextNode(" " + k)); cats.appendChild(b); });
+      if ((r.excluded || []).length) { const b = el("span", "import-pill2 same2"); b.appendChild(elText("b", null, String(r.excluded.length))); b.appendChild(document.createTextNode(" 반영 안 함(중복·과거 건)")); cats.appendChild(b); }
+      m.body.appendChild(cats);
+      const check = r.rows.filter(x => /확인|정정/.test(x.category) || (x.notes || []).some(n => /확인/.test(n)));
+      if (check.length) {
+        const cb = el("div", "import-errbox2 warn-box2");
+        cb.appendChild(elText("p", null, `확인이 필요한 ${check.length}건 — 반영은 되고, 사업 원장 '다음 할 일'에도 표시됩니다.`));
+        const ul = el("ul", null);
+        check.forEach(x => ul.appendChild(elText("li", null, `${lineOf(x)} · ${x.summary.split(" · ").slice(1, 4).join(" · ")} → ${x.category}${(x.notes || []).length ? " — " + x.notes.join(" / ") : ""}`)));
+        cb.appendChild(ul); m.body.appendChild(cb);
+      }
+      if ((r.excluded || []).length) {
+        const det = document.createElement("details"); det.className = "bis-ex2";
+        det.appendChild(elText("summary", null, `반영하지 않는 진행현황 ${r.excluded.length}건 보기 (매출현황과 같은 확정 건·과거 건)`));
+        const ul = el("ul", null);
+        r.excluded.forEach(e => ul.appendChild(elText("li", null, `${e.file} ${e.line}행 · ${e.summary} → ${e.reason}`)));
+        det.appendChild(ul); m.body.appendChild(det);
+      }
+    }
     const cols = el("div", "import-colmap2");
+    if (opts.bis) cols.style.display = "none"; // BIS는 머리글을 자동으로 맞추므로 열 인식 표시 생략
     cols.appendChild(elText("span", "ok2", "인식한 열: " + (r.columns.matched.join(", ") || "없음")));
     if (r.columns.unknown.length) cols.appendChild(elText("span", "warn2", "인식 못 한 열(무시됨): " + r.columns.unknown.join(", ")));
     if (r.columns.defaults.length) cols.appendChild(elText("span", null, "자동으로 채운 칸: " + r.columns.defaults.join(", ")));
@@ -4297,7 +4452,7 @@
       const eb = el("div", "import-errbox2");
       eb.appendChild(elText("p", "err2", `오류 ${errRows.length}건은 반영되지 않아요 — 나머지 ${r.added + r.updated}건은 [반영하기]로 저장됩니다. 오류 행은 엑셀에서 고쳐 다시 올리면 됩니다.`));
       const ul = el("ul", null);
-      errRows.slice(0, 30).forEach(x => ul.appendChild(elText("li", null, `${x.line - 1 + headerLine}행 · ${x.summary.split(" · ").slice(1, 4).join(" · ")} → ${x.errors.join(" / ")}`)));
+      errRows.slice(0, 30).forEach(x => ul.appendChild(elText("li", null, `${lineOf(x)}${opts.bis ? "" : "행"} · ${x.summary.split(" · ").slice(1, 4).join(" · ")} → ${x.errors.join(" / ")}`)));
       eb.appendChild(ul);
       m.body.appendChild(eb);
     }
@@ -4307,16 +4462,18 @@
     } else if (!(r.added + r.updated)) {
       m.body.appendChild(elText("p", "modal-desc2", "새로 들어가거나 바뀌는 내용이 없어요(이미 같은 내용이 저장되어 있음)."));
     }
-    if (table === "deals") m.body.appendChild(elText("p", "modal-desc2", "같은 사업 판단: 사업ID가 있으면 ID로, 없으면 '브랜드 + 아티스트 그룹 + 계약구분 + 시작 월'로 찾습니다. 엑셀의 빈 칸은 기존 값을 유지합니다. 간편 양식의 '실적 반영(O/X)·실적 연도·반기·KPI 인정 금액'도 반영됩니다."));
+    if (opts.bis) m.body.appendChild(elText("p", "modal-desc2", "BIS가 갱신하는 칸: 진행 단계·통화·금액·계약 기간·실입금액·최종 압축일·확정/불발일·불발 사유. 플랫폼에서 정한 KPI 인정 시기·실적 반영·실적 인정 기준·확정 금액·비고·담당자는 그대로 유지됩니다."));
+    else if (table === "deals") m.body.appendChild(elText("p", "modal-desc2", "같은 사업 판단: 사업ID가 있으면 ID로, 없으면 '브랜드 + 아티스트 그룹 + 계약구분 + 시작 월'로 찾습니다. 엑셀의 빈 칸은 기존 값을 유지합니다. 간편 양식의 '실적 반영(O/X)·실적 연도·반기·KPI 인정 금액'도 반영됩니다."));
     const t = el("table", "data-table2 import-table2");
     const hr = el("tr", null);
-    ["엑셀 행", "결과", "내용", "변경·오류"].forEach(h => hr.appendChild(elText("th", null, h)));
+    (opts.bis ? ["파일·행", "분류", "결과", "내용", "변경·오류"] : ["엑셀 행", "결과", "내용", "변경·오류"]).forEach(h => hr.appendChild(elText("th", null, h)));
     const thead = el("thead", null); thead.appendChild(hr); t.appendChild(thead);
     const tbody = el("tbody", null);
     const label = { new: "신규", update: "변경", same: "변경 없음", error: "오류" };
     r.rows.slice(0, 300).forEach(x => {
       const tr = el("tr", "st-" + x.status + "2");
-      tr.appendChild(elText("td", null, String(x.line - 1 + headerLine)));
+      tr.appendChild(elText("td", null, lineOf(x)));
+      if (opts.bis) tr.appendChild(elText("td", null, x.category || ""));
       tr.appendChild(elText("td", null, label[x.status] + (x.id ? ` (${x.id})` : "")));
       tr.appendChild(elText("td", "long2", x.summary));
       const detail = x.errors.length ? x.errors.join(" / ") : x.changes.map(c => `${c.field}: ${c.before || "(빈칸)"} → ${c.after}`).join(" / ") + (x.changeCount > x.changes.length ? ` 외 ${x.changeCount - x.changes.length}건` : "");
@@ -4335,7 +4492,7 @@
       prog.done("preview", "확인 완료");
       prog.start("commit", `신규 ${r.added} · 변경 ${r.updated} 저장 중…`);
       let done;
-      try { done = await callDb("importCommit", { table, rows }); }
+      try { done = await callDb(opts.bis ? "bisCommit" : "importCommit", opts.bis ? opts.payload : { table, rows }); }
       catch (err) { done = { ok: false, message: err.message }; }
       if (!done.ok) { prog.fail("commit", "실패 — 아래 내용 확인"); go.disabled = false; cancel.disabled = false; go.textContent = "다시 반영하기"; m.body.appendChild(elText("p", "err2", "반영 실패: " + (done.message || done.error))); return; }
       prog.done("commit", `신규 ${done.result.added} · 변경 ${done.result.updated} 저장 완료`);
@@ -4345,7 +4502,7 @@
       const box = el("div", "import-done2");
       box.appendChild(elText("p", "ok-big2", `✅ 반영 완료 — 신규 ${done.result.added}건 · 변경 ${done.result.updated}건`));
       if (done.result.errors) box.appendChild(elText("p", "err2", `오류 ${done.result.errors}건은 반영하지 않았어요.`));
-      box.appendChild(elText("p", "modal-desc2", "변경 이력 탭에 '엑셀 업로드' 기록으로 남았습니다." + (table === "members" ? " 이름 선택 목록에도 바로 반영됐어요." : "")));
+      box.appendChild(elText("p", "modal-desc2", (opts.bis ? "확인이 필요한 건은 사업 원장 '다음 할 일'에 표시됩니다. " : "") + "변경 이력 탭에 '엑셀 업로드' 기록으로 남았습니다." + (table === "members" ? " 이름 선택 목록에도 바로 반영됐어요." : "")));
       m.body.appendChild(box);
       const a2 = el("div", "form-actions2");
       const ok = elText("button", "btn-primary2", "확인"); ok.type = "button";

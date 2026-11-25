@@ -682,6 +682,102 @@ function mapImportRow_(key, raw, defaultsUsed) {
 }
 function stageNameByWeight_(w) { var s = dbCodes_().stages.filter(function (x) { return x.weight === w; })[0]; return s ? s.name : ''; }
 
+// ============================================================
+// BIS 통합 업로드(광고팀): 매출현황 + 진행현황을 함께 받아 판정
+//  · 매출현황에 있으면 무조건 '진행 확정'(진행현황이 최종 압축이어도 확정으로 정정)
+//  · 진행현황의 최종 압축·진행 중은 진행현황 기준, 불발은 운영 연도 건만
+//  · 진행현황의 과거 건(운영 연도 이전에 확정·불발)은 제외, '진행확정'인데 매출현황에 없으면 확인 필요
+// ============================================================
+function wordsOf_(text) {
+  var set = {};
+  (String(text || '').toLowerCase().match(/[a-z0-9]{2,}|[가-힣]{2,}/g) || []).forEach(function (w) { set[w] = true; });
+  return set;
+}
+// 후보 중 사업명·브랜드 단어가 가장 많이 겹치는 1건(동점이면 null)
+function bestByWords_(cands, text) {
+  var w = wordsOf_(text), scored = cands.map(function (c) {
+    var cw = wordsOf_([c.brand, c.name, c.cond].join(' ')), n = 0;
+    Object.keys(w).forEach(function (k) { if (cw[k]) n++; });
+    return { c: c, n: n };
+  }).sort(function (a, b) { return b.n - a.n; });
+  return scored.length && scored[0].n > 0 && (scored.length === 1 || scored[0].n > scored[1].n) ? scored[0].c : null;
+}
+
+function bisReconcile_(salesRaw, pipeRaw) {
+  var op = cfg_().general.year, today = nowStamp_().slice(0, 10);
+  var keyOf = function (m) { return [String(m.group || '').toUpperCase(), brandKey_(m.brand), m.ckind || ''].join('|'); };
+  var confirmed = stageNameByWeight_(100);
+  var sales = [], excluded = [], byKey = {};
+  (salesRaw || []).forEach(function (r, i) {
+    var m = mapImportRow_('deals', r, {});
+    if (!m.brand && !m.group) return;
+    m.stage = confirmed; m._src = '매출현황'; m._line = i + 2; m._cat = '확정(매출현황)'; m._source = 'BIS 매출현황 (' + today + ')';
+    var sig = JSON.stringify([m.group, m.brand, m.ckind, m.name, m.cur, m.amount, m.startDate, m.endDate]);
+    var twin = sales.filter(function (x) { return x._sig === sig; })[0];
+    m._sig = sig;
+    if (twin) { m._note = '매출현황 ' + twin._line + '행과 내용이 완전히 같음 — 중복 입력인지 확인'; twin._note = twin._note || '매출현황 ' + (i + 2) + '행과 내용이 완전히 같음 — 중복 입력인지 확인'; }
+    sales.push(m); (byKey[keyOf(m)] = byKey[keyOf(m)] || []).push(m);
+  });
+  // 같은 사업 찾기(두 파일의 표기가 달라도): ① 그룹·브랜드·계약구분 일치 → ② 비슷한 브랜드·같은 계약구분
+  // → ③ 비슷한 브랜드(계약구분 표기 다름, 1건) → ④ 같은 그룹·같은 통화·같은 계약금액(1건, 예: 'CK' ↔ '캘빈클라인')
+  var findSales = function (m) {
+    var hit = byKey[keyOf(m)];
+    if (hit) return hit;
+    var g = String(m.group || '').toUpperCase();
+    var sameG = sales.filter(function (s) { return String(s.group || '').toUpperCase() === g; });
+    var t2 = sameG.filter(function (s) { return s.ckind === m.ckind && sameBrand_(s.brand, m.brand); });
+    if (t2.length) return t2;
+    var amt = numOrBlank_(m.amount);
+    var sameAmt = function (s) { return typeof amt === 'number' && amt > 0 && numOrBlank_(s.amount) === amt && String(s.cur || '') === String(m.cur || ''); };
+    var t3 = sameG.filter(function (s) { return sameBrand_(s.brand, m.brand); });
+    if (t3.length === 1) return t3;
+    if (t3.length > 1) {
+      var t3a = t3.filter(sameAmt); // 같은 브랜드 계약이 여럿이면 금액으로, 그래도 여럿이면 사업명 단어로 구분
+      if (t3a.length === 1) return t3a;
+      var best = bestByWords_(t3a.length ? t3a : t3, [m.brand, m.name, m.cond].join(' '));
+      if (best) return [best];
+    }
+    var t4 = sameG.filter(function (s) { return s.ckind === m.ckind && sameAmt(s); });
+    if (t4.length === 1) return t4;
+    return null;
+  };
+  var out = sales.slice();
+  (pipeRaw || []).forEach(function (r, i) {
+    var m = mapImportRow_('deals', r, {});
+    if (!m.brand && !m.group) return;
+    m._src = '진행현황'; m._line = i + 2;
+    var w = stageInfo_(m.stage).weight, dec = flexMonth_(m.decidedDate);
+    var label = [m.group, m.brand, m.ckind, m.stage].filter(Boolean).join(' · ');
+    var hit = findSales(m);
+    if (hit) {
+      hit.forEach(function (s) { if (!s.shortDate && m.shortDate) s.shortDate = m.shortDate; if (!s.decidedDate && m.decidedDate) s.decidedDate = m.decidedDate; });
+      if (w >= 100) { excluded.push({ file: '진행현황', line: i + 2, summary: label, reason: '매출현황에 있는 확정 건 — 매출현황 기준으로 반영' }); return; }
+      if (w > 0) {
+        hit.forEach(function (s) { s._cat = '단계 자동 정정'; s._note = '진행현황은 "' + m.stage + '"이지만 매출현황에 있어 확정으로 정정'; });
+        excluded.push({ file: '진행현황', line: i + 2, summary: label, reason: '매출현황에 있어 확정으로 정정(매출현황 행으로 반영)' }); return;
+      }
+      hit.forEach(function (s) { s._note = '진행현황은 불발로 표시 — 매출현황 기준 확정으로 반영, 확인 필요'; });
+      excluded.push({ file: '진행현황', line: i + 2, summary: label, reason: '매출현황에 있어 확정으로 반영(불발 표시 확인 필요)' }); return;
+    }
+    if ((w >= 100 || w === 0) && dec && dec.y < op) { excluded.push({ file: '진행현황', line: i + 2, summary: label, reason: '과거 건(' + dec.y + '년 ' + (w ? '확정' : '불발') + ')' }); return; }
+    if (w >= 100) { m._cat = '확정(매출현황 누락 확인)'; m._note = '진행현황은 진행확정인데 매출현황에 없음 — 확인 필요'; m._source = 'BIS 진행현황(매출현황 누락 확인)'; }
+    else if (w === 0) { m._cat = '불발·보류'; m._source = 'BIS 진행현황 (' + today + ')'; }
+    else { m._cat = '진행 중(진행현황)'; m._source = 'BIS 진행현황 (' + today + ')'; }
+    out.push(m);
+  });
+  return { rows: out, excluded: excluded };
+}
+function dbBisImport_(payload, user, commit) {
+  var rc = bisReconcile_(payload.sales || [], payload.pipe || []);
+  var result = dbImport_('deals', rc.rows, user, commit, { premapped: true, bis: true });
+  result.excluded = rc.excluded;
+  result.salesCount = (payload.sales || []).length; result.pipeCount = (payload.pipe || []).length;
+  var cats = {};
+  result.rows.forEach(function (r) { if (r.status !== 'error') cats[r.category] = (cats[r.category] || 0) + 1; });
+  result.categories = cats;
+  return result;
+}
+
 // 같은 사업 찾기: ID가 있으면 ID, 없으면 (브랜드+아티스트 그룹+계약구분+시작 월)
 function dealFingerprint_(r) {
   var start = flexMonth_(normFlexDate_(r.startDate) || '');
@@ -692,7 +788,10 @@ function dealFingerprint2_(r) {
   return [String(r.brand || '').replace(/\s/g, '').toLowerCase(), String(r.group || '').toUpperCase(), r.ckind || ''].join('|');
 }
 
-function dbImport_(key, rawRows, user, commit) {
+// BIS 업로드가 덮어쓰는 칸(그 외 KPI 인정 시기·실적 반영·확정 금액·비고·담당자 등은 플랫폼 값 유지)
+var BIS_FIELDS = ['stage', 'cur', 'amount', 'startDate', 'startStatus', 'endDate', 'endStatus', 'months', 'paidKrw', 'shortDate', 'decidedDate', 'reason'];
+function dbImport_(key, rawRows, user, commit, opts) {
+  opts = opts || {};
   var t = DB_TABLES[key];
   if (!t || !t.editable) throw new Error('업로드할 수 없는 탭입니다.');
   var run = function () {
@@ -709,8 +808,17 @@ function dbImport_(key, rawRows, user, commit) {
     var result = { added: 0, updated: 0, unchanged: 0, errors: 0, rows: [], columns: importColumns_(key, rawRows) };
     var toAppend = [], toUpdate = [], logs = [];
     var seq = existing.slice();
+    var claimed = {};
+    var pickOne = function (cands, rec) {
+      var free = (cands || []).filter(function (c) { return !claimed[c.id]; });
+      if (free.length <= 1) return free[0] || null;
+      var fields = ['amount', 'cur', 'startDate', 'endDate', 'name', 'artist'];
+      var scored = free.map(function (c) { return { c: c, n: fields.filter(function (f) { return String(c[f] === undefined ? '' : c[f]) === String(rec[f] === undefined ? '' : rec[f]); }).length }; })
+        .sort(function (a, b) { return b.n - a.n; });
+      return scored[0].c; // 동점이면(완전히 같은 행) 앞의 것부터 차례로
+    };
     rawRows.forEach(function (raw, i) {
-      var mapped = mapImportRow_(key, raw, defaultsUsed);
+      var mapped = opts.premapped ? raw : mapImportRow_(key, raw, defaultsUsed);
       var errors = [];
       var rec = cleanRecord_(key, mapped, errors);
       var match = null;
@@ -718,10 +826,11 @@ function dbImport_(key, rawRows, user, commit) {
       else if (key === 'members' && rec.name) match = existing.filter(function (m) { return m.name === rec.name; })[0] || null;
       else if (key === 'deals') {
         var c = byFp[dealFingerprint_(rec)];
-        if (c && c.length === 1) match = c[0];
-        // 시작일이 없는 엑셀(예: BIS 진행현황)은 브랜드+아티스트 그룹+계약구분이 하나로 특정될 때만 같은 사업으로 봄
-        else { var c2 = byFp2[dealFingerprint2_(rec)]; if (c2 && c2.length === 1 && (!rec.startDate || !c2[0].startDate)) match = c2[0]; }
+        if (c && c.length) match = pickOne(c, rec);
+        // 시작일이 없는 엑셀(예: BIS 진행현황)은 브랜드+아티스트 그룹+계약구분으로
+        if (!match) { var c2 = (byFp2[dealFingerprint2_(rec)] || []).filter(function (x) { return !rec.startDate || !x.startDate; }); if (c2.length === 1 && !claimed[c2[0].id]) match = c2[0]; }
       }
+      if (match) claimed[match.id] = true;
       if (match && key === 'deals') {
         (mapped._defaulted || []).forEach(function (k) { rec[k] = ''; }); // 자동 채움 값으로 기존 값을 덮어쓰지 않음
         // 간편 양식으로 내려받은 '반기'(자동 계산값)를 그대로 올린 경우는 변경 아님
@@ -744,6 +853,7 @@ function dbImport_(key, rawRows, user, commit) {
       if (match && !errors.length) {
         t.cols.forEach(function (c) {
           if (c.type === 'auto' || rec[c.key] === '' ) return; // 빈 칸은 기존 값 유지
+          if (opts.bis && BIS_FIELDS.indexOf(c.key) < 0) return; // BIS는 정해진 칸만 갱신
           if (String(match[c.key]) !== String(rec[c.key])) changes.push({ field: c.label, before: match[c.key], after: rec[c.key] });
         });
         if (flag && (flag === 'O') !== !!match.approvedAt) changes.push({ field: '실적 반영', before: match.approvedAt ? 'ON' : 'OFF', after: flag === 'O' ? 'ON' : 'OFF' });
@@ -751,13 +861,16 @@ function dbImport_(key, rawRows, user, commit) {
       }
       var flagNote = '';
       if (!errors.length && flag) { var probe = match ? stripRow_(match) : JSON.parse(JSON.stringify(rec)); if (match) t.cols.forEach(function (c) { if (c.type !== 'auto' && rec[c.key] !== '') probe[c.key] = rec[c.key]; }); flagNote = applyFlag(probe); }
-      result.rows.push({ line: i + 2, status: status, id: match ? match.id : '', summary: summaryOf_(key, rec), errors: errors, changes: changes.slice(0, 6), changeCount: changes.length, notes: flagNote ? [flagNote] : [] });
+      var notes = [];
+      if (flagNote) notes.push(flagNote);
+      if (mapped._note) notes.push(mapped._note);
+      result.rows.push({ line: mapped._line || i + 2, file: mapped._src || '', category: mapped._cat || '', status: status, id: match ? match.id : '', summary: summaryOf_(key, rec), errors: errors, changes: changes.slice(0, 6), changeCount: changes.length, notes: notes });
       if (status === 'error') { result.errors++; return; }
       if (status === 'same') { result.unchanged++; return; }
       if (!commit) { status === 'new' ? result.added++ : result.updated++; return; }
       if (status === 'new') {
         rec.id = nextId_(key, rec, seq);
-        rec.source = '엑셀 업로드 (' + nowStamp_().slice(0, 10) + ')';
+        rec.source = mapped._source || '엑셀 업로드 (' + nowStamp_().slice(0, 10) + ')';
         // 엑셀로 들어온 사업은 '오늘 단계가 바뀐 것'이 아니므로 엑셀의 확정/불발일을 단계 변경일로 씀(없으면 빈칸)
         if (key === 'deals') { rec.stageDate = rec.decidedDate || ''; applyFlag(rec); computeDeal_(rec, fxRows); }
         rec.updatedBy = user; rec.updatedAt = nowStamp_();
@@ -765,7 +878,8 @@ function dbImport_(key, rawRows, user, commit) {
         logs.push({ user: user, table: key, recordId: rec.id, action: '엑셀 업로드-추가', before: '', after: summaryOf_(key, rec) });
       } else {
         var merged = stripRow_(match);
-        t.cols.forEach(function (c) { if (c.type !== 'auto' && rec[c.key] !== '') merged[c.key] = rec[c.key]; });
+        t.cols.forEach(function (c) { if (c.type !== 'auto' && rec[c.key] !== '' && (!opts.bis || BIS_FIELDS.indexOf(c.key) >= 0)) merged[c.key] = rec[c.key]; });
+        if (mapped._source) merged.source = mapped._source;
         if (key === 'deals') {
           if (merged.stage !== match.stage) merged.stageDate = nowStamp_().slice(0, 10);
           if (match.approvedAt && kpiFieldsChanged_(match, merged)) {
@@ -1611,6 +1725,95 @@ function dbYears_() {
 // ============================================================
 // 협업 API (Index.html → google.script.run.dbApi)
 // ============================================================
+// ============================================================
+// 서버에서 엑셀(.xlsx) 직접 읽기 — 브라우저·외부 서버(엑셀 도구) 영향 없이 업로드되도록
+// 화면은 파일을 base64로 보내기만 하고, 여기서 압축을 풀어 시트 XML을 읽는다.
+// ============================================================
+function xmlText_(s) {
+  return String(s || '').replace(/_x000D_/g, '').replace(/&#x([0-9a-fA-F]+);/g, function (m, h) { return String.fromCharCode(parseInt(h, 16)); })
+    .replace(/&#(\d+);/g, function (m, d) { return String.fromCharCode(parseInt(d, 10)); })
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+}
+function xmlAttrs_(tag) {
+  var out = {}, re = /([\w:]+)="([^"]*)"/g, m;
+  while ((m = re.exec(tag))) out[m[1]] = xmlText_(m[2]);
+  return out;
+}
+function colIndex_(ref) {
+  var letters = String(ref).replace(/\d+/g, ''), n = 0;
+  for (var i = 0; i < letters.length; i++) n = n * 26 + (letters.charCodeAt(i) - 64);
+  return n - 1;
+}
+function parseXlsxBase64_(b64) {
+  var blob = Utilities.newBlob(Utilities.base64Decode(b64), 'application/zip', 'upload.zip');
+  var files = {};
+  Utilities.unzip(blob).forEach(function (f) { files[f.getName().replace(/^\//, '')] = f; });
+  var read = function (name) { var f = files[name]; return f ? f.getDataAsString('UTF-8') : ''; };
+  var wbXml = read('xl/workbook.xml');
+  if (!wbXml) throw new Error('엑셀(.xlsx) 파일이 아니에요. 엑셀에서 "다른 이름으로 저장 → Excel 통합 문서(.xlsx)"로 저장해 주세요.');
+  var date1904 = /date1904="(1|true)"/.test(wbXml);
+  // 공유 문자열
+  var shared = [];
+  (read('xl/sharedStrings.xml').match(/<si>[\s\S]*?<\/si>/g) || []).forEach(function (si) {
+    si = si.replace(/<rPh\b[\s\S]*?<\/rPh>/g, '');
+    var t = (si.match(/<t\b[^>]*>[\s\S]*?<\/t>/g) || []).map(function (x) { return x.replace(/^<t\b[^>]*>/, '').replace(/<\/t>$/, ''); }).join('');
+    shared.push(xmlText_(t));
+  });
+  // 날짜 서식 판별(셀 서식 번호 → 날짜인지)
+  var stylesXml = read('xl/styles.xml'), customFmt = {};
+  (stylesXml.match(/<numFmt\b[^>]*\/?>/g) || []).forEach(function (t) { var a = xmlAttrs_(t); customFmt[a.numFmtId] = a.formatCode || ''; });
+  var xfBlock = (stylesXml.match(/<cellXfs\b[\s\S]*?<\/cellXfs>/) || [''])[0];
+  var isDateFmt = function (id) {
+    id = Number(id);
+    if ((id >= 14 && id <= 22) || (id >= 45 && id <= 47) || (id >= 27 && id <= 36) || (id >= 50 && id <= 58)) return true;
+    var code = customFmt[String(id)];
+    if (!code) return false;
+    code = code.replace(/"[^"]*"/g, '').replace(/\[[^\]]*\]/g, '').replace(/\\./g, '');
+    return /[ymd]/i.test(code) && !/^[#0.,%\s]*$/.test(code);
+  };
+  var xfDate = (xfBlock.match(/<xf\b[^>]*\/?>/g) || []).map(function (t) { return isDateFmt(xmlAttrs_(t).numFmtId); });
+  var serialToDate = function (n) {
+    var base = date1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 30);
+    var d = new Date(base + Math.round(n * 86400000));
+    return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2);
+  };
+  // 시트 목록(이름 → 파일)
+  var rels = {};
+  (read('xl/_rels/workbook.xml.rels').match(/<Relationship\b[^>]*\/?>/g) || []).forEach(function (t) { var a = xmlAttrs_(t); rels[a.Id] = a.Target; });
+  var sheets = [];
+  (wbXml.match(/<sheet\b[^>]*\/?>/g) || []).forEach(function (t) {
+    var a = xmlAttrs_(t), target = rels[a['r:id']] || '';
+    var path = target.charAt(0) === '/' ? target.slice(1) : 'xl/' + target.replace(/^\.\//, '');
+    var xml = read(path);
+    var aoa = [];
+    (xml.match(/<row\b[\s\S]*?(?:<\/row>|\/>)/g) || []).forEach(function (rowXml) {
+      var rAttr = xmlAttrs_(rowXml.match(/^<row\b[^>]*>/)[0]);
+      var rIdx = Number(rAttr.r) - 1, row = [];
+      var cre = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g, m, ci = 0;
+      while ((m = cre.exec(rowXml))) {
+        var ca = xmlAttrs_('<c ' + m[1] + '>'), inner = m[2] || '';
+        var idx = ca.r ? colIndex_(ca.r) : ci;
+        ci = idx + 1;
+        var vm = inner.match(/<v>([\s\S]*?)<\/v>/), v = vm ? xmlText_(vm[1]) : '';
+        var val;
+        if (ca.t === 's') val = shared[Number(v)] || '';
+        else if (ca.t === 'inlineStr') val = xmlText_((inner.match(/<t\b[^>]*>([\s\S]*?)<\/t>/g) || []).map(function (x) { return x.replace(/^<t\b[^>]*>/, '').replace(/<\/t>$/, ''); }).join(''));
+        else if (ca.t === 'str' || ca.t === 'e') val = v;
+        else if (ca.t === 'b') val = v === '1';
+        else if (v === '') val = '';
+        else { var num = Number(v); val = isNaN(num) ? v : (ca.s !== undefined && xfDate[Number(ca.s)] ? serialToDate(num) : num); }
+        row[idx] = val;
+      }
+      for (var j = 0; j < row.length; j++) if (row[j] === undefined) row[j] = '';
+      aoa[isNaN(rIdx) ? aoa.length : rIdx] = row;
+    });
+    for (var k = 0; k < aoa.length; k++) if (!aoa[k]) aoa[k] = [];
+    sheets.push({ name: a.name, aoa: aoa });
+  });
+  if (!sheets.length) throw new Error('엑셀에서 시트를 찾지 못했어요.');
+  return sheets;
+}
+
 function dbApi(action, password, user, payloadJson) {
   var pw = getPassword_();
   if (!pw || password !== pw) return JSON.stringify({ ok: false, error: 'unauthorized' });
@@ -1620,7 +1823,7 @@ function dbApi(action, password, user, payloadJson) {
   // 관리자 모드: 화면이 관리자 비밀번호를 함께 보내면 확인(틀리면 잠금 횟수에 포함)
   var adminDenied = payload.adminPw ? checkAdminPassword_(payload.adminPw) : { error: 'forbidden' };
   var isAdmin = !adminDenied;
-  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, deleteMany: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
+  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, deleteMany: 1, parseFile: 1, bisPreview: 1, bisCommit: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
   // 입력·저장은 팀원 명단(사용)에 있는 이름만. 관리자 모드는 예외, 명단이 비어 있으면(최초 설정) 허용.
   var WRITE_ACTIONS = { save: 1, delete: 1, restore: 1 };
   if (WRITE_ACTIONS[action] && !isAdmin && dbReady_()) {
@@ -1639,6 +1842,9 @@ function dbApi(action, password, user, payloadJson) {
       case 'saveFx': res = dbSaveFx_(payload.year, payload.rates, user); break;
       case 'addMembers': res = dbAddMembers_(payload.records, user); break;
       case 'deleteMany': res = dbDeleteMany_(payload.table, payload.ids, user); break;
+      case 'parseFile': res = { ok: true, sheets: parseXlsxBase64_(String(payload.b64 || '')) }; break;
+      case 'bisPreview': res = { ok: true, result: dbBisImport_(payload, user, false) }; break;
+      case 'bisCommit': res = { ok: true, result: dbBisImport_(payload, user, true) }; break;
       case 'setYear': res = { ok: true, year: setOperatingYear_(payload.year, user) }; break;
       case 'saveCodes': res = { ok: true, codes: saveCodes_(payload.codes, user) }; break;
       case 'start': res = { ok: true, report: startPlatform_(user) }; break;
