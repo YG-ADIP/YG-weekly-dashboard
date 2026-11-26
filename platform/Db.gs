@@ -21,7 +21,7 @@ var DB_TABLES = {
     cols: [
       { key: 'id', label: '사업ID', type: 'auto' },
       { key: 'part', label: '파트', type: 'select', codes: 'parts', required: true },
-      { key: 'year', label: 'KPI 기준연도', type: 'number', required: true, adminOnly: true }, // 실적 반영 연도 — 관리자가 지정(작성자 입력은 무시)
+      { key: 'year', label: 'KPI 기준연도', type: 'number', required: true }, // 실적 반영 연도 — 관리자·작성자 지정(실적 반영 ON 건을 작성자가 바꾸면 승인 대기로)
       { key: 'group', label: '아티스트 그룹', type: 'select', codes: 'groups', required: true },
       { key: 'artist', label: '아티스트', type: 'text', required: true },
       { key: 'brand', label: '브랜드/파트너', type: 'text', required: true },
@@ -43,7 +43,7 @@ var DB_TABLES = {
       { key: 'months', label: '계약기간(개월)', type: 'number' },
       { key: 'cur', label: '계약통화', type: 'select', codes: 'currencies' }, // 최종 압축(가중치 70%) 이상이면 필수 — cleanRecord_
       { key: 'amount', label: '계약금액', type: 'number' },
-      { key: 'kpiHalfManual', label: 'KPI 인정 반기(직접 지정)', type: 'select', codes: 'halves', adminOnly: true }, // 실적 반영 반기 — 관리자 지정
+      { key: 'kpiHalfManual', label: 'KPI 인정 반기(직접 지정)', type: 'select', codes: 'halves' }, // 비우면 계약 시작일 월로 자동 — 관리자·작성자 지정
       { key: 'kpiHalf', label: 'KPI 인정 반기', type: 'auto' },
       { key: 'kpiKrw', label: 'KPI 추산금액(KRW)', type: 'auto' },
       { key: 'approval', label: 'KPI 승인', type: 'auto' },
@@ -468,9 +468,7 @@ function dbSave_(key, input, user, baseUpdatedAt, isAdmin) {
     var errors = [];
     if (key === 'deals' && !isAdmin) {
       input = JSON.parse(JSON.stringify(input || {}));
-      var prev = input.id ? readTable_('deals').filter(function (r) { return r.id === input.id; })[0] : null;
-      input.year = prev ? prev.year : cfg_().general.year;
-      input.kpiHalfManual = prev ? prev.kpiHalfManual : '';
+      if (!input.year) { var prev = input.id ? readTable_('deals').filter(function (r) { return r.id === input.id; })[0] : null; input.year = prev ? prev.year : cfg_().general.year; }
     }
     var rec = cleanRecord_(key, input, errors);
     if (errors.length) return { ok: false, error: 'invalid', errors: errors };
@@ -1635,6 +1633,63 @@ function migrateFromSheets_(user) {
 // ============================================================
 // 관리자 모드 기능 — KPI 승인, 운영 연도 전환, 기준 정보, 플랫폼 시작하기
 // ============================================================
+function approveBlock_(d) {
+  if (stageInfo_(d.stage).weight <= 0) return '불발·보류 건은 실적 반영 불가';
+  if (basisOf_(d) === '실입금액' && typeof d.paidKrw !== 'number') return '실입금액 기준인데 실입금액이 비어 있음';
+  if (basisOf_(d) === '확정 금액' && typeof d.kpiFixedKrw !== 'number') return '확정 금액 기준인데 확정 KPI 금액이 비어 있음';
+  if (basisOf_(d) === 'KPI 고정환율' && typeof d.kpiKrw !== 'number') return 'KPI 추산금액 없음(KPI 고정환율 확인)';
+  if (!d.kpiHalf || String(d.kpiHalf).indexOf('미정') === 0) return '실적 반영 반기 미정(계약 시작일 또는 반기 지정 필요)';
+  return '';
+}
+
+// 목록에서 고친 KPI 인정 시기·실적 반영·기준을 한 번에 저장. 작성자는 시기(연도·반기)만, 관리자는 전부.
+// 실적 반영 ON인 건을 작성자가 시기를 바꾸면 승인 대기로(관리자 재확인). 다른 사람이 먼저 고친 건은 건너뜀.
+function dbBulkKpi_(changes, user, isAdmin) {
+  return withLock_(function () {
+    var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.deals.sheet);
+    var rows = readTable_('deals'), fxRows = readTable_('fx'), logs = [], done = 0, skipped = [], reset = 0, out = [];
+    var BASES = { 'KPI 고정환율': 1, '실입금액': 1, '확정 금액': 1 };
+    (changes || []).slice(0, 500).forEach(function (c) {
+      var d = rows.filter(function (r) { return r.id === c.id; })[0];
+      if (!d) { skipped.push(c.id + ': 이미 삭제된 사업'); return; }
+      if (c.baseUpdatedAt !== undefined && String(d.updatedAt || '') !== String(c.baseUpdatedAt || '')) { skipped.push(c.id + ': ' + (d.updatedBy || '다른 사람') + '님이 ' + d.updatedAt + '에 먼저 수정함 — 새로고침 후 다시'); return; }
+      var ch = [], when = false;
+      if (c.year !== undefined) {
+        var y = Number(c.year);
+        if (!(y >= 2000 && y <= 2100)) { skipped.push(c.id + ': 연도 형식 오류'); return; }
+        if (y !== Number(d.year)) { ch.push(['KPI 기준연도', d.year, y]); d.year = y; when = true; }
+      }
+      if (c.kpiHalfManual !== undefined) {
+        var h = c.kpiHalfManual === '상반기' || c.kpiHalfManual === '하반기' ? c.kpiHalfManual : '';
+        if (h !== (d.kpiHalfManual || '')) { ch.push(['KPI 인정 반기(직접 지정)', d.kpiHalfManual || '자동', h || '자동(계약 시작일)']); d.kpiHalfManual = h; when = true; }
+      }
+      if (isAdmin && c.kpiBasis !== undefined && BASES[c.kpiBasis]) {
+        var bNow = basisOf_(d);
+        if (c.kpiBasis !== bNow) { ch.push(['실적 인정 기준', bNow, c.kpiBasis]); d.kpiBasis = c.kpiBasis === 'KPI 고정환율' ? '' : c.kpiBasis; }
+      }
+      computeDeal_(d, fxRows);
+      if (isAdmin && c.approval !== undefined) {
+        if (c.approval === '승인' && !d.approvedAt) {
+          var why = approveBlock_(d);
+          if (why) skipped.push(c.id + ': 실적 반영 ON 불가 — ' + why);
+          else { d.approvedBy = user; d.approvedAt = nowStamp_(); ch.push(['KPI 승인', '승인 대기', '승인']); }
+        } else if (c.approval !== '승인' && d.approvedAt) { d.approvedBy = ''; d.approvedAt = ''; ch.push(['KPI 승인', '승인', '승인 대기']); }
+      } else if (!isAdmin && when && d.approvedAt) {
+        d.approvedBy = ''; d.approvedAt = ''; reset++; ch.push(['KPI 승인', '승인', 'KPI 인정 시기 변경 → 승인 대기']);
+      }
+      if (!ch.length) return;
+      d.updatedBy = user || '(이름 없음)'; d.updatedAt = nowStamp_();
+      computeDeal_(d, fxRows);
+      var row = recordToRow_('deals', d);
+      sh.getRange(d._row, 1, 1, row.length).setValues([row]);
+      ch.forEach(function (x) { logs.push({ user: user, table: 'deals', recordId: d.id, action: x[0] === 'KPI 승인' ? (x[2] === '승인' ? '실적 반영 ON' : '실적 반영 OFF') : '일괄 반영', field: x[0], before: x[1], after: x[2] }); });
+      done++; out.push(stripRow_(d));
+    });
+    appendLogs_(logs);
+    return { ok: true, done: done, skipped: skipped, approvalReset: reset, rows: out };
+  });
+}
+
 function dbApprove_(ids, approve, user) {
   return withLock_(function () {
     var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.deals.sheet);
@@ -1994,7 +2049,7 @@ function dbApi(action, password, user, payloadJson) {
   try { ensureStagesV2_(); } catch (e) {} // 진행 단계 체계 변경 — 한 번만
   var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, deleteMany: 1, parseFile: 1, bisDrive: 1, setBisFolder: 1, bisPreview: 1, bisCommit: 1, clearCheck: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
   // 입력·저장은 팀원 명단(사용)에 있는 이름만. 관리자 모드는 예외, 명단이 비어 있으면(최초 설정) 허용.
-  var WRITE_ACTIONS = { save: 1, delete: 1, restore: 1 };
+  var WRITE_ACTIONS = { save: 1, delete: 1, restore: 1, bulkKpi: 1 };
   if (WRITE_ACTIONS[action] && !isAdmin && dbReady_()) {
     var active = readTable_('members').filter(function (m) { return m.active !== '중지'; }).map(function (m) { return String(m.name).trim(); });
     if (active.length && active.indexOf(user) < 0) return JSON.stringify({ ok: false, error: 'unknown_user', message: '팀원 명단에 없는 이름(' + user + ')입니다. 이름을 다시 고르거나 관리자에게 팀원 등록을 요청해 주세요.' });
@@ -2014,6 +2069,7 @@ function dbApi(action, password, user, payloadJson) {
       case 'parseFile': res = { ok: true, sheets: parseXlsxBase64_(String(payload.b64 || '')) }; break;
       case 'clearCheck': res = dbClearCheck_(payload.ids, user); break;
       case 'bisDrive': res = dbBisDrive_(payload); break;
+      case 'bulkKpi': res = dbBulkKpi_(payload.changes, user, isAdmin); break;
       case 'setBisFolder': res = dbSetBisFolder_(payload.folder, user); break;
       case 'bisPreview': res = { ok: true, result: dbBisImport_(payload, user, false) }; break;
       case 'bisCommit': res = { ok: true, result: dbBisImport_(payload, user, true) }; break;
