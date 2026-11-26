@@ -283,9 +283,11 @@ function waitLockOrBusy_(lock, ms) {
   catch (e) { var err = new Error('BUSY: 다른 분이 업로드·가져오기 같은 큰 작업을 하고 있어요. 잠시 후 다시 시도해 주세요.'); err.busy = true; throw err; }
 }
 
+var FRESH_DONE_ = false;
 function handleApi_(params) {
   var pw = getPassword_();
   if (!pw || params.password !== pw) return { ok: false, error: 'unauthorized' };
+  if (params.fresh && !FRESH_DONE_) { FRESH_DONE_ = true; try { if (dbReady_()) bumpDbVer_(); } catch (e) {} } // [새로고침] — 표 캐시 비우고 최신 값
   var viewYear = parseInt(params.viewYear, 10);
   if (viewYear >= 2000 && viewYear <= 2100 && viewYear !== cfg_().general.year) {
     var copy = JSON.parse(JSON.stringify(cfg_()));
@@ -309,7 +311,7 @@ function handleApiInner_(params) {
       case 'calendar': return getCalendarData_();
       case 'businessCalendar': return dbReady_() ? getBusinessCalendarDataDb_() : getBusinessCalendarData_();
       case 'teamCalendar':
-        return getTeamCalendarData_(parseInt(params.year, 10), parseInt(params.month, 10));
+        return getTeamCalendarData_(parseInt(params.year, 10), parseInt(params.month, 10), !!params.fresh);
       case 'upcomingSelection': return { ok: true, selection: getUpcomingSelection_() };
       case 'saveUpcomingSelection':
         saveUpcomingSelection_(params.mode, params.ids);
@@ -1283,14 +1285,14 @@ function formatCalDate_(d) {
 
 // 구글 캘린더 API 이벤트 객체와 최대한 비슷한 모양({summary, start:{dateTime|date}, end:{...}})으로
 // 반환 — 클라이언트의 날짜 스팬 계산 로직을 손 안 대고 그대로 재사용하기 위함.
-function getTeamCalendarData_(year, month) {
+function getTeamCalendarData_(year, month, fresh) {
   if (!year || !month) return { ok: true, events: [] };
   // 팀 일정 캘린더 그리드와 "차주 인사이트" 배지가 같은 달을 거의 동시에 두 번 요청하는 경우가
   // 많아서(둘 다 오늘이 속한 달을 봄), 60초 캐시로 중복 CalendarApp 호출을 줄인다(로딩 속도 민원
   // 대응 — 실적현황 파일(설정 sources.kpiFile) 쪽과 같은 이유의 같은 종류 문제). 에러 응답은 캐시하지 않음(재시도 가능하게).
   var cache = CacheService.getScriptCache();
   var cacheKey = 'teamCal_' + year + '_' + month;
-  var cached = cache.get(cacheKey);
+  var cached = fresh ? null : cache.get(cacheKey); // [새로고침]이면 캘린더를 새로 조회
   if (cached) return JSON.parse(cached);
 
   var cal = CalendarApp.getCalendarById(cfg_().sources.teamCalendar);
@@ -1324,6 +1326,6 @@ function getTeamCalendarData_(year, month) {
     };
   });
   var result = { ok: true, events: out };
-  try { cache.put(cacheKey, JSON.stringify(result), 60); } catch (e) {}
+  try { cache.put(cacheKey, JSON.stringify(result), 600); } catch (e) {} // 10분(새로고침 시 즉시 새로 조회)
   return result;
 }

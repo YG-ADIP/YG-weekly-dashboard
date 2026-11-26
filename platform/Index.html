@@ -1126,9 +1126,13 @@
     }
   }
   const BATCH_SECTIONS = new Set(["kpi", "insight", "agenda", "trend", "calendar", "businessCalendar", "teamCalendar", "upcomingSelection", "bizEventOverrides"]);
-  let apiQueue = [], apiTimer = null;
-  function flushApiQueue() {
-    const items = apiQueue; apiQueue = []; apiTimer = null;
+  // 팀 캘린더(구글 캘린더 조회가 느림)는 별도 묶음으로 병렬 전송 — 느려도 KPI·AGENDA·트렌드를 막지 않음
+  const SLOW_SECTIONS = new Set(["teamCalendar"]);
+  const apiQueues = { main: { items: [], timer: null }, slow: { items: [], timer: null } };
+  let FRESH_ONCE = false; // [새로고침]을 누른 그 한 번만 서버 캐시를 건너뜀
+  function flushApiQueue(lane) {
+    const q = apiQueues[lane || "main"];
+    const items = q.items; q.items = []; q.timer = null;
     const reqs = items.map(x => ({ section: x.section, params: x.params }));
     withRetry(() => gsRun("apiBatch", storedPw(), JSON.stringify(reqs)).then(text => JSON.parse(text)), err => TRANSIENT_RE.test(err.message))
       .then(results => {
@@ -1145,11 +1149,13 @@
   }
   // 같은 Apps Script 프로젝트의 api()를 호출 — 응답 모양은 기존 JSON API와 동일.
   function callBackend(section, extraParams) {
-    const params = Object.assign({ viewYear: CFG_YEAR }, extraParams || {});
+    const params = Object.assign({ viewYear: CFG_YEAR }, FRESH_ONCE ? { fresh: 1 } : {}, extraParams || {});
     if (!BATCH_SECTIONS.has(section)) return callBackendDirect(section, params); // 저장 요청은 묶지 않음(같은 값으로 덮어쓰는 저장이라 재시도해도 안전)
+    const lane = SLOW_SECTIONS.has(section) ? "slow" : "main";
     return new Promise((resolve, reject) => {
-      apiQueue.push({ section, params, resolve, reject });
-      if (!apiTimer) apiTimer = setTimeout(flushApiQueue, 20);
+      const q = apiQueues[lane];
+      q.items.push({ section, params, resolve, reject });
+      if (!q.timer) q.timer = setTimeout(() => flushApiQueue(lane), 20);
     });
   }
 
@@ -2981,7 +2987,10 @@
     if (!collabStarted) { collabStarted = true; initCollab(); }
   }
 
-  document.getElementById("refreshBtn").addEventListener("click", () => loadAll());
+  document.getElementById("refreshBtn").addEventListener("click", async () => {
+    FRESH_ONCE = true;
+    try { await loadAll(); } finally { FRESH_ONCE = false; }
+  });
 
   // 페이지 로드 시 이미 입력된 비밀번호가 있으면 바로 시도 — 이 경우 비번 입력창을 보여줄
   // 필요가 없으므로, 검증하는 동안에는 "다시 접속하셨네요" 안내 카드를 대신 보여준다
@@ -3108,7 +3117,15 @@
 
   // 협업 DB 호출: 읽기는 일시 오류면 재시도, 저장은 '서버가 실행 전에 거절'했거나 'busy'(잠금 대기 초과·아무것도 안 씀)일 때만 재시도
   const DB_READ_ACTIONS = new Set(["meta", "list", "adminCheck"]);
+  let metaInflight = null;
   async function callDb(action, payload) {
+    if (action === "meta" && !payload) { // 동시에 여러 곳에서 부르면 한 번만 요청
+      if (!metaInflight) metaInflight = callDbRaw("meta").finally(() => { metaInflight = null; });
+      return metaInflight;
+    }
+    return callDbRaw(action, payload);
+  }
+  async function callDbRaw(action, payload) {
     const body = JSON.stringify(Object.assign({}, payload || {}, COLLAB.adminPw ? { adminPw: COLLAB.adminPw } : {}));
     const canRetry = err => (DB_READ_ACTIONS.has(action) ? TRANSIENT_RE : PRE_EXEC_RE).test(err.message);
     const res = await withRetry(() => gsRun("dbApi", action, storedPw(), COLLAB.user, body).then(text => JSON.parse(text)), canRetry);
