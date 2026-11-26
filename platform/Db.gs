@@ -305,7 +305,62 @@ function cellToValue_(col, v) {
   return typeof v === 'number' && col.type !== 'auto' ? String(v) : v;
 }
 
+// ---- 표 읽기 캐시(로딩 속도) ----
+// ① 한 번 실행 안에서는 같은 표를 다시 읽지 않음(TBL_MEMO_) ② 실행 사이에는 서버 캐시(10분)에 보관.
+// 플랫폼에서 저장·삭제·업로드(잠금 안의 작업)가 끝나면 버전을 바꿔 캐시를 즉시 무효화.
+// 잠금 안(쓰기 작업 중)에서는 항상 시트를 직접 읽음(충돌 확인·덮어쓰기 판단이 최신 값 기준이 되도록).
+// 시트를 손으로 직접 고친 내용은 최대 10분 뒤(또는 화면 [새로고침] 즉시) 반영.
+var TBL_MEMO_ = {}, IN_LOCK_ = 0, DB_VER_ = null;
+var TBL_CACHE_TTL = 600, TBL_CACHE_SKIP = { log: 1 }, TBL_CHUNK = 30000;
+function dbVer_() {
+  if (DB_VER_) return DB_VER_;
+  var c = CacheService.getScriptCache(), v = c.get('dbver');
+  if (!v) { v = String(new Date().getTime()); c.put('dbver', v, 21600); }
+  DB_VER_ = v;
+  return v;
+}
+function bumpDbVer_() {
+  TBL_MEMO_ = {};
+  DB_VER_ = String(new Date().getTime()) + Math.random().toString(36).slice(2, 6);
+  try { CacheService.getScriptCache().put('dbver', DB_VER_, 21600); } catch (e) {}
+}
+function cacheGetBig_(cache, key) {
+  var head = cache.get(key);
+  if (!head) return null;
+  if (head.indexOf('N:') !== 0) return head;
+  var n = Number(head.slice(2)), keys = [];
+  for (var i = 0; i < n; i++) keys.push(key + ':' + i);
+  var parts = cache.getAll(keys), out = '';
+  for (var j = 0; j < n; j++) { if (parts[keys[j]] == null) return null; out += parts[keys[j]]; }
+  return out;
+}
+function cachePutBig_(cache, key, text, ttl) {
+  if (text.length <= TBL_CHUNK) { cache.put(key, text, ttl); return; }
+  var map = {}, n = Math.ceil(text.length / TBL_CHUNK);
+  if (n > 40) return; // 너무 크면 캐시하지 않음
+  for (var i = 0; i < n; i++) map[key + ':' + i] = text.slice(i * TBL_CHUNK, (i + 1) * TBL_CHUNK);
+  cache.putAll(map, ttl);
+  cache.put(key, 'N:' + n, ttl);
+}
 function readTable_(key) {
+  if (IN_LOCK_) return readTableRaw_(key);
+  if (TBL_MEMO_[key]) return JSON.parse(TBL_MEMO_[key]);
+  var cache = null, ck = null;
+  if (!TBL_CACHE_SKIP[key]) {
+    try {
+      cache = CacheService.getScriptCache();
+      ck = 'tbl:' + String(cfg_().sources.dbSheet).slice(0, 16) + ':' + key + ':' + dbVer_(); // 읽기 전에 버전 확정(경합 시에도 옛 버전 키에만 저장)
+      var hit = cacheGetBig_(cache, ck);
+      if (hit) { TBL_MEMO_[key] = hit; return JSON.parse(hit); }
+    } catch (e) { ck = null; }
+  }
+  var rows = readTableRaw_(key);
+  var json = JSON.stringify(rows);
+  TBL_MEMO_[key] = json;
+  if (ck) { try { cachePutBig_(cache, ck, json, TBL_CACHE_TTL); } catch (e) {} }
+  return rows;
+}
+function readTableRaw_(key) {
   var t = DB_TABLES[key];
   var sh = dbSpreadsheet_().getSheetByName(t.sheet) || ensureTable_(dbSpreadsheet_(), key);
   if (sh.getLastColumn() < t.cols.length) ensureTable_(dbSpreadsheet_(), key); // 새로 추가된 열의 머리글
@@ -456,7 +511,8 @@ function nextId_(key, rec, rows) {
 function withLock_(fn) {
   var lock = LockService.getScriptLock();
   waitLockOrBusy_(lock, 30000); // 30초 넘게 기다려야 하면 'busy'로 안내(아무것도 저장하지 않음)
-  try { return fn(); } finally { lock.releaseLock(); }
+  IN_LOCK_++;
+  try { return fn(); } finally { IN_LOCK_--; if (!IN_LOCK_) bumpDbVer_(); lock.releaseLock(); }
 }
 
 // 레코드 하나 저장. input.id가 있으면 수정(baseUpdatedAt이 현재 값과 다르면 충돌), 없으면 추가.
@@ -1034,12 +1090,8 @@ function upsertSnapshot_(year, week, status, force) {
   var cache = CacheService.getScriptCache(), ck = 'snap_' + year + '_' + week;
   var sig = JSON.stringify([status.annual, status.h1, status.h2, status.pipeline]);
   if (!force && cache.get(ck) === sig) return;
-  var lock = LockService.getScriptLock();
-  if (force) waitLockOrBusy_(lock, 30000);
-  else if (!lock.tryLock(0)) return; // 다른 저장이 진행 중이면 이번엔 건너뜀(다음 조회 때 기록)
-  try {
-    var rows = readTable_('snapshots');
-    var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.snapshots.sheet);
+  var SNAP_KEYS = ['goalS', 'goalB', 'actual', 'pipeline', 'weighted', 'confirmedCount', 'activeCount'];
+  var buildRecs = function () {
     var lines = [];
     [['전체', status]].concat(status.parts.map(function (p) { return [p.name, p]; })).forEach(function (pair) {
       [['연간', 'annual'], ['상반기', 'h1'], ['하반기', 'h2']].forEach(function (pp) {
@@ -1047,17 +1099,36 @@ function upsertSnapshot_(year, week, status, force) {
         lines.push({ part: pair[0], period: pp[0], goalS: isNaN(r.goal) ? '' : r.goal, goalB: isNaN(r.goalBase) ? '' : r.goalBase, actual: r.actual });
       });
     });
-    lines.forEach(function (l) {
-      var rec = { year: year, week: week, recordedAt: nowStamp_(), part: l.part, period: l.period, goalS: l.goalS, goalB: l.goalB, actual: l.actual,
+    return lines.map(function (l) {
+      return { year: year, week: week, recordedAt: nowStamp_(), part: l.part, period: l.period, goalS: l.goalS, goalB: l.goalB, actual: l.actual,
         pipeline: l.part === '전체' && l.period === '연간' ? status.pipeline.active : '', weighted: l.part === '전체' && l.period === '연간' ? status.pipeline.weighted : '',
         confirmedCount: l.part === '전체' && l.period === '연간' ? status.pipeline.confirmedCount : '', activeCount: l.part === '전체' && l.period === '연간' ? status.pipeline.activeCount : '', source: force ? '자동 기록(주간 예약)' : '자동 기록' };
-      var ex = rows.filter(function (r) { return Number(r.year) === year && r.week === week && r.part === l.part && r.period === l.period && r.source !== '시트 이관'; })[0];
-      rec.id = ex ? ex.id : 'SN-' + year + '-' + week + '-' + l.part + '-' + l.period;
-      var row = recordToRow_('snapshots', rec);
-      if (ex) sh.getRange(ex._row, 1, 1, row.length).setValues([row]);
-      else sh.getRange(sh.getLastRow() + 1, 1, 1, row.length).setValues([row]);
     });
-  } finally { lock.releaseLock(); }
+  };
+  var same = function (a, b) { return String(a === undefined ? '' : a) === String(b === undefined ? '' : b) || (a !== '' && b !== '' && Number(a) === Number(b)); };
+  var plan = function (rows) { // 바뀐 줄만: [{rec, ex}]
+    return buildRecs().map(function (rec) {
+      var ex = rows.filter(function (r) { return Number(r.year) === year && r.week === week && r.part === rec.part && r.period === rec.period && r.source !== '시트 이관'; })[0];
+      rec.id = ex ? ex.id : 'SN-' + year + '-' + week + '-' + rec.part + '-' + rec.period;
+      return { rec: rec, ex: ex };
+    }).filter(function (x) { return !x.ex || SNAP_KEYS.some(function (k) { return !same(x.ex[k], x.rec[k]); }); });
+  };
+  // 잠금 없이 먼저 확인 — 값이 그대로면 아무것도 쓰지 않음(대시보드 열 때 쓰기 작업 제거)
+  if (!plan(readTable_('snapshots')).length) { cache.put(ck, sig, 600); return; }
+  var lock = LockService.getScriptLock();
+  if (force) waitLockOrBusy_(lock, 30000);
+  else if (!lock.tryLock(0)) return; // 다른 저장이 진행 중이면 이번엔 건너뜀(다음 조회 때 기록)
+  IN_LOCK_++;
+  try {
+    var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.snapshots.sheet);
+    var todo = plan(readTable_('snapshots')), add = [];
+    todo.forEach(function (x) {
+      var row = recordToRow_('snapshots', x.rec);
+      if (x.ex) sh.getRange(x.ex._row, 1, 1, row.length).setValues([row]);
+      else add.push(row);
+    });
+    if (add.length) sh.getRange(sh.getLastRow() + 1, 1, add.length, add[0].length).setValues(add); // 새 줄은 한 번에
+  } finally { IN_LOCK_--; if (!IN_LOCK_) bumpDbVer_(); lock.releaseLock(); }
   cache.put(ck, sig, 600);
 }
 
