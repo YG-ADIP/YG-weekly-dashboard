@@ -3005,7 +3005,7 @@
   ];
   // 표에 보이는 열(나머지는 입력 양식에서 확인)
   const LIST_COLS = {
-    deals: ["part", "group", "artist", "brand", "name", "stage", "cur", "amount", "paid", "period", "todo", "kpiWhen", "approval", "counted"],
+    deals: ["part", "group", "artist", "brand", "approval", "name", "stage", "cur", "amount", "paid", "period", "todo", "kpiWhen", "counted"],
     kpiGoals: ["year", "part", "period", "goalS", "goalB", "note", "updatedBy"],
     fx: ["year", "half", "cur", "unit", "rate", "note", "updatedBy"],
     snapshots: ["week", "part", "period", "goalS", "goalB", "actual", "pipeline", "weighted", "source", "recordedAt"],
@@ -3896,7 +3896,7 @@
     t.appendChild(tbody);
     wrap.appendChild(t);
     if (selectable) updateSelBar();
-    enableWideTable(wrap, t, table === "deals" ? (selectable ? 5 : 4) : 1, table === "deals" ? 3 : 0);
+    enableWideTable(wrap, t, table === "deals" ? (selectable ? 6 : 5) : 1, table === "deals" ? 2 : 0); // 앞: 파트~브랜드·실적 반영·기준 / 뒤: KPI 인정 시기·인정 실적
     if (sorted.length > 500) wrap.appendChild(elText("p", "state-msg2", "최근 500건만 표시합니다. 검색·필터로 좁혀 보세요."));
   }
 
@@ -3983,44 +3983,6 @@
   }
   window.addEventListener("beforeunload", e => { if (COLLAB.kpiPending && COLLAB.kpiPending.size) { e.preventDefault(); e.returnValue = ""; } });
 
-  // 실적 반영 토글(관리자) — 켜면 KPI 실적으로 집계, 끄면 제외. 기존 'KPI 승인'과 같은 값(승인/승인 대기)을 씀.
-  function countSwitch(r, onDone) {
-    const on = r.approval === "승인";
-    const sw = el("button", "switch2" + (on ? " on2" : ""));
-    sw.type = "button"; sw.setAttribute("role", "switch"); sw.setAttribute("aria-checked", on ? "true" : "false");
-    sw.title = on ? "실적 반영 중 — 누르면 끔" : "실적 미반영 — 누르면 켬";
-    sw.appendChild(el("span", "knob2"));
-    sw.appendChild(elText("span", "switch-label2", on ? "ON" : "OFF"));
-    sw.addEventListener("click", async e => {
-      e.stopPropagation();
-      if (!COLLAB.user) { openUserPicker(false); return; }
-      sw.disabled = true;
-      const res = await callDb("approve", { ids: [r.id], approve: !on });
-      sw.disabled = false;
-      if (!res.ok) { alert("실패: " + (res.message || res.error)); return; }
-      if (res.skipped && res.skipped.length) { alert("실적 반영을 켤 수 없어요:\n" + res.skipped.join("\n")); return; }
-      COLLAB.dashDirty = true; onDone && onDone();
-    });
-    return sw;
-  }
-  function basisSelect(r, onDone) {
-    const sel = document.createElement("select");
-    sel.className = "basis-select2";
-    sel.title = "실적 인정 기준";
-    [["KPI 고정환율", "고정환율 기준"], ["실입금액", "실입금액 기준"], ["확정 금액", "확정 금액 기준"]].forEach(([v, t]) => sel.appendChild(new Option(t, v)));
-    sel.value = r.kpiBasis === "실입금액" || r.kpiBasis === "확정 금액" ? r.kpiBasis : "KPI 고정환율";
-    sel.addEventListener("click", e => e.stopPropagation());
-    sel.addEventListener("change", async e => {
-      e.stopPropagation();
-      if (!COLLAB.user) { openUserPicker(false); return; }
-      sel.disabled = true;
-      const res = await callDb("setBasis", { ids: [r.id], basis: sel.value });
-      sel.disabled = false;
-      if (!res.ok) { alert("실패: " + (res.message || res.error)); return; }
-      COLLAB.dashDirty = true; onDone && onDone();
-    });
-    return sel;
-  }
   // 사업 원장 목록의 계산 칸: 실입금(3단계) · 계약기간 · KPI 인정 시기 · 인정 실적
   const VIRTUAL_COLS = { todo: "다음 할 일", paid: "실입금", period: "계약기간", kpiWhen: "KPI 인정 시기", counted: "인정 실적(KRW)" };
   function paidStatus(r) {
@@ -4120,7 +4082,7 @@
         left += w;
       });
       table.querySelectorAll(`tr > :nth-child(${freezeCount})`).forEach(c => c.classList.add("freeze-last2"));
-      // 오른쪽 고정(사업 원장 = KPI 인정 시기 · 실적 반영·기준 · 인정 실적)
+      // 오른쪽 고정(사업 원장 = KPI 인정 시기 · 인정 실적)
       const n = headRow.children.length;
       let right = 0;
       for (let i = 0; i < (freezeRight || 0); i++) {
@@ -4321,8 +4283,10 @@
       if (!isNew && rec.approval) {
         const wrapSw = el("div", "form-field2");
         wrapSw.appendChild(elText("span", "form-label2", "실적 반영"));
-        wrapSw.appendChild(countSwitch(rec, () => { document.querySelector(".modal-x2") && document.querySelector(".modal-x2").click(); renderDataView(COLLAB.view); }));
-        wrapSw.appendChild(elText("span", "form-hint2", "켜면 그 해 KPI 실적에 집계 · 기준을 바꿨다면 먼저 [저장]"));
+        const fsw = pendSwitch(rec);
+        fsw.addEventListener("click", () => setTimeout(() => renderDataView(COLLAB.view), 0)); // 목록의 노란 표시·반영 전 막대 갱신
+        wrapSw.appendChild(fsw);
+        wrapSw.appendChild(elText("span", "form-hint2", "바로 저장되지 않아요 — 사업 원장 목록 위 [일괄 반영]을 눌러야 저장됩니다"));
         grid.appendChild(wrapSw);
       }
       adminSec.appendChild(grid);
