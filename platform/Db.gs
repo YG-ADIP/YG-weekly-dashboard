@@ -1749,9 +1749,11 @@ function dbClearCheck_(ids, user) {
   return withLock_(function () {
     var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.deals.sheet), logs = [], done = 0;
     readTable_('deals').forEach(function (d) {
-      if ((ids || []).indexOf(d.id) < 0 || !d.dupCheck) return;
-      logs.push({ user: user, table: 'deals', recordId: d.id, action: '관리자 확인 완료', field: '관리자 확인 사항', before: d.dupCheck, after: '' });
+      var miss = /매출현황 누락/.test(d.source || '');
+      if ((ids || []).indexOf(d.id) < 0 || (!d.dupCheck && !miss)) return;
+      logs.push({ user: user, table: 'deals', recordId: d.id, action: '관리자 확인 완료', field: '관리자 확인 사항', before: d.dupCheck || '진행현황은 진행확정인데 매출현황에 없음', after: '' });
       d.dupCheck = '';
+      if (miss) d.source = String(d.source).replace(/\(?매출현황 누락 확인\)?/, '(관리자 확인 완료)');
       var row = recordToRow_('deals', d);
       sh.getRange(d._row, 1, 1, row.length).setValues([row]);
       done++;
@@ -2071,9 +2073,9 @@ function dbApi(action, password, user, payloadJson) {
   var adminDenied = payload.adminPw ? checkAdminPassword_(payload.adminPw) : { error: 'forbidden' };
   var isAdmin = !adminDenied;
   try { ensureStagesV2_(); } catch (e) {} // 진행 단계 체계 변경 — 한 번만
-  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, deleteMany: 1, parseFile: 1, bisDrive: 1, setBisFolder: 1, bisPreview: 1, bisCommit: 1, clearCheck: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
+  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, parseFile: 1, bisDrive: 1, setBisFolder: 1, bisPreview: 1, bisCommit: 1, clearCheck: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
   // 입력·저장은 팀원 명단(사용)에 있는 이름만. 관리자 모드는 예외, 명단이 비어 있으면(최초 설정) 허용.
-  var WRITE_ACTIONS = { save: 1, delete: 1, restore: 1, bulkKpi: 1 };
+  var WRITE_ACTIONS = { save: 1, delete: 1, restore: 1, bulkKpi: 1, deleteMany: 1 };
   if (WRITE_ACTIONS[action] && !isAdmin && dbReady_()) {
     var active = readTable_('members').filter(function (m) { return m.active !== '중지'; }).map(function (m) { return String(m.name).trim(); });
     if (active.length && active.indexOf(user) < 0) return JSON.stringify({ ok: false, error: 'unknown_user', message: '팀원 명단에 없는 이름(' + user + ')입니다. 이름을 다시 고르거나 관리자에게 팀원 등록을 요청해 주세요.' });
@@ -2089,7 +2091,9 @@ function dbApi(action, password, user, payloadJson) {
       case 'setBasis': res = dbSetBasis_(payload.ids, payload.basis, user); break;
       case 'saveFx': res = dbSaveFx_(payload.year, payload.rates, user); break;
       case 'addMembers': res = dbAddMembers_(payload.records, user); break;
-      case 'deleteMany': res = dbDeleteMany_(payload.table, payload.ids, user); break;
+      case 'deleteMany':
+        res = payload.table === 'deals' || isAdmin ? dbDeleteMany_(payload.table, payload.ids, user) : { ok: false, error: 'forbidden', message: '관리자 모드에서만 할 수 있습니다.' };
+        break;
       case 'parseFile': res = { ok: true, sheets: parseXlsxBase64_(String(payload.b64 || '')) }; break;
       case 'clearCheck': res = dbClearCheck_(payload.ids, user); break;
       case 'bisDrive': res = dbBisDrive_(payload); break;
