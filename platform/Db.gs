@@ -1029,12 +1029,14 @@ function kpiStatusFromDeals_(year, deals, goals) {
 }
 
 // 이번 주 KPI를 KPI_주간기록에 남김(같은 주는 덮어씀) — 지난 주차 조회·추이 그래프의 근거.
-function upsertSnapshot_(year, week, status) {
+// force(주간 예약 기록): 캐시와 관계없이 기록하고, 다른 저장이 진행 중이면 최대 30초 기다림.
+function upsertSnapshot_(year, week, status, force) {
   var cache = CacheService.getScriptCache(), ck = 'snap_' + year + '_' + week;
   var sig = JSON.stringify([status.annual, status.h1, status.h2, status.pipeline]);
-  if (cache.get(ck) === sig) return;
+  if (!force && cache.get(ck) === sig) return;
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(0)) return; // 다른 저장이 진행 중이면 이번엔 건너뜀(다음 조회 때 기록)
+  if (force) waitLockOrBusy_(lock, 30000);
+  else if (!lock.tryLock(0)) return; // 다른 저장이 진행 중이면 이번엔 건너뜀(다음 조회 때 기록)
   try {
     var rows = readTable_('snapshots');
     var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.snapshots.sheet);
@@ -1048,7 +1050,7 @@ function upsertSnapshot_(year, week, status) {
     lines.forEach(function (l) {
       var rec = { year: year, week: week, recordedAt: nowStamp_(), part: l.part, period: l.period, goalS: l.goalS, goalB: l.goalB, actual: l.actual,
         pipeline: l.part === '전체' && l.period === '연간' ? status.pipeline.active : '', weighted: l.part === '전체' && l.period === '연간' ? status.pipeline.weighted : '',
-        confirmedCount: l.part === '전체' && l.period === '연간' ? status.pipeline.confirmedCount : '', activeCount: l.part === '전체' && l.period === '연간' ? status.pipeline.activeCount : '', source: '자동 기록' };
+        confirmedCount: l.part === '전체' && l.period === '연간' ? status.pipeline.confirmedCount : '', activeCount: l.part === '전체' && l.period === '연간' ? status.pipeline.activeCount : '', source: force ? '자동 기록(주간 예약)' : '자동 기록' };
       var ex = rows.filter(function (r) { return Number(r.year) === year && r.week === week && r.part === l.part && r.period === l.period && r.source !== '시트 이관'; })[0];
       rec.id = ex ? ex.id : 'SN-' + year + '-' + week + '-' + l.part + '-' + l.period;
       var row = recordToRow_('snapshots', rec);
@@ -1057,6 +1059,28 @@ function upsertSnapshot_(year, week, status) {
     });
   } finally { lock.releaseLock(); }
   cache.put(ck, sig, 600);
+}
+
+// ---- 주간 자동 기록: 매주 금요일 18시(서울)에 그 주 KPI를 KPI_주간기록에 남김 ----
+// 설치: Apps Script 편집기에서 setupWeeklySnapshot 을 한 번 실행(권한 승인). 다시 실행해도 예약은 1개만 유지.
+var WEEKLY_SNAPSHOT_HANDLER = 'weeklySnapshotJob';
+function weeklySnapshotJob() {
+  if (!dbReady_()) return;
+  var year = cfg_().general.year, now = new Date();
+  if (now.getFullYear() !== year) return; // 운영 연도가 지난(또는 아직인) 해에는 기록하지 않음
+  var status = kpiStatusFromDeals_(year, readTable_('deals'), readTable_('kpiGoals'));
+  upsertSnapshot_(year, weekKeyOf_(now), status, true);
+  PropertiesService.getScriptProperties().setProperty('WEEKLY_SNAPSHOT_LAST', nowStamp_() + ' · ' + weekKeyOf_(now));
+}
+function setupWeeklySnapshot() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === WEEKLY_SNAPSHOT_HANDLER) ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger(WEEKLY_SNAPSHOT_HANDLER).timeBased().onWeekDay(ScriptApp.WeekDay.FRIDAY).atHour(18).inTimezone('Asia/Seoul').create();
+  weeklySnapshotJob(); // 설치하면서 이번 주도 바로 기록
+  return '주간 자동 기록 예약 완료: 매주 금요일 18시(서울)';
+}
+function weeklySnapshotState_() {
+  var on = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === WEEKLY_SNAPSHOT_HANDLER; });
+  return { installed: on, last: PropertiesService.getScriptProperties().getProperty('WEEKLY_SNAPSHOT_LAST') || '' };
 }
 
 function snapshotStatus_(rows) {

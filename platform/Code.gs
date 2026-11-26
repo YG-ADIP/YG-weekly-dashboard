@@ -505,6 +505,12 @@ function testConnections_(config) {
         ? { ok: true, detail: r.folder + ' · 매출현황 ' + n('sales') + '개 · 진행현황 ' + n('pipe') + '개 확인' }
         : { ok: false, detail: r.folder + ' — BIS 매출현황·진행현황 엑셀을 찾지 못했습니다(머리글 확인).' };
     });
+    add('주간 자동 기록(금 18시)', function () {
+      var st = weeklySnapshotState_();
+      return st.installed
+        ? { ok: true, detail: '예약됨 · 매주 금요일 18시 KPI 주간기록' + (st.last ? ' · 마지막 기록 ' + st.last : '') }
+        : { ok: false, detail: '예약 안 됨 — Apps Script 편집기에서 함수 setupWeeklySnapshot 을 한 번 실행해 주세요(권한 승인).' };
+    });
     add('팀 구글 캘린더', function () {
       var cal = CalendarApp.getCalendarById(config.sources.teamCalendar);
       if (!cal) return { ok: false, detail: '캘린더를 열 수 없습니다(ID 또는 공유 권한 확인).' };
