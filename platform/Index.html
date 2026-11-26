@@ -1042,22 +1042,44 @@
     const pending = rows.filter(r => r.approval === "승인 대기" && stageWeight(r.stage) >= 100 && Number(r.year) === CFG_YEAR);
     const flagged = rows.filter(needsAdminCheck), n = flagged.length; // 한 건이 두 사유에 해당해도 1건
     if (tab && n) tab.appendChild(elText("span", "tab-badge2", String(n)));
-    if (!n && !pending.length) return;
+    const pendSig = "pend:" + pending.map(r => r.id).sort().join(",");
+    let pendHidden = false; try { pendHidden = localStorage.getItem("yg_pend_alert_closed") === pendSig; } catch (e) {}
+    if (!n && (!pending.length || pendHidden)) return;
     const bar = el("div", "admin-alert2" + (n ? "" : " info2"));
     bar.appendChild(elText("b", null, n ? `\u26A0 관리자 확인 필요 ${n}건` : "관리자 알림"));
     const parts = [];
     if (dup.length) parts.push(`중복 의심 ${dup.length}건`);
     if (miss.length) parts.push(`BIS 매출현황 누락 ${miss.length}건`);
-    if (pending.length) parts.push(`실적 반영 대기(확정 건) ${pending.length}건`);
+    if (pending.length && !pendHidden) parts.push(`실적 반영 대기(확정 건) ${pending.length}건`);
     bar.appendChild(elText("span", null, parts.join(" · ")));
     const go = elText("button", "btn-line2 small2", n ? "확인하러 가기" : "사업 원장 보기"); go.type = "button";
     go.addEventListener("click", () => { const f = defaultFilters("deals"); f.todo = n ? "관리자 확인" : ""; f.approval = n ? "" : "승인 대기"; switchView("deals"); });
     bar.appendChild(go);
+    const ack = async (ids) => {
+      if (!isAdminMode()) { alert("관리자 모드를 켠 뒤 [확인]할 수 있어요."); const chip = document.getElementById("adminChip"); if (chip) chip.click(); return; }
+      const res = await callDb("clearCheck", { ids });
+      if (!res.ok) { alert("실패: " + (res.message || res.error)); return; }
+      ids.forEach(id => { const t = rows.find(x => x.id === id); if (t) { t.dupCheck = ""; t.source = String(t.source || "").replace(/\(?매출현황 누락 확인\)?/, "(관리자 확인 완료)"); } });
+      COLLAB.dashDirty = true; renderAdminAlerts(rows);
+      if (COLLAB.view === "deals") renderDataView("deals");
+    };
     if (n) {
+      const all = elText("button", "btn-line2 small2", "모두 확인"); all.type = "button";
+      all.addEventListener("click", () => { if (confirm(`관리자 확인 필요 ${n}건을 모두 확인 처리할까요?\n(알림에서 사라지고 변경 이력에 남습니다)`)) ack(flagged.map(r => r.id)); });
+      bar.appendChild(all);
       const ul = el("ul", null);
-      flagged.slice(0, 5).forEach(r => ul.appendChild(elText("li", null, `${r.id} · ${r.group} · ${r.brand} — ${r.dupCheck || "진행현황은 진행확정인데 매출현황에 없음"}`)));
-      if (n > 5) ul.appendChild(elText("li", null, `외 ${n - 5}건`));
+      flagged.slice(0, 10).forEach(r => {
+        const li = elText("li", null, `${r.id} · ${r.group} · ${r.brand} — ${r.dupCheck || "진행현황은 진행확정인데 매출현황에 없음"} `);
+        const b = elText("button", "link-btn2 ack-btn2", "확인"); b.type = "button"; b.title = "확인했음 — 알림에서 지움";
+        b.addEventListener("click", () => ack([r.id]));
+        li.appendChild(b); ul.appendChild(li);
+      });
+      if (n > 10) ul.appendChild(elText("li", null, `외 ${n - 10}건 — [확인하러 가기]에서 확인`));
       bar.appendChild(ul);
+    } else {
+      const close = elText("button", "btn-line2 small2", "확인"); close.type = "button"; close.title = "이 안내 닫기(대기 건이 바뀌면 다시 표시)";
+      close.addEventListener("click", () => { try { localStorage.setItem("yg_pend_alert_closed", pendSig); } catch (e) {} renderAdminAlerts(rows); });
+      bar.appendChild(close);
     }
     slot.appendChild(bar);
   }
@@ -3017,14 +3039,14 @@
   // 사업 원장 입력 양식 묶음
   // 사업 원장 입력 양식: 꼭 필요한 칸만 먼저 보이고, 나머지는 [추가 정보]에 접어 둠. 자동 계산 칸은 맨 위 한 줄 요약.
   const DEAL_CORE_GROUPS = [
-    ["어떤 사업인가요?", ["part", "group", "artist", "brand", "ckind"]],
+    ["어떤 사업인가요?", ["part", "group", "artist", "brand", "ckind", "name"]],
     ["진행 단계", ["stage", "reason"]],
     ["금액 · 계약 기간", ["cur", "amount", "startDate", "endDate"]],
     ["입금 (회계 확인 후 입력)", ["paidKrw", "paidDate"]],
     ["비고", ["note"]],
   ];
   // 사업명은 필수가 아니므로 [추가 정보]로. KPI 기준연도·인정 반기는 'KPI 인정 시기' 칸(관리자·작성자)에서.
-  const DEAL_EXTRA_KEYS = ["name", "ctype", "item", "country", "cond", "shortDate", "decidedDate", "startStatus", "endStatus", "months", "owner"];
+  const DEAL_EXTRA_KEYS = ["ctype", "item", "country", "cond", "shortDate", "decidedDate", "startStatus", "endStatus", "months", "owner"];
   // 진행 단계 구분(가중치 아님): 진행 중 / 확정 / 종료(불발·보류)
   function stageKind(name) { const w = stageWeight(name); return w >= 100 ? "확정" : w <= 0 ? "종료" : "진행 중"; }
   // 통화·금액 입력 요청: '총괄님 승인 완료'(예전 최종 압축) 이후 단계와 확정 단계 — 저장은 막지 않고 '다음 할 일'로 안내
@@ -3794,8 +3816,8 @@
     summary.appendChild(elText("span", "data-count2", `${list.length}건${list.length !== rows.length ? ` / 전체 ${rows.length}건` : ""}`));
     wrap.innerHTML = "";
     if (!list.length) { wrap.appendChild(elText("p", "state-msg2", "조건에 맞는 항목이 없어요." + (def.editable ? " [＋ 새로 추가]로 입력하세요." : ""))); return; }
-    // 선택(관리자 모드 · 사업 원장): 체크한 건 일괄 삭제
-    const selectable = table === "deals" && isAdminMode();
+    // 선택(사업 원장 · 관리자·작성자): 체크한 건 삭제 — 확인 창에서 [확인]을 눌러야 삭제
+    const selectable = table === "deals" && !!COLLAB.user;
     const sel = COLLAB.sel || (COLLAB.sel = {});
     const selSet = sel[table] || (sel[table] = new Set());
     Array.from(selSet).forEach(id => { if (!list.some(r => r.id === id)) selSet.delete(id); }); // 필터로 안 보이는 건은 선택 해제
@@ -3810,7 +3832,8 @@
       selBar.appendChild(elText("span", null, ` · 금액 합계 ${(sum / 1e8).toFixed(2)}억`));
       const del = elText("button", "btn-danger2 small2", "선택 삭제"); del.type = "button";
       del.addEventListener("click", async () => {
-        if (!confirm(`선택한 ${selSet.size}건(금액 합계 ${(sum / 1e8).toFixed(2)}억)을 삭제할까요?\n삭제한 건은 변경 이력에서 하나씩 [복원]할 수 있습니다.`)) return;
+        const onCnt = picked.filter(r => r.approval === "승인").length;
+        if (!confirm(`선택한 ${selSet.size}건(금액 합계 ${(sum / 1e8).toFixed(2)}억)을 삭제할까요?` + (onCnt ? `\n\n주의: 이 중 ${onCnt}건은 실적 반영 ON — 삭제하면 KPI 실적에서 빠집니다.` : "") + `\n\n삭제한 건은 변경 이력에서 하나씩 [복원]할 수 있습니다.`)) return;
         del.disabled = true; del.textContent = "삭제 중…";
         const res = await callDb("deleteMany", { table, ids: Array.from(selSet) });
         if (!res.ok) { alert("삭제 실패: " + (res.message || res.error)); del.disabled = false; del.textContent = "선택 삭제"; return; }
@@ -4294,7 +4317,7 @@
     }
     const more = document.createElement("details");
     more.className = "form-more2";
-    more.appendChild(elText("summary", null, "추가 정보 (선택 — 사업명(상세내용)·계약유형·품목·국가·조건·담당자·등)"));
+    more.appendChild(elText("summary", null, "추가 정보 (선택 — 계약유형·품목·국가·조건·담당자·등)"));
     addGrid(more, DEAL_EXTRA_KEYS);
     form.appendChild(more);
     const val = k => { const i = form.querySelector(`[data-key="${k}"]`); return i ? i.value : rec[k]; };
