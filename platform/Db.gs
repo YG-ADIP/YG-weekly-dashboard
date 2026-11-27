@@ -222,8 +222,8 @@ function dbCodes_() {
   Object.keys(DEFAULT_CODES).forEach(function (k) { out[k] = c[k] && c[k].length ? c[k] : DEFAULT_CODES[k]; });
   if (out.stages !== DEFAULT_CODES.stages && out.stages.some(function (x) { return OLD_STAGE_NAMES.indexOf(x.name || x) >= 0; })) out.stages = DEFAULT_CODES.stages; // 예전 단계 체계 → 새 보고 진행 체계
   Object.keys(FIXED_CODES).forEach(function (k) { out[k] = FIXED_CODES[k]; });
-  // 다음 할 일 목록: 진행 단계와 연동하지 않음(따로 관리). 처음 값만 기본 진행 단계 이름과 같음
-  out.nextActions = c.nextActions && c.nextActions.length ? c.nextActions : DEFAULT_CODES.stages.map(function (x) { return x.name; });
+  // 다음 할 일 목록 = 진행 단계 목록(같은 항목·같은 순서, 2026-11). 고르는 건 진행 단계와 따로(자동 연동 없음)
+  out.nextActions = out.stages.map(function (x) { return x.name; });
   out.weeks = weekKeysOfYear_();
   return out;
 }
@@ -1772,6 +1772,7 @@ function saveCodes_(codes, user) {
         readTable_('deals').forEach(function (d) {
           var ch = false;
           if (renames[d.stage] && keys.indexOf(d.stage) >= 0) { logs.push({ user: user, table: 'deals', recordId: d.id, action: '수정', field: '진행 단계(이름 변경)', before: d.stage, after: renames[d.stage] }); d.stage = renames[d.stage]; ch = true; }
+          if (renames[d.nextAction] && keys.indexOf(d.nextAction) >= 0) { logs.push({ user: user, table: 'deals', recordId: d.id, action: '수정', field: '다음 할 일(단계 이름 변경)', before: d.nextAction, after: renames[d.nextAction] }); d.nextAction = renames[d.nextAction]; ch = true; } // 다음 할 일도 같은 목록
           if (!ch) return;
           var row = recordToRow_('deals', d);
           sh.getRange(d._row, 1, 1, row.length).setValues([row]);

@@ -706,7 +706,21 @@
   .next-sel2.saved2 { border-color: var(--good); box-shadow: 0 0 0 2px rgba(47,107,82,.2); }
   .next-auto2 { margin-top: 4px; }
   .todo-chip2.memo2 { background: #eef3ff; color: #2b4aa0; border-color: #d6e0fb; }
-  body:not(.admin-mode2) .app-tab2[data-view="admin"] { display: none; }
+  body:not(.admin-mode2) .app-tab2[data-view="admin"],
+  body:not(.admin-mode2) .app-tab2[data-view="kpi"],
+  body:not(.admin-mode2) .app-tab2[data-view="members"] { display: none; }
+  /* 상단 드롭다운 메뉴 */
+  .nav-menu2 { position: relative; }
+  .nav-head2 { font-family: inherit; font-size: 13px; font-weight: 700; padding: 8px 14px; border: none; border-radius: 10px; background: transparent; color: #6b7280; cursor: pointer; display: inline-flex; align-items: center; gap: 2px; }
+  .nav-head2:hover, .nav-menu2.open2 .nav-head2 { background: #f3f6fb; color: var(--ink); }
+  .nav-menu2.active2 .nav-head2 { background: var(--accent-tint); color: var(--accent-700); }
+  .nav-cur2 { font-weight: 600; }
+  .nav-caret2 { font-size: 10px; margin-left: 4px; opacity: .7; }
+  .nav-drop2 { display: none; position: absolute; top: 100%; left: 0; z-index: 60; min-width: 180px; padding: 6px; margin-top: 2px; background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(15, 23, 42, .14); border: 1px solid var(--hairline); }
+  .nav-menu2:hover .nav-drop2, .nav-menu2.open2 .nav-drop2 { display: flex; flex-direction: column; gap: 2px; }
+  .nav-menu2.hold-closed2:not(.open2) .nav-drop2 { display: none; }
+  .nav-drop2::before { content: ""; position: absolute; left: 0; right: 0; top: -6px; height: 6px; } /* 머리 → 목록으로 마우스 옮길 때 닫히지 않게 */
+  .nav-item2 { text-align: left; width: 100%; white-space: nowrap; }
   .help2 { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #e8eefb; color: var(--accent-700); font-size: 11px; font-weight: 700; cursor: help; vertical-align: middle; }
   .help2 .tip2 { display: none; position: absolute; left: -8px; top: calc(100% + 8px); z-index: 50; width: 300px; padding: 10px 12px; border-radius: 10px; background: #1f2a44; color: #fff; font-size: 12px; font-weight: 400; line-height: 1.55; white-space: pre-line; text-align: left; box-shadow: 0 8px 24px rgba(20,32,66,.25); }
   .help2:hover .tip2, .help2:focus .tip2, .help2.open2 .tip2 { display: block; }
@@ -1181,14 +1195,15 @@
   function renderAdminAlerts(rows) {
     const slot = document.getElementById("adminAlertSlot");
     const tab = document.querySelector('.app-tab2[data-view="deals"]');
-    if (tab) { const old = tab.querySelector(".tab-badge2"); if (old) old.remove(); }
+    const head = document.querySelector('.nav-menu2[data-menu="input"] .nav-head2');
+    [tab, head].forEach(t => { if (t) { const old = t.querySelector(".tab-badge2"); if (old) old.remove(); } });
     if (!slot) return;
     slot.innerHTML = "";
     if (!isAdminUser() || !rows) return;
     const dup = rows.filter(r => r.dupCheck), miss = rows.filter(r => /매출현황 누락/.test(r.source || ""));
     const pending = rows.filter(r => r.approval === "승인 대기" && stageWeight(r.stage) >= 100 && Number(r.year) === CFG_YEAR);
     const flagged = rows.filter(needsAdminCheck), n = flagged.length; // 한 건이 두 사유에 해당해도 1건
-    if (tab && n) tab.appendChild(elText("span", "tab-badge2", String(n)));
+    if (n) [tab, head].forEach(t => { if (t) t.appendChild(elText("span", "tab-badge2", String(n))); });
     const pendSig = "pend:" + pending.map(r => r.id).sort().join(",");
     let pendHidden = false; try { pendHidden = localStorage.getItem("yg_pend_alert_closed") === pendSig; } catch (e) {}
     if (!n && (!pending.length || pendHidden)) return;
@@ -3436,12 +3451,29 @@
     const header = document.querySelector(".dash-header2");
     const bar = el("nav", "app-tabs2");
     bar.id = "appTabs";
-    [{ key: "dashboard", title: "대시보드" }].concat(DATA_VIEWS).forEach(v => {
-      const b = elText("button", "app-tab2" + (v.key === "dashboard" ? " active2" : ""), v.title);
-      b.type = "button"; b.dataset.view = v.key;
-      b.addEventListener("click", () => switchView(v.key));
-      bar.appendChild(b);
+    const viewOf = k => (k === "dashboard" ? { key: "dashboard", title: "대시보드" } : DATA_VIEWS.find(v => v.key === k));
+    const tabBtn = (k, cls) => {
+      const v = viewOf(k);
+      const b = elText("button", "app-tab2" + (cls ? " " + cls : "") + (k === "dashboard" ? " active2" : ""), v.title);
+      b.type = "button"; b.dataset.view = k;
+      b.addEventListener("click", () => { closeNavMenus(true); switchView(k); });
+      return b;
+    };
+    NAV_LAYOUT.forEach(item => {
+      if (typeof item === "string") { bar.appendChild(tabBtn(item)); return; }
+      // 드롭다운: PC는 마우스를 올리면, 터치는 누르면 펼쳐짐
+      const menu = el("div", "nav-menu2"); menu.dataset.menu = item.key;
+      const head = el("button", "nav-head2"); head.type = "button"; head.setAttribute("aria-haspopup", "true"); head.setAttribute("aria-expanded", "false");
+      head.append(elText("span", "nav-label2", item.title), elText("span", "nav-cur2", ""), elText("span", "nav-caret2", "▾"));
+      head.addEventListener("click", e => { e.stopPropagation(); const open = !menu.classList.contains("open2"); closeNavMenus(); menu.classList.toggle("open2", open); head.setAttribute("aria-expanded", String(open)); });
+      const drop = el("div", "nav-drop2");
+      item.views.forEach(k => drop.appendChild(tabBtn(k, "nav-item2")));
+      menu.addEventListener("mouseleave", () => menu.classList.remove("hold-closed2"));
+      menu.append(head, drop);
+      bar.appendChild(menu);
     });
+    document.addEventListener("click", e => { if (!e.target.closest || !e.target.closest(".nav-menu2")) closeNavMenus(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape") closeNavMenus(); });
     const userBtn = el("button", "user-chip2");
     userBtn.type = "button"; userBtn.id = "userChip";
     userBtn.addEventListener("click", () => openUserPicker(true));
@@ -3526,8 +3558,28 @@
     try { sessionStorage.removeItem("dashAdminPw"); } catch (e) {}
     if (COLLAB.user === ADMIN_TEMP_USER && !rememberedUserValid(ADMIN_TEMP_USER)) { COLLAB.user = ""; updateUserChip(); openUserPicker(false); }
     updateAdminChip();
-    if (COLLAB.view === "admin") { switchView("dashboard"); return; } // 관리자 모드를 끄면 설정 탭에서 나감
+    if (["admin", "kpi", "members"].includes(COLLAB.view)) { switchView("dashboard"); return; } // 관리자 전용 화면에서 나감
     if (COLLAB.view !== "dashboard") renderDataView(COLLAB.view);
+  }
+  // 상단 메뉴 구성(2026-11): 대시보드 · 보고 진행 현황 · 입력하기 ▾ · 관리 ▾
+  const NAV_LAYOUT = [
+    "dashboard", "report",
+    { key: "input", title: "입력하기", views: ["deals", "agenda", "trend"] },
+    { key: "manage", title: "관리", views: ["admin", "kpi", "members", "settings", "log"] }, // 관리자 설정·KPI·팀원은 관리자 모드에서만
+  ];
+  function closeNavMenus(afterPick) {
+    document.querySelectorAll(".nav-menu2").forEach(m => {
+      m.classList.remove("open2");
+      if (afterPick && m.matches(":hover")) m.classList.add("hold-closed2"); // 고른 직후엔 마우스가 있어도 닫힘
+      const h = m.querySelector(".nav-head2"); if (h) h.setAttribute("aria-expanded", "false");
+    });
+  }
+  function updateNavHeads() {
+    document.querySelectorAll(".nav-menu2").forEach(m => {
+      const act = m.querySelector(".nav-item2.active2");
+      m.classList.toggle("active2", !!act);
+      const cur = m.querySelector(".nav-cur2"); if (cur) cur.textContent = act ? " › " + act.textContent.replace(/\d+$/, "").trim() : "";
+    });
   }
   function updateUserChip() {
     const chip = document.getElementById("userChip");
@@ -3539,6 +3591,7 @@
       !confirm(`사업 원장에 반영 전 변경 ${COLLAB.kpiPending.size}건이 있어요. [일괄 반영]을 누르지 않으면 저장되지 않습니다.\n그래도 이동할까요? (변경 내용은 이 창을 닫기 전까지 유지)`)) return;
     COLLAB.view = key;
     document.querySelectorAll(".app-tab2").forEach(b => b.classList.toggle("active2", b.dataset.view === key));
+    updateNavHeads();
     const isDash = key === "dashboard";
     document.getElementById("dashView").hidden = !isDash;
     document.getElementById("dataView").hidden = isDash;
@@ -4286,7 +4339,7 @@
     const tw = el("div", "data-table-wrap2"); tw.appendChild(t); stageBox.appendChild(tw);
     wrap.appendChild(stageBox);
     // 드롭다운 목록
-    const lists = [["groups", "아티스트 그룹"], ["ctypes", "계약유형"], ["ckinds", "계약구분"], ["items", "품목"], ["currencies", "계약통화"], ["nextActions", "다음 할 일"]];
+    const lists = [["groups", "아티스트 그룹"], ["ctypes", "계약유형"], ["ckinds", "계약구분"], ["items", "품목"], ["currencies", "계약통화"]]; // 다음 할 일 = 진행 단계 목록(따로 편집 없음)
     const listBox = el("div", "settings-block2");
     listBox.appendChild(elText("h3", "data-table-title2", "선택 목록"));
     const grid = el("div", "form-grid2");
@@ -4296,11 +4349,10 @@
       f.appendChild(elText("span", "form-label2", label));
       const ta = document.createElement("textarea"); ta.rows = 3; ta.disabled = !admin;
       ta.value = (codes[k] || []).join(", ");
-      if (k === "nextActions") f.appendChild(elText("span", "form-hint2", "보고 진행 현황·입력 양식에서 고르는 목록(진행 단계와 따로 관리)"));
       inputs[k] = ta; f.appendChild(ta); grid.appendChild(f);
     });
     listBox.appendChild(grid);
-    listBox.appendChild(elText("p", "data-desc2", "진행 단계(이름·구분·순서·추가)는 관리자 모드 → [관리자 설정] 탭 → ④ 진행 단계에서 바꿉니다."));
+    listBox.appendChild(elText("p", "data-desc2", "진행 단계(이름·구분·순서·추가)는 관리자 모드 → [관리 ▾] → 관리자 설정 → ④ 진행 단계에서 바꿉니다. '다음 할 일' 선택지는 진행 단계와 같은 목록입니다(단계를 바꾸면 함께 바뀜, 고르는 건 따로)."));
     if (admin) {
       const save = elText("button", "btn-primary2", "기준 정보 저장"); save.type = "button";
       save.addEventListener("click", async () => {
