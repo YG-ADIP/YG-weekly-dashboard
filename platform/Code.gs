@@ -182,7 +182,7 @@ function sanitizeCodes_(codes) {
     stages.push({ name: name.slice(0, 20), weight: w, desc: String(desc || '').trim().slice(0, 60) });
   });
   if (stages.length) out.stages = stages;
-  ['groups', 'ctypes', 'ckinds', 'items', 'currencies'].forEach(function (k) {
+  ['groups', 'ctypes', 'ckinds', 'items', 'currencies', 'nextActions'].forEach(function (k) {
     if (c[k] === undefined) return;
     var list = cleanList_(c[k], 40);
     if (list.length) out[k] = list;
@@ -352,9 +352,9 @@ function adminApi(action, adminPassword, payloadJson) {
     switch (action) {
       case 'load': res = { ok: true, config: cfg_(), defaults: sanitizeConfig_({}), codeDefaults: DEFAULT_CODES, history: getConfigHistoryIndex_() }; break;
       case 'test': res = { ok: true, results: testConnections_(sanitizeConfig_(payload.config)) }; break;
-      case 'save': res = { ok: true, config: saveConfig_(sanitizeConfig_(payload.config), payload.by, payload.memo) }; break;
+      case 'save': res = { ok: true, config: saveConfig_(keepCodes_(sanitizeConfig_(payload.config)), payload.by, payload.memo) }; break;
       case 'restore': res = { ok: true, config: restoreConfig_(payload.key, payload.by) }; break;
-      case 'reset': res = { ok: true, config: saveConfig_(sanitizeConfig_({}), payload.by, '기본값으로 복원') }; break;
+      case 'reset': res = { ok: true, config: saveConfig_(keepCodes_(sanitizeConfig_({})), payload.by, '기본값으로 복원') }; break;
       case 'passwords': changePasswords_(payload.dashboard, payload.admin); res = { ok: true }; break;
       case 'createDb': res = { ok: true, db: createDb_(payload.by), config: cfg_() }; break;
       case 'status': res = adminStatus_(); break;
@@ -406,8 +406,10 @@ function restoreConfig_(key, by) {
   if (!entry) throw new Error('해당 변경 이력을 찾을 수 없습니다.');
   var raw = PropertiesService.getScriptProperties().getProperty(key);
   if (!raw) throw new Error('해당 시점의 설정 기록이 없습니다.');
-  return saveConfig_(sanitizeConfig_(JSON.parse(raw)), by, '되돌리기: ' + entry.at + ' 설정');
+  return saveConfig_(keepCodes_(sanitizeConfig_(JSON.parse(raw))), by, '되돌리기: ' + entry.at + ' 설정');
 }
+// 진행 단계·선택 목록은 사업 데이터와 맞물려 있어 설정 저장·되돌리기로 바뀌지 않게 지금 값을 유지
+function keepCodes_(config) { config.codes = JSON.parse(JSON.stringify(cfg_().codes || {})); return config; }
 
 // 연결 대상이 바뀌면 60초 캐시에 남은 예전 시트 데이터가 보이지 않게 비움.
 function clearDataCaches_(config) {
