@@ -686,6 +686,34 @@
   .fx-half2 { font-size: 11px; font-weight: 700; color: var(--soft); width: 40px; flex-shrink: 0; }
   .sel-bar2 { position: sticky; left: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fff7f5; border-bottom: 1px solid #f3d3cc; font-size: 12px; }
   .sel-bar2[hidden] { display: none; }
+  body:not(.admin-mode2) .app-tab2[data-view="admin"] { display: none; }
+  .help2 { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #e8eefb; color: var(--accent-700); font-size: 11px; font-weight: 700; cursor: help; vertical-align: middle; }
+  .help2 .tip2 { display: none; position: absolute; left: -8px; top: calc(100% + 8px); z-index: 50; width: 300px; padding: 10px 12px; border-radius: 10px; background: #1f2a44; color: #fff; font-size: 12px; font-weight: 400; line-height: 1.55; white-space: pre-line; text-align: left; box-shadow: 0 8px 24px rgba(20,32,66,.25); }
+  .help2:hover .tip2, .help2:focus .tip2, .help2.open2 .tip2 { display: block; }
+  .adm2 { display: flex; flex-direction: column; gap: 16px; padding-bottom: 70px; }
+  .adm-check2 { border: 1px solid var(--hairline); border-radius: 14px; padding: 12px 16px; background: #fafbfd; }
+  .adm-check-list2 { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .adm-check-item2 { font: inherit; font-size: 12.5px; border: 1px solid var(--hairline); border-radius: 999px; padding: 6px 12px; background: #fff; cursor: pointer; }
+  .adm-check-item2.ng2 { border-color: #f1c88a; background: #fffaf0; }
+  .adm-group2 { border: 1px solid var(--hairline); border-radius: 14px; padding: 16px 18px; background: #fff; }
+  .adm-group2 h3 { margin: 0 0 4px; font-size: 15px; display: flex; align-items: center; gap: 6px; }
+  .adm-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px 16px; margin-top: 10px; }
+  .adm-field2 { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; min-width: 0; }
+  .adm-field2.check2 { flex-direction: row; align-items: center; gap: 8px; }
+  .adm-field2 input[type=text], .adm-field2 input[type=number], .adm-field2 input[type=password], .adm-field2 textarea, .adm-sec-table2 input[type=text] { font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid rgba(20,32,66,0.16); border-radius: 10px; width: 100%; box-sizing: border-box; }
+  .adm-field2 textarea { min-height: 56px; resize: vertical; }
+  .adm-label2 { font-weight: 700; color: var(--soft); display: inline-flex; align-items: center; gap: 4px; }
+  .adm-idpv2 { font-size: 11px; color: var(--accent-700); word-break: break-all; }
+  .adm-sections2 { margin-top: 10px; } .adm-sec-table2 td { vertical-align: middle; } .adm-ord2 { width: 80px; white-space: nowrap; } .adm-vis2 { width: 70px; white-space: nowrap; }
+  .adm-testrow2 { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  .adm-results2 { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .adm-res2 { font-size: 12.5px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--hairline); background: #fafbfd; } .adm-res2.ng2 { border-color: #f1c88a; background: #fffaf0; }
+  .adm-adv2 { margin-top: 12px; font-size: 12.5px; } .adm-adv2 summary { cursor: pointer; color: var(--soft); }
+  .adm-hist2 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid #eef0f4; font-size: 12.5px; } .adm-hist2.cur2 b { color: var(--accent-700); }
+  #adm-history .btn-danger2 { margin-top: 10px; }
+  .adm-bar2 { position: sticky; bottom: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border: 1px solid var(--hairline); border-radius: 14px; background: rgba(255,255,255,.97); box-shadow: 0 -4px 16px rgba(20,32,66,.08); z-index: 5; }
+  .adm-bar2 input { flex: 1 1 200px; font: inherit; font-size: 13px; padding: 7px 10px; border: 1px solid rgba(20,32,66,0.16); border-radius: 10px; }
+  .adm-status2 { font-size: 12.5px; font-weight: 700; color: var(--soft); flex: 1 1 100%; } .adm-status2.dirty2 { color: #8a6420; } .adm-status2.ok2 { color: var(--good); } .adm-status2.err2 { color: var(--bad); }
   .admin-alert2 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; border: 1px solid #f3c9c1; background: #fff6f4; border-radius: 14px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; }
   .admin-alert2 > b { color: var(--bad); }
   .admin-alert2.info2 { border-color: #dfe7ff; background: #f3f6ff; } .admin-alert2.info2 > b { color: var(--accent-700); }
@@ -846,7 +874,6 @@
   // 입력·저장하고, 서버가 이 페이지를 만들 때 표시용 설정만 심어준다(시트·캘린더 ID는 내려오지 않음).
   const PLATFORM_UI = <?!= uiConfigJson ?>;
   let CFG_YEAR = PLATFORM_UI.general.year; // 보고 있는 연도(상단 연도 선택). 운영 연도 전환은 관리자 모드 → 기준 정보
-  const KPI_RAW_URL = PLATFORM_UI.sources.kpiSourceUrl;
 
   // 섹션 구성 — 설정의 순서대로 번호(01, 02…)를 매기고, 숨긴 섹션은 번호에서 빠짐.
   const SECTION_SLOT = { kpi: "kpiSlot", report: "reportSlot", agenda: "agendaSlot", bizcal: "calSlot", trend: "trendSlot", teamcal: "teamCalSlot" };
@@ -1125,7 +1152,7 @@
       }
     }
   }
-  const BATCH_SECTIONS = new Set(["kpi", "insight", "agenda", "trend", "calendar", "businessCalendar", "teamCalendar", "upcomingSelection", "bizEventOverrides"]);
+  const BATCH_SECTIONS = new Set(["kpi", "insight", "agenda", "trend", "businessCalendar", "teamCalendar", "upcomingSelection", "bizEventOverrides"]);
   // 팀 캘린더(구글 캘린더 조회가 느림)는 별도 묶음으로 병렬 전송 — 느려도 KPI·AGENDA·트렌드를 막지 않음
   const SLOW_SECTIONS = new Set(["teamCalendar"]);
   const apiQueues = { main: { items: [], timer: null }, slow: { items: [], timer: null } };
@@ -1186,7 +1213,7 @@
     setStoredPw(pw);
     try {
       const data = await callBackend("kpi");
-      if (!data.ok) {
+      if (!data.ok && data.error !== "no_db") { // no_db = 비밀번호는 맞음(협업 DB만 아직 없음 → 관리자 모드에서 [플랫폼 시작하기])
         setStoredPw("");
         // 서버 오류(server_error 등)까지 "비밀번호 틀림"으로 오인하지 않도록 구분
         // (리디자인 버그 1번 수정).
@@ -1198,7 +1225,7 @@
         }
         return;
       }
-      cachedKpiData = data;
+      cachedKpiData = data.ok ? data : null;
       document.body.classList.remove("locked");
       document.getElementById("pwGate").remove();
       boot();
@@ -1257,15 +1284,6 @@
       toggleBtn.textContent = kpiDetailView ? "전체 보기" : "상세보기";
       toggleBtn.addEventListener("click", opts.onToggle);
       actions.appendChild(toggleBtn);
-    }
-    if (KPI_RAW_URL) {
-      const rawLink = document.createElement("a");
-      rawLink.className = "link-detail2";
-      rawLink.href = KPI_RAW_URL;
-      rawLink.target = "_blank";
-      rawLink.rel = "noopener noreferrer";
-      rawLink.textContent = "원본 시트 ↗";
-      actions.appendChild(rawLink);
     }
     card.appendChild(sectionHead(secNum("kpi"), secTitle("kpi"), true, badgeText, actions));
     return card;
@@ -1562,7 +1580,7 @@
     const points = [];
     for (const e of entries) {
       const status = e.data;
-      if (!status || !status.annual || isNaN(status.annual.actual)) continue;
+      if (!status || !status.annual || isNaN(status.annual.actual) || !kpiNum(KPI_GOAL.goal)) continue; // 목표 미입력이면 추이 생략
       // STRETCH 선과 같은 방식으로, BASE도 최신 시트의 Base 목표(KPI_GOAL.goalBase)를 전 주차에 동일 적용
       // — 구양식 주차(Base 열 없음)도 추이 선이 끊기지 않게. Base 목표가 아예 없으면 BASE 선 생략.
       const goalBase = kpiNum(KPI_GOAL.goalBase);
@@ -3002,8 +3020,8 @@
       notice.classList.remove("hide2");
       try {
         const data = await callBackend("kpi");
-        if (data.ok) {
-          cachedKpiData = data;
+        if (data.ok || data.error === "no_db") {
+          cachedKpiData = data.ok ? data : null;
           document.body.classList.remove("locked");
           document.getElementById("pwGate").remove();
           notice.remove();
@@ -3033,6 +3051,7 @@
     { key: "members", title: "팀원", tables: ["members"], desc: "입장할 때 고르는 이름 목록입니다(관리자 모드에서 등록). 저장 기록의 작성자로 표시됩니다." },
     { key: "log", title: "변경 이력", tables: ["log"], desc: "누가·언제·무엇을 바꿨는지 자동으로 기록됩니다. 삭제된 항목은 [복원]으로 되살릴 수 있습니다." },
     { key: "settings", title: "기준 정보", tables: [], desc: "운영 연도와 진행 단계·드롭다운 목록입니다. 관리자 모드에서 바꿀 수 있습니다." },
+    { key: "admin", title: "관리자 설정", tables: [], adminOnly: true, desc: "대시보드 제목·데이터 연결·화면 구성·비밀번호를 바꿉니다. 각 칸의 ? 에 마우스를 올리면 무엇을 넣는지와 영향이 나옵니다." },
   ];
   // 표에 보이는 열(나머지는 입력 양식에서 확인)
   const LIST_COLS = {
@@ -3244,6 +3263,7 @@
     try { sessionStorage.removeItem("dashAdminPw"); } catch (e) {}
     if (COLLAB.user === ADMIN_TEMP_USER && !rememberedUserValid(ADMIN_TEMP_USER)) { COLLAB.user = ""; updateUserChip(); openUserPicker(false); }
     updateAdminChip();
+    if (COLLAB.view === "admin") { switchView("dashboard"); return; } // 관리자 모드를 끄면 설정 탭에서 나감
     if (COLLAB.view !== "dashboard") renderDataView(COLLAB.view);
   }
   function updateUserChip() {
@@ -3396,6 +3416,7 @@
     card.appendChild(head);
     card.appendChild(elText("p", "data-desc2", view.desc));
     host.appendChild(card);
+    if (viewKey === "admin") { card.appendChild(renderAdminSettings()); return; }
     if (!COLLAB.meta || !COLLAB.meta.ready) {
       if (COLLAB.meta && COLLAB.meta.error) { card.appendChild(elText("p", "state-msg2 err2", "협업 DB에 연결하지 못했어요: " + COLLAB.meta.error)); return; }
       card.appendChild(renderStartBox());
@@ -3408,6 +3429,266 @@
       card.appendChild(section);
       await renderTableBlock(section, t, view.tables.length > 1);
     }
+  }
+
+
+  // ============================================================
+  // 관리자 설정(관리자 모드 탭) — 예전 별도 화면(?page=admin)을 대시보드 안으로 통합.
+  // 칸마다 ? 도움말: 무엇을 넣는지 · 예시 · 바꾸면 어디에 영향이 가는지.
+  // ============================================================
+  function callAdmin(action, payload) {
+    return gsRun("adminApi", action, COLLAB.adminPw, JSON.stringify(payload || {})).then(t => JSON.parse(t));
+  }
+  function helpTip(text) {
+    const h = el("span", "help2"); h.tabIndex = 0; h.setAttribute("role", "button"); h.setAttribute("aria-label", "도움말: " + text.split("\n")[0]);
+    h.appendChild(document.createTextNode("?"));
+    h.appendChild(elText("span", "tip2", text));
+    h.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); h.classList.toggle("open2"); });
+    h.addEventListener("blur", () => h.classList.remove("open2"));
+    return h;
+  }
+  const ADMIN_GROUPS = [
+    { id: "basic", title: "① 기본 정보", desc: "화면 맨 위에 보이는 이름입니다.", fields: [
+      { path: "general.title", label: "대시보드 제목", help: "무엇: 화면 맨 위 큰 제목\n예: 주간회의 대시보드\n영향: 모든 팀원 화면의 제목·브라우저 탭 이름" },
+      { path: "general.teamName", label: "팀명", help: "무엇: 제목 위 작은 팀 이름\n예: 광고IP사업팀\n영향: 화면 상단 표시만 바뀜(데이터 영향 없음)" },
+      { path: "general.teamNameEn", label: "팀명(영문)", help: "무엇: 팀명 옆 영문 표기\n예: AD/IP BUSINESS\n영향: 화면 상단 표시만 바뀜" },
+    ] },
+    { id: "data", title: "② 데이터 연결", desc: "데이터는 모두 플랫폼에서 입력해 협업 DB에 저장됩니다. 여기서는 저장 위치와 외부 연결만 정합니다.", fields: [
+      { path: "sources.bisFolder", label: "BIS 업로드 폴더", id: true, help: "무엇: BIS 매출현황·진행현황 엑셀을 넣어 두는 구글 드라이브 폴더\n예: https://drive.google.com/drive/folders/…  (주소를 그대로 붙여 넣기)\n영향: 사업 원장 [BIS 업로드]가 이 폴더의 최신 파일을 자동으로 읽음\n주의: 플랫폼을 배포한 구글 계정이 이 폴더를 열 수 있어야 함(공유: 뷰어 이상)" },
+      { path: "sources.teamCalendar", label: "팀 구글 캘린더", id: true, help: "무엇: 대시보드 '팀 일정 캘린더'에 보여줄 구글 캘린더\n예: …@group.calendar.google.com 또는 캘린더 공유 링크\n영향: 팀 일정 섹션·'차주엔~' 배지·사업 일정 표시" },
+      { path: "sources.teamCalendarLabel", label: "캘린더 표시 이름", help: "무엇: 팀 일정 섹션에 보이는 캘린더 이름\n예: 광고 IP 사업팀 캘린더\n영향: 표시만 바뀜" },
+      { path: "sources.dbSheet", label: "협업 DB 시트", id: true, advanced: true, help: "무엇: 모든 입력 데이터(사업 원장·KPI·AGENDA·트렌드·변경 이력)가 저장되는 구글 시트\n[플랫폼 시작하기]로 자동 생성·연결됩니다.\n주의: 다른 시트로 바꾸면 그 시트의 데이터를 보게 됩니다. 평소에는 바꾸지 마세요." },
+    ] },
+    { id: "screen", title: "③ 대시보드 화면", desc: "섹션 순서·표시 여부와 알림 기준을 정합니다.", sections: true, fields: [
+      { path: "bizCal.alertMonths", label: "계약 종료 알림 시점(개월 전)", list: "num", help: "무엇: 계약 종료일 몇 개월 전부터 '사업 캘린더'에 알림을 띄울지\n예: 3, 1  → 3개월 전(황색)·1개월 전(적색)\n영향: 사업 캘린더의 알림 카드(최대 4개)" },
+      { path: "bizCal.keywords", label: "사업 일정 키워드", list: "text", help: "무엇: 팀 캘린더 일정 제목에 이 단어가 있으면 '사업 일정'으로 분류\n예: 촬영, 행사, 업로드, SNS\n영향: 사업 캘린더에 표시되는 일정(띄어쓰기·대소문자 무시)" },
+      { path: "bizCal.useMark", label: "표시 기호로도 분류", check: true, help: "무엇: 일정 제목에 아래 기호가 있으면 사업 일정으로 분류할지\n예: 제목 '◈ OPPO 촬영'\n영향: 사업 캘린더에 표시되는 일정" },
+      { path: "bizCal.mark", label: "사업 일정 표시 기호", help: "무엇: 위 '표시 기호로도 분류'에 쓰는 기호(최대 3자)\n예: ◈" },
+      { path: "teamCal.upcomingKeywords", label: "'차주엔~' 배지 키워드", list: "text", help: "무엇: 팀 일정 상단 '차주엔~' 배지에 자동으로 보여줄 일정 단어\n예: 출장, 촬영, 업로드\n영향: 배지에 보이는 일정" },
+      { path: "teamCal.upcomingDays", label: "'차주엔~' 미리보기 기간(일)", num: true, help: "무엇: 오늘부터 며칠 뒤 일정까지 배지에 보여줄지(1~31)\n예: 10" },
+    ] },
+  ];
+  const ADMIN_SECTION_LABEL = { kpi: "KPI 현황", report: "보고 진행 현황", agenda: "팀 AGENDA", bizcal: "사업 캘린더", trend: "트렌드 리포트", teamcal: "팀 일정 캘린더" };
+  function getPath2(o, path) { return path.split(".").reduce((x, k) => (x == null ? x : x[k]), o); }
+  function setPath2(o, path, v) { const ks = path.split("."); let x = o; ks.slice(0, -1).forEach(k => { x = x[k] = x[k] || {}; }); x[ks[ks.length - 1]] = v; }
+
+  function renderAdminSettings() {
+    const root = el("div", "adm2");
+    if (!isAdminMode()) { root.appendChild(elText("p", "err2", "관리자 모드에서만 볼 수 있어요.")); return root; }
+    const st = { config: null, saved: "", history: [] };
+    const checklist = el("div", "adm-check2");
+    const body = el("div", "adm-body2");
+    const bar = el("div", "adm-bar2");
+    const status = elText("span", "adm-status2", "불러오는 중…");
+    const memo = document.createElement("input"); memo.type = "text"; memo.placeholder = "변경 메모(선택) 예: BIS 폴더 교체"; memo.maxLength = 80;
+    const save = elText("button", "btn-primary2", "저장"); save.type = "button";
+    bar.append(status, memo, save);
+    root.append(checklist, body, bar);
+    const fieldEls = {};
+    const markDirty = () => {
+      readAll();
+      const dirty = JSON.stringify(st.config) !== st.saved;
+      status.textContent = dirty ? "● 저장하지 않은 변경이 있어요" : "저장된 설정과 같아요";
+      status.className = "adm-status2" + (dirty ? " dirty2" : "");
+    };
+    const readAll = () => {
+      Object.entries(fieldEls).forEach(([path, f]) => {
+        let v;
+        if (f.def.check) v = f.input.checked;
+        else if (f.def.list === "num") v = f.input.value.split(/[,\s]+/).map(x => parseInt(x, 10)).filter(n => !isNaN(n));
+        else if (f.def.list === "text") v = f.input.value.split(/[,\n]/).map(x => x.trim()).filter(Boolean);
+        else if (f.def.num) v = f.input.value === "" ? null : Number(f.input.value);
+        else v = f.input.value;
+        setPath2(st.config, path, v);
+      });
+    };
+    const previewId = v => {
+      const t = String(v || "").trim();
+      const m = t.match(/\/d\/([a-zA-Z0-9_-]{10,})/) || t.match(/\/folders\/([a-zA-Z0-9_-]{10,})/) || t.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+      if (m) return m[1];
+      const src = t.match(/[?&]src=([^&#]+)/); if (src) return decodeURIComponent(src[1]);
+      return t;
+    };
+    const fieldRow = def => {
+      const row = el("label", "adm-field2" + (def.check ? " check2" : ""));
+      row.dataset.path = def.path;
+      const head = el("span", "adm-label2");
+      head.appendChild(document.createTextNode(def.label + " "));
+      head.appendChild(helpTip(def.help));
+      let input;
+      if (def.check) { input = document.createElement("input"); input.type = "checkbox"; input.checked = !!getPath2(st.config, def.path); row.append(input, head); }
+      else {
+        input = document.createElement(def.list === "text" ? "textarea" : "input");
+        if (input.tagName === "INPUT") input.type = def.num ? "number" : "text";
+        const v = getPath2(st.config, def.path);
+        input.value = Array.isArray(v) ? v.join(", ") : (v == null ? "" : v);
+        row.append(head, input);
+        if (def.id) {
+          const pv = elText("span", "adm-idpv2", "");
+          const upd = () => { const id = previewId(input.value); pv.textContent = id && id !== input.value.trim() ? "→ 인식된 ID: " + id : ""; };
+          input.addEventListener("input", upd); upd(); row.appendChild(pv);
+        }
+      }
+      fieldEls[def.path] = { def, input };
+      input.addEventListener("input", markDirty); input.addEventListener("change", markDirty);
+      return row;
+    };
+    const sectionsTable = () => {
+      const box = el("div", "adm-sections2");
+      const h = el("div", "adm-label2"); h.appendChild(document.createTextNode("섹션 순서 · 표시 · 이름 ")); h.appendChild(helpTip("무엇: 대시보드에 보이는 섹션의 순서·표시 여부·제목\n예: '보고 진행 현황'을 KPI 바로 아래로, 안 쓰는 섹션은 표시 끄기\n영향: 모든 팀원의 대시보드 배치(번호는 자동)\n팁: 제목의 {year}는 운영 연도로 바뀜"));
+      box.appendChild(h);
+      const t = el("table", "data-table2 adm-sec-table2");
+      const tb = el("tbody", null);
+      const draw = () => {
+        tb.innerHTML = "";
+        st.config.sections.forEach((sec, i) => {
+          const tr = el("tr", null);
+          const ord = el("td", "adm-ord2");
+          [["▲", -1], ["▼", 1]].forEach(([tx, d]) => {
+            const b = elText("button", "btn-line2 small2", tx); b.type = "button";
+            b.disabled = (d < 0 && i === 0) || (d > 0 && i === st.config.sections.length - 1);
+            b.addEventListener("click", () => { const a = st.config.sections, j = i + d; [a[i], a[j]] = [a[j], a[i]]; draw(); markDirty(); });
+            ord.appendChild(b);
+          });
+          const nm = el("td", null);
+          const inp = document.createElement("input"); inp.type = "text"; inp.value = sec.title; inp.maxLength = 40; inp.placeholder = ADMIN_SECTION_LABEL[sec.key];
+          inp.addEventListener("input", () => { sec.title = inp.value; markDirty(); });
+          nm.append(inp, elText("div", "form-hint2", "기능: " + ADMIN_SECTION_LABEL[sec.key]));
+          const vis = el("td", "adm-vis2");
+          const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = sec.visible; cb.title = "표시";
+          cb.addEventListener("change", () => { sec.visible = cb.checked; markDirty(); });
+          vis.append(cb, document.createTextNode(" 표시"));
+          tr.append(ord, nm, vis); tb.appendChild(tr);
+        });
+      };
+      draw(); t.appendChild(tb); box.appendChild(t);
+      return box;
+    };
+    const group = g => {
+      const sec = el("section", "adm-group2"); sec.id = "adm-" + g.id;
+      sec.append(elText("h3", null, g.title), elText("p", "data-desc2", g.desc));
+      const grid = el("div", "adm-grid2");
+      const adv = el("details", "adm-adv2"); adv.appendChild(elText("summary", null, "고급 (평소에는 바꾸지 않음)"));
+      const advGrid = el("div", "adm-grid2"); adv.appendChild(advGrid);
+      g.fields.forEach(f => (f.advanced ? advGrid : grid).appendChild(fieldRow(f)));
+      if (g.sections) sec.appendChild(sectionsTable());
+      sec.appendChild(grid);
+      if (g.id === "data") {
+        const res = el("div", "adm-results2");
+        const tb = elText("button", "btn-line2", "연결 테스트"); tb.type = "button";
+        const th = helpTip("무엇: 입력한 값(저장 전 포함)으로 협업 DB·BIS 폴더·팀 캘린더·주간 자동 기록을 실제로 열어 확인\n영향: 아무것도 바꾸지 않음(확인만)\n10~30초 걸릴 수 있어요");
+        tb.addEventListener("click", async () => {
+          readAll(); tb.disabled = true; res.innerHTML = ""; res.appendChild(elText("p", "form-hint2", "확인 중… (10~30초)"));
+          try {
+            const r = await callAdmin("test", { config: st.config });
+            if (!r.ok) throw new Error(r.message || r.error);
+            res.innerHTML = "";
+            r.results.forEach(x => { const d = el("div", "adm-res2 " + (x.ok ? "ok2" : "ng2")); d.append(elText("b", null, (x.ok ? "✅ " : "⚠ ") + x.name), elText("span", null, " " + x.detail)); res.appendChild(d); });
+          } catch (e) { res.innerHTML = ""; res.appendChild(elText("p", "err2", "연결 테스트 실패: " + e.message)); }
+          finally { tb.disabled = false; }
+        });
+        const trow = el("div", "adm-testrow2"); trow.append(tb, th);
+        sec.append(trow, res);
+        sec.appendChild(adv);
+      } else if (adv.querySelector(".adm-field2")) sec.appendChild(adv);
+      return sec;
+    };
+    const security = () => {
+      const sec = el("section", "adm-group2"); sec.id = "adm-security";
+      sec.append(elText("h3", null, "④ 보안 — 비밀번호"), elText("p", "data-desc2", "바꿀 비밀번호만 입력하세요(4자 이상)."));
+      const grid = el("div", "adm-grid2");
+      const mk = (label, help) => { const r = el("label", "adm-field2"); const h = el("span", "adm-label2"); h.append(document.createTextNode(label + " "), helpTip(help)); const i = document.createElement("input"); i.type = "password"; i.autocomplete = "new-password"; r.append(h, i); grid.appendChild(r); return i; };
+      const dash = mk("새 대시보드 비밀번호", "무엇: 팀원 모두가 대시보드에 들어올 때 쓰는 공통 비밀번호\n영향: 바꾸면 모든 팀원이 새 비밀번호로 다시 들어와야 함 → 팀원에게 꼭 공유");
+      const adm = mk("새 관리자 비밀번호", "무엇: 관리자 모드·관리자 설정에 쓰는 비밀번호\n영향: 바꾸면 다른 관리자에게도 새 비밀번호 공유 필요\n5번 연속 틀리면 30분 잠김");
+      const b = elText("button", "btn-line2", "비밀번호 변경"); b.type = "button";
+      const msg = elText("span", "form-hint2", "");
+      b.addEventListener("click", async () => {
+        if (!dash.value && !adm.value) { msg.textContent = "바꿀 비밀번호를 입력하세요."; return; }
+        if (!confirm("비밀번호를 변경할까요?")) return;
+        const r = await callAdmin("passwords", { dashboard: dash.value, admin: adm.value });
+        if (!r.ok) { msg.textContent = "실패: " + (r.message || r.error); return; }
+        if (adm.value) { COLLAB.adminPw = adm.value; try { sessionStorage.setItem("dashAdminPw", adm.value); } catch (e) {} }
+        if (dash.value) { try { setStoredPw(dash.value); } catch (e) {} }
+        msg.textContent = "변경했습니다." + (dash.value ? " 팀원에게 새 대시보드 비밀번호를 공유하세요." : "");
+        dash.value = ""; adm.value = "";
+      });
+      const row = el("div", "adm-testrow2"); row.append(b, msg);
+      sec.append(grid, row);
+      return sec;
+    };
+    const historyBox = el("section", "adm-group2"); historyBox.id = "adm-history";
+    const drawHistory = () => {
+      historyBox.innerHTML = "";
+      const h = el("h3", null); h.append(document.createTextNode("⑤ 변경 이력 "), helpTip("무엇: 설정을 저장할 때마다 그 시점 설정 전체가 기록됨(최근 20건)\n[되돌리기]: 그 시점 설정으로 즉시 복원(현재 설정도 이력에 남음)\n[기본값으로 복원]: 처음 설정으로(데이터 연결 주소도 초기화되니 주의)"));
+      historyBox.appendChild(h);
+      if (!st.history.length) historyBox.appendChild(elText("p", "form-hint2", "아직 저장 이력이 없어요."));
+      st.history.forEach((x, i) => {
+        const r = el("div", "adm-hist2" + (i === 0 ? " cur2" : ""));
+        r.append(elText("b", null, x.at), elText("span", null, " " + (x.by || "(이름 없음)") + (x.memo ? " · " + x.memo : "")));
+        if (i === 0) r.appendChild(elText("span", "form-hint2", " 현재 적용 중"));
+        else {
+          const b = elText("button", "btn-line2 small2", "되돌리기"); b.type = "button";
+          b.addEventListener("click", async () => { if (!confirm(x.at + " 시점 설정으로 되돌릴까요?")) return; apply(await callAdmin("restore", { key: x.key, by: COLLAB.user }), "되돌렸어요"); });
+          r.appendChild(b);
+        }
+        historyBox.appendChild(r);
+      });
+      const reset = elText("button", "btn-danger2 small2", "기본값으로 복원"); reset.type = "button";
+      reset.addEventListener("click", async () => { if (!confirm("모든 설정을 기본값으로 되돌릴까요? (BIS 폴더·협업 DB 연결도 초기화됩니다)\n현재 설정은 이력에 남습니다.")) return; apply(await callAdmin("reset", { by: COLLAB.user }), "기본값으로 복원했어요"); });
+      historyBox.appendChild(reset);
+    };
+    const drawChecklist = async () => {
+      checklist.innerHTML = "";
+      checklist.appendChild(elText("b", null, "설정 점검표"));
+      try {
+        const s2 = await callAdmin("status");
+        if (!s2.ok) throw new Error(s2.message || s2.error);
+        const items = [
+          [s2.db.ready, "협업 DB 연결", s2.db.ready ? "연결됨" : "없음 — 기준 정보 탭 [플랫폼 시작하기]", "data", s2.db.url],
+          [s2.bisFolder.set, "BIS 업로드 폴더", s2.bisFolder.set ? "지정됨" : "지정 필요 — 아래 ② 데이터 연결", "data", s2.bisFolder.url],
+          [s2.weekly.installed, "주간 자동 기록(금 18시)", s2.weekly.installed ? ("예약됨" + (s2.weekly.last ? " · 마지막 " + s2.weekly.last : "")) : "예약 필요 — Apps Script 편집기에서 setupWeeklySnapshot 1회 실행", "data", ""],
+          [s2.teamCalendar.set, "팀 구글 캘린더", s2.teamCalendar.set ? "지정됨" : "지정 필요 — 아래 ② 데이터 연결", "data", ""],
+        ];
+        const ul = el("div", "adm-check-list2");
+        items.forEach(([okv, name, detail, target, url]) => {
+          const it = el("button", "adm-check-item2 " + (okv ? "ok2" : "ng2")); it.type = "button";
+          it.append(elText("span", null, okv ? "✅" : "⚠"), elText("b", null, " " + name), elText("span", null, " · " + detail));
+          it.addEventListener("click", () => { if (okv && url) window.open(url, "_blank", "noopener"); else { const g = document.getElementById("adm-" + target); if (g) g.scrollIntoView({ behavior: "smooth" }); } });
+          ul.appendChild(it);
+        });
+        checklist.appendChild(ul);
+      } catch (e) { checklist.appendChild(elText("span", "err2", " 점검표를 불러오지 못했어요: " + e.message)); }
+    };
+    const apply = (res, okText) => {
+      if (!res || !res.ok) { status.textContent = "실패: " + ((res && (res.message || res.error)) || ""); status.className = "adm-status2 err2"; return; }
+      st.config = res.config; st.config.codes = st.config.codes || {}; st.saved = JSON.stringify(st.config);
+      if (res.history) st.history = res.history;
+      drawAll();
+      status.textContent = okText + " — 모든 팀원 화면은 새로고침하면 반영돼요."; status.className = "adm-status2 ok2";
+      drawChecklist();
+    };
+    const drawAll = () => {
+      body.innerHTML = ""; Object.keys(fieldEls).forEach(k => delete fieldEls[k]);
+      ADMIN_GROUPS.forEach(g => body.appendChild(group(g)));
+      body.appendChild(security());
+      body.appendChild(historyBox); drawHistory();
+    };
+    save.addEventListener("click", async () => {
+      readAll();
+      if (!confirm("이 설정으로 저장할까요? 저장 즉시 모든 팀원에게 적용됩니다.")) return;
+      save.disabled = true;
+      try { apply(await callAdmin("save", { config: st.config, by: COLLAB.user, memo: memo.value }), "저장했어요"); memo.value = ""; }
+      finally { save.disabled = false; }
+    });
+    (async () => {
+      try {
+        const res = await callAdmin("load");
+        if (!res.ok) throw new Error(res.message || res.error);
+        apply(res, "불러왔어요");
+        status.textContent = "저장된 설정을 불러왔어요"; status.className = "adm-status2";
+      } catch (e) { status.textContent = "불러오지 못했어요: " + e.message; status.className = "adm-status2 err2"; }
+    })();
+    return root;
   }
 
   // 팀원 여러 명을 표에 적고 한 번에 저장(관리자). 이미 있는 이름은 건너뜀.
@@ -3543,12 +3824,12 @@
   function renderStartBox() {
     const box = el("div", "start-box2");
     box.appendChild(elText("h3", null, "플랫폼 시작하기"));
-    box.appendChild(elText("p", null, "협업 DB(구글 시트)를 만들고, 기존 시트의 팀 AGENDA·트렌드 리포트 지난 주차와 KPI 주차 기록·목표를 한 번에 가져옵니다. 처음 한 번만 하면 됩니다."));
+    box.appendChild(elText("p", null, "협업 DB(구글 시트)를 만듭니다. 이후 사업 원장·KPI 목표·AGENDA·트렌드는 모두 플랫폼에서 직접 입력해 이 DB에 저장됩니다. 처음 한 번만 하면 됩니다."));
     if (!isAdminMode()) { box.appendChild(elText("p", "err2", "관리자 모드에서 시작할 수 있어요. 오른쪽 위 [\u{1F512} 관리자 모드]를 눌러 주세요.")); return box; }
     const go = elText("button", "btn-primary2", "플랫폼 시작하기"); go.type = "button";
     const out = el("div", "form-msg2");
     go.addEventListener("click", async () => {
-      if (!confirm("협업 DB를 만들고 기존 데이터를 가져올까요? (1분 가까이 걸릴 수 있습니다)")) return;
+      if (!confirm("협업 DB를 만들까요?")) return;
       go.disabled = true; go.textContent = "진행 중…";
       const res = await callDb("start");
       if (!res.ok) { out.textContent = "실패: " + (res.message || res.error); go.disabled = false; go.textContent = "플랫폼 시작하기"; return; }
@@ -3589,24 +3870,6 @@
       yearBox.appendChild(row);
     }
     wrap.appendChild(yearBox);
-    // 기존 시트 데이터 다시 가져오기(이미 플랫폼을 시작한 뒤 추가된 이관 항목 — 사업 원장 등). 이미 옮긴 항목은 건너뜀.
-    if (admin) {
-      const mig = el("div", "settings-block2");
-      mig.appendChild(elText("h3", "data-table-title2", "기존 시트 데이터 가져오기"));
-      mig.appendChild(elText("p", "data-desc2", "마스터 데이터 시트의 '1. 실적관리' 전체(상태·통화·금액·KPI 인정 금액·연도·반기)를 사업 원장으로 옮기고, '2. 토탈 리스트'로 계약 카테고리·지역·계약일을, 사업 캘린더 시트로 계약 종료일을 보강합니다. 시트에서 실적으로 잡힌 건(실적여부 X 제외)은 '확정 금액' 기준·실적 반영 ON으로 들어옵니다. 다시 눌러도 같은 건은 중복 추가되지 않습니다."));
-      const btn = elText("button", "btn-primary2", "기존 시트 데이터 가져오기"); btn.type = "button";
-      btn.addEventListener("click", async () => {
-        if (!confirm("기존 시트 데이터를 가져올까요? (1분 가까이 걸릴 수 있습니다)\n\n처음 마스터 시트로 가져올 때는, 예전에 시트에서 옮겨 온 사업 중 아무도 수정·실적 반영하지 않은 건을 마스터 시트 기준으로 교체합니다(지운 건은 변경 이력에서 복원 가능). 팀원이 수정한 건은 그대로 둡니다.")) return;
-        btn.disabled = true; btn.textContent = "가져오는 중…";
-        const res = await callDb("start");
-        btn.disabled = false; btn.textContent = "기존 시트 데이터 가져오기";
-        if (!res.ok) { alert("실패: " + (res.message || res.error)); return; }
-        COLLAB.dashDirty = true; COLLAB.rows = {};
-        alert("완료했습니다.\n" + res.report.join("\n"));
-      });
-      mig.appendChild(btn);
-      wrap.appendChild(mig);
-    }
     // 진행 단계
     const stageBox = el("div", "settings-block2");
     stageBox.appendChild(elText("h3", "data-table-title2", "진행 단계 (보고 진행 체계)"));
