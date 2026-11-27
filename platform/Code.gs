@@ -28,7 +28,8 @@ var MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP',
 // ============================================================
 var PLATFORM_SECTION_KEYS = ['kpi', 'newdeals', 'report', 'agenda', 'bizcal', 'trend', 'teamcal']; // 월별 트래킹은 2026-11 삭제, 보고 진행 현황 2026-11 추가
 var DEFAULT_CONFIG = {
-  general: { title: '주간회의 대시보드', teamName: '광고IP사업팀', teamNameEn: 'AD/IP BUSINESS', year: 2026 },
+  // startDate: 대시보드 운영 시작일 — 이 날짜가 속한 주(월~일)부터 대시보드에 표시, 그 이전 주차는 숨김
+  general: { title: '주간회의 대시보드', teamName: '광고IP사업팀', teamNameEn: 'AD/IP BUSINESS', year: 2026, startDate: '2026-11-30' },
   // 데이터는 모두 플랫폼에서 직접 입력해 협업 DB(구글 시트 1개)에 저장(2026-11, 기존 시트·폴더 연동 삭제)
   sources: {
     bisFolder: '',  // BIS 업로드 폴더(드라이브) — BIS 매출현황·진행현황 엑셀을 넣어 두면 [드라이브에서 가져오기]로 반영
@@ -141,6 +142,7 @@ function sanitizeConfig_(input) {
       teamName: cleanText_(g.teamName, 40, d.general.teamName),
       teamNameEn: cleanText_(g.teamNameEn, 40, d.general.teamNameEn),
       year: clampInt_(g.year, 2000, 2100, d.general.year),
+      startDate: /^\d{4}-\d{2}-\d{2}$/.test(String(g.startDate || '')) ? String(g.startDate) : d.general.startDate,
     },
     sources: {
       bisFolder: extractId_(src.bisFolder),

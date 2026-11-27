@@ -69,6 +69,8 @@ var DB_TABLES = {
       { key: 'nextAction', label: '다음 할 일', type: 'select', codes: 'nextActions', loose: true },
       // 등록일시 — 처음 저장(화면 입력·엑셀·BIS 업로드)된 시각. 이번 주 등록 건은 '신규' 표시
       { key: 'createdAt', label: '등록일시', type: 'auto' },
+      // 신규 사업 섹션에 보여줄지(관리자가 [대시보드 표시]로 켬). 'Y'면 표시
+      { key: 'newShow', label: '신규 사업 대시보드 표시', type: 'auto' },
     ],
   },
   kpiGoals: {
@@ -141,6 +143,19 @@ var DB_TABLES = {
       { key: 'updatedAt', label: '최종 수정일시', type: 'auto' },
     ],
   },
+  // 사업별 주간 상태(매주 금 18시 자동 기록) — 지난 주차를 고르면 보고 진행 현황을 그 주 마지막 상태로 보여줌
+  dealSnaps: {
+    sheet: '사업_주간기록', idPrefix: 'DS', editable: false,
+    cols: [
+      { key: 'id', label: 'ID', type: 'auto' },
+      { key: 'year', label: '연도', type: 'auto' },
+      { key: 'week', label: '주차', type: 'auto' },
+      { key: 'dealId', label: '사업ID', type: 'auto' },
+      { key: 'stage', label: '진행 단계', type: 'auto' },
+      { key: 'nextAction', label: '다음 할 일', type: 'auto' },
+      { key: 'recordedAt', label: '기록일시', type: 'auto' },
+    ],
+  },
   snapshots: {
     sheet: 'KPI_주간기록', idPrefix: 'SN', editable: false,
     cols: [
@@ -175,7 +190,7 @@ var DB_TABLES = {
     ],
   },
 };
-var DB_TABLE_ORDER = ['deals', 'kpiGoals', 'fx', 'agenda', 'trend', 'members', 'snapshots', 'log'];
+var DB_TABLE_ORDER = ['deals', 'kpiGoals', 'fx', 'agenda', 'trend', 'members', 'snapshots', 'dealSnaps', 'log'];
 
 // 코드(드롭다운) 기본값 — 진행 단계·아티스트 그룹 등은 관리자 설정에서 바꿀 수 있음(cfg_().codes).
 var DEFAULT_CODES = {
@@ -226,9 +241,13 @@ function dbCodes_() {
   return out;
 }
 
-function weekKeysOfYear_() {
-  var keys = [];
-  MONTH_ABBR.forEach(function (m) { for (var w = 1; w <= 5; w++) keys.push(m + '_' + w); });
+function weekKeysOfYear_() { // 그 해에 실제로 있는 주차만(목요일이 5번 있는 달만 5주차)
+  var keys = [], y = cfg_().general.year;
+  MONTH_ABBR.forEach(function (m, i) {
+    var days = new Date(y, i + 1, 0).getDate(), first = new Date(y, i, 1).getDay();
+    var firstThu = 1 + ((4 - first + 7) % 7), n = Math.floor((days - firstThu) / 7) + 1;
+    for (var w = 1; w <= n; w++) keys.push(m + '_' + w);
+  });
   return keys;
 }
 
@@ -1038,15 +1057,34 @@ function dbImport_(key, rawRows, user, commit, opts) {
 // ============================================================
 // 대시보드용 계산 — 화면이 원래 받던 모양 그대로 만들어 준다(화면 코드는 그대로 재사용)
 // ============================================================
-function weekKeyOf_(date) {
-  return MONTH_ABBR[date.getMonth()] + '_' + Math.ceil(date.getDate() / 7);
+// 주차 기준(2026-11 변경): 월~일을 한 주로, 그 주 목요일이 속한 달의 n번째 목요일이면 'n주차'.
+// 예) 11/30(월)~12/6(일) = 12월 1주차. 작성자가 목·금에 쓰는 내용은 항상 그 주로 들어감.
+function weekThursday_(date) {
+  var d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  var back = (d.getDay() + 6) % 7; // 월요일까지 며칠 전인지
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - back + 3);
 }
+function weekKeyOf_(date) {
+  var thu = weekThursday_(date);
+  return MONTH_ABBR[thu.getMonth()] + '_' + Math.ceil(thu.getDate() / 7);
+}
+function weekYearOf_(date) { return weekThursday_(date).getFullYear(); }
 function weekRange_(year, key) {
   var p = String(key).split('_'), m = MONTH_ABBR.indexOf(p[0]), w = parseInt(p[1], 10);
-  var start = new Date(year, m, (w - 1) * 7 + 1);
-  var lastDay = new Date(year, m + 1, 0).getDate();
-  var end = new Date(year, m, Math.min(w * 7, lastDay), 23, 59, 59);
+  var first = new Date(year, m, 1);
+  var thuDay = 1 + ((4 - first.getDay() + 7) % 7) + 7 * (w - 1);
+  var start = new Date(year, m, thuDay - 3);
+  var end = new Date(year, m, thuDay + 3, 23, 59, 59);
   return { start: start, end: end };
+}
+// 작성 주차 선택용: 지난 주 · 이번 주 · 다음 주
+function writeWeeks_(now) {
+  now = now || new Date();
+  var tz = Session.getScriptTimeZone();
+  return [-7, 0, 7].map(function (off) {
+    var d = new Date(now.getTime() + off * 86400000), key = weekKeyOf_(d), y = weekYearOf_(d), r = weekRange_(y, key);
+    return { key: key, year: y, start: Utilities.formatDate(r.start, tz, 'yyyy-MM-dd'), end: Utilities.formatDate(r.end, tz, 'yyyy-MM-dd'), current: off === 0 };
+  });
 }
 function parseFlexToDate_(s) {
   var m = String(s || '').match(/^(\d{4})-(\d{2})(?:-(\d{2}))?/);
@@ -1148,8 +1186,48 @@ function weeklySnapshotJob() {
   if (now.getFullYear() !== year) return; // 운영 연도가 지난(또는 아직인) 해에는 기록하지 않음
   var status = kpiStatusFromDeals_(year, readTable_('deals'), readTable_('kpiGoals'));
   upsertSnapshot_(year, weekKeyOf_(now), status, true);
+  recordDealSnaps_(year, weekKeyOf_(now));
   PropertiesService.getScriptProperties().setProperty('WEEKLY_SNAPSHOT_LAST', nowStamp_() + ' · ' + weekKeyOf_(now));
 }
+function recordDealSnaps_(year, week) {
+  withLock_(function () {
+    var stamp = nowStamp_();
+    var rows = readTable_('deals').filter(function (d) { return d.stage; }).map(function (d, i) {
+      return recordToRow_('dealSnaps', { id: 'DS-' + year + '-' + week + '-' + d.id + '-' + stamp.replace(/\D/g, ''), year: year, week: week, dealId: d.id, stage: d.stage, nextAction: d.nextAction || '', recordedAt: stamp });
+    });
+    if (!rows.length) return;
+    var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.dealSnaps.sheet) || ensureTable_(dbSpreadsheet_(), 'dealSnaps');
+    sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows); // 한 번에(같은 주 여러 번이면 마지막 기록 사용)
+  });
+}
+// 지난 주차의 사업 목록: 그 주 마지막 기록의 진행 단계·다음 할 일로(그 주 이후 등록된 사업은 제외)
+function dbDealsAt_(year, week) {
+  var r = weekRange_(Number(year), week), endStr = Utilities.formatDate(r.end, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+  var snaps = readTable_('dealSnaps').filter(function (s) { return Number(s.year) === Number(year) && s.week === week; });
+  var last = {};
+  snaps.forEach(function (s) { if (!last[s.dealId] || String(s.recordedAt) > String(last[s.dealId].recordedAt)) last[s.dealId] = s; });
+  var rows = readTable_('deals').filter(function (d) { return !d.createdAt || String(d.createdAt) <= endStr; }).map(function (d) {
+    var o = stripRow_(d), s = last[d.id];
+    if (s) { o.stage = s.stage; o.nextAction = s.nextAction; }
+    return o;
+  });
+  return { ok: true, rows: rows, snapshot: snaps.length > 0, recordedAt: snaps.length ? snaps.map(function (s) { return String(s.recordedAt); }).sort().pop() : '' };
+}
+function dbSetNewShow_(id, show, user) {
+  return withLock_(function () {
+    var d = readTable_('deals').filter(function (x) { return x.id === id; })[0];
+    if (!d) return { ok: false, error: 'not_found', message: '이미 삭제된 사업입니다.' };
+    var v = show ? 'Y' : '';
+    if ((d.newShow || '') !== v) {
+      d.newShow = v;
+      var row = recordToRow_('deals', d);
+      dbSpreadsheet_().getSheetByName(DB_TABLES.deals.sheet).getRange(d._row, 1, 1, row.length).setValues([row]);
+      appendLogs_([{ user: user, table: 'deals', recordId: id, action: '수정', field: '신규 사업 대시보드 표시', before: d.newShow ? '' : 'Y', after: v ? '표시' : '숨김' }]);
+    }
+    return { ok: true, newShow: v };
+  });
+}
+
 function setupWeeklySnapshot() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === WEEKLY_SNAPSHOT_HANDLER) ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger(WEEKLY_SNAPSHOT_HANDLER).timeBased().onWeekDay(ScriptApp.WeekDay.FRIDAY).atHour(18).inTimezone('Asia/Seoul').create();
@@ -1169,10 +1247,12 @@ function snapshotStatus_(rows) {
   };
   var annual = get('전체', '연간');
   if (!annual) return null;
+  var top = rows.filter(function (x) { return x.part === '전체' && x.period === '연간'; })[0] || {};
   return {
     annual: annual, h1: get('전체', '상반기'), h2: get('전체', '하반기'),
     parts: ['광고', 'IP'].map(function (p) { return { name: p, annual: get(p, '연간'), h1: get(p, '상반기'), h2: get(p, '하반기') }; })
       .filter(function (p) { return p.annual || p.h1 || p.h2; }),
+    pipeline: top.pipeline === '' || top.pipeline === undefined ? null : { active: Number(top.pipeline), activeCount: top.activeCount === '' ? null : Number(top.activeCount), confirmedCount: top.confirmedCount === '' ? null : Number(top.confirmedCount) },
   };
 }
 
@@ -1785,7 +1865,7 @@ function dbApi(action, password, user, payloadJson) {
   var isAdmin = !adminDenied;
   try { ensureStagesV2_(); } catch (e) {} // 진행 단계 체계 변경 — 한 번만
   try { ensureCreatedAtV1_(); } catch (e) {} // 기존 건 등록일시 채우기 — 한 번만
-  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, parseFile: 1, bisDrive: 1, setBisFolder: 1, bisPreview: 1, bisCommit: 1, clearCheck: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
+  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, parseFile: 1, bisDrive: 1, setBisFolder: 1, setNewShow: 1, bisPreview: 1, bisCommit: 1, clearCheck: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
   // 입력·저장은 팀원 명단(사용)에 있는 이름만. 관리자 모드는 예외, 명단이 비어 있으면(최초 설정) 허용.
   var WRITE_ACTIONS = { save: 1, delete: 1, restore: 1, bulkKpi: 1, deleteMany: 1 };
   if (WRITE_ACTIONS[action] && !isAdmin && dbReady_()) {
@@ -1810,6 +1890,8 @@ function dbApi(action, password, user, payloadJson) {
       case 'clearCheck': res = dbClearCheck_(payload.ids, user); break;
       case 'bisDrive': res = dbBisDrive_(payload); break;
       case 'bulkKpi': res = dbBulkKpi_(payload.changes, user, isAdmin); break;
+      case 'dealsAt': res = dbDealsAt_(payload.year, String(payload.week || '')); break;
+      case 'setNewShow': res = dbSetNewShow_(String(payload.id || ''), !!payload.show, user); break;
       case 'setBisFolder': res = dbSetBisFolder_(payload.folder, user); break;
       case 'bisPreview': res = { ok: true, result: dbBisImport_(payload, user, false) }; break;
       case 'bisCommit': res = { ok: true, result: dbBisImport_(payload, user, true) }; break;
@@ -1823,6 +1905,7 @@ function dbApi(action, password, user, payloadJson) {
           codes: dbReady_() ? dbCodes_() : null,
           members: dbReady_() ? readTable_('members').filter(function (m) { return m.active !== '중지'; }).map(function (m) { return { name: m.name, role: m.role, part: m.part }; }) : [],
           bisFolder: !!cfg_().sources.bisFolder,
+          writeWeeks: writeWeeks_(), startDate: cfg_().general.startDate,
           dbUrl: dbReady_() ? 'https://docs.google.com/spreadsheets/d/' + cfg_().sources.dbSheet + '/edit' : '' };
         break;
       case 'list': res = { ok: true, rows: readTable_(payload.table).map(stripRow_) }; break;

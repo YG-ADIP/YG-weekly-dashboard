@@ -686,6 +686,20 @@
   .fx-half2 { font-size: 11px; font-weight: 700; color: var(--soft); width: 40px; flex-shrink: 0; }
   .sel-bar2 { position: sticky; left: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fff7f5; border-bottom: 1px solid #f3d3cc; font-size: 12px; }
   .sel-bar2[hidden] { display: none; }
+  .prestart2 { margin: 0 0 14px; padding: 10px 14px; border-radius: 12px; border: 1px dashed #c9d6f3; background: #f5f8ff; color: #2b4aa0; font-size: 13px; font-weight: 600; }
+  .wow2 .wow-sub2 { font-size: 11px; color: var(--faint); }
+  .wow-list2 { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+  .wow-row2 { display: grid; grid-template-columns: 1fr auto auto; grid-template-areas: "n now chg" "n prev prev"; align-items: center; gap: 0 12px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .wow-name2 { grid-area: n; font-size: 13px; opacity: .85; } .wow-now2 { grid-area: now; font-size: 15px; } .wow-prev2 { grid-area: prev; font-size: 11px; opacity: .55; text-align: right; }
+  .wow-chg2 { grid-area: chg; min-width: 78px; text-align: right; font-weight: 700; font-size: 13px; } .wow-ico2 { font-style: normal; margin-right: 4px; font-size: 11px; }
+  .wow-chg2.up2 { color: #6aa8ff; } .wow-chg2.down2 { color: #ff6b6b; } .wow-chg2.flat2 { color: #9aa3b2; }
+  .past-note2 { font-size: 12px; color: #2b4aa0; background: #f5f8ff; border: 1px solid #dfe7fb; border-radius: 10px; padding: 7px 10px; margin: 0 0 10px; }
+  .new-show2 { font-size: 12px; white-space: nowrap; cursor: pointer; }
+  .write-week2 { margin: 0 0 14px; padding: 12px 14px; border: 1px solid #dfe7fb; border-radius: 14px; background: #f7f9ff; }
+  .write-week-title2 { margin: 0 0 8px; font-weight: 700; font-size: 13.5px; }
+  .write-week-row2 { display: flex; gap: 8px; flex-wrap: wrap; }
+  .write-week-btn2 { font: inherit; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 14px; border-radius: 12px; border: 1px solid rgba(20,32,66,.16); background: #fff; cursor: pointer; }
+  .write-week-btn2 span { font-size: 11px; color: var(--faint); } .write-week-btn2.on2 { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(47,107,255,.15); background: #eef3ff; }
   .new-badge2 { display: inline-block; margin-right: 5px; padding: 1px 6px; border-radius: 999px; background: #ff5a36; color: #fff; font-size: 10px; font-weight: 700; line-height: 15px; vertical-align: 1px; }
   .stage-chip2.new2 b { color: #e0431f; } .stage-chip2.new2.on2 { border-color: #ff5a36; background: #fff1ec; }
   .new-sum2 { font-size: 13px; margin: 2px 0 10px; } .new-sum2 b { color: #e0431f; }
@@ -863,6 +877,7 @@
     </div>
   </header>
 
+  <div id="prestartSlot"></div>
   <div id="insightSlot"></div>
   <!-- 섹션 순서·표시 여부·이름은 관리자 설정값대로 applySectionLayout()이 다시 배치 -->
   <div id="sectionsRoot">
@@ -973,11 +988,12 @@
     try {
       if (!COLLAB.meta || !COLLAB.meta.codes) { const meta = await callDb("meta"); if (meta.ok) COLLAB.meta = Object.assign(COLLAB.meta || {}, meta); }
       if (!COLLAB.meta || !COLLAB.meta.ready) { body.innerHTML = ""; body.appendChild(elText("p", "state-msg2", "협업 DB를 시작하면 사업 원장의 진행 단계가 여기에 프로젝트별로 표시됩니다.")); return; }
-      const res = await dealsOnce();
+      const past = !!(selectedWeekKey && !isCurrentWeekKey(selectedWeekKey));
+      const res = past ? await callDb("dealsAt", { year: CFG_YEAR, week: selectedWeekKey }) : await dealsOnce();
       if (!res.ok) throw new Error(res.message || res.error);
-      COLLAB.rows.deals = res.rows;
-      renderReport(body, res.rows, slot);
-      renderAdminAlerts(res.rows);
+      if (!past) COLLAB.rows.deals = res.rows;
+      renderReport(body, res.rows, slot, past ? { snapshot: res.snapshot, recordedAt: res.recordedAt } : null);
+      if (!past) renderAdminAlerts(res.rows);
     } catch (e) {
       body.innerHTML = "";
       body.appendChild(elText("p", "state-msg2 err2", "불러오지 못했어요: " + e.message));
@@ -1011,22 +1027,39 @@
   }
   function renderNewDeals(body, rows, slot) {
     body.innerHTML = "";
-    const list = rows.filter(isNewDeal).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-    const ws = weekStartStr();
+    const wk = dashWeek(), rg = weekRangeOf(wk.year, wk.key), from = ymdStr(rg.start), to = ymdStr(rg.end);
+    const inWeek = r => r.createdAt && String(r.createdAt).slice(0, 10) >= from && String(r.createdAt).slice(0, 10) <= to;
+    const admin = isAdminMode();
+    const all = rows.filter(inWeek).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    const list = admin ? all : all.filter(r => r.newShow === "Y");
     const krw = r => (typeof r.kpiKrw === "number" ? r.kpiKrw : 0);
     const sum = list.reduce((a, r) => a + krw(r), 0);
     const byPart = p => list.filter(r => r.part === p).length;
     const head = el("div", "new-sum2");
-    head.appendChild(elText("b", null, `이번 주 신규 ${list.length}건`));
-    head.appendChild(elText("span", null, ` · 광고 ${byPart("광고")} · IP ${byPart("IP")} · 추산 금액 ${(sum / 1e8).toFixed(2)}억 · ${ws.slice(5).replace("-", "/")}(월)부터 등록된 사업`));
+    head.appendChild(elText("b", null, `${isCurrentWeekKey(wk.key) ? "이번 주" : weekTitle(wk.key)} 신규 ${list.length}건`));
+    head.appendChild(elText("span", null, ` · 광고 ${byPart("광고")} · IP ${byPart("IP")} · 추산 금액 ${(sum / 1e8).toFixed(2)}억 · ${weekTitle(wk.key)}(${weekSpanText(wk.key, wk.year)}) 등록`));
+    if (admin) head.appendChild(elText("span", "form-hint2", ` — 관리자: 이 주 등록 ${all.length}건 중 [대시보드 표시]를 켠 건만 팀원에게 보여요`));
     body.appendChild(head);
-    if (!list.length) { body.appendChild(elText("p", "state-msg2", "이번 주에 새로 등록된 사업이 아직 없어요.")); return; }
+    if (!list.length) { body.appendChild(elText("p", "state-msg2", admin ? "이 주에 새로 등록된 사업이 없어요." : "이 주에 소개할 신규 사업이 아직 없어요.")); return; }
     const artistOf = r => (r.artist && r.artist !== r.group ? `${r.group} · ${r.artist}` : (r.group || r.artist || ""));
     const titleOf = r => { const box = el("div", null); box.appendChild(newBadge()); box.appendChild(elText("b", null, r.brand || "")); if (r.name) box.appendChild(elText("div", "report-sub2", r.name)); return box; };
     const money = r => (r.amount === "" || r.amount == null ? "—" : `${r.cur || ""} ${fmtNum(r.amount)}`.trim());
-    body.appendChild(reportTable(["등록일", "진행 단계", "다음 할 일", "구분", "아티스트", "브랜드 · 사업명", "계약금액"], list, r => {
+    const showCell = r => {
+      const lab = el("label", "new-show2"); const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = r.newShow === "Y";
+      lab.addEventListener("click", e => e.stopPropagation());
+      cb.addEventListener("change", async () => {
+        cb.disabled = true;
+        const res = await callDb("setNewShow", { id: r.id, show: cb.checked });
+        cb.disabled = false;
+        if (!res.ok) { alert("실패: " + (res.message || res.error)); cb.checked = !cb.checked; return; }
+        r.newShow = res.newShow; COLLAB.dashDirty = true;
+      });
+      lab.append(cb, document.createTextNode(" 표시")); return lab;
+    };
+    const cols = ["등록일", "진행 단계", "다음 할 일", "구분", "아티스트", "브랜드 · 사업명", "계약금액"].concat(admin ? ["대시보드"] : []);
+    body.appendChild(reportTable(cols, list, r => {
       const todo = nextActionCell(r);
-      return [String(r.createdAt).slice(5, 10).replace("-", "/"), stageBadge(r.stage), todo, r.part, artistOf(r), titleOf(r), money(r)];
+      return [String(r.createdAt).slice(5, 10).replace("-", "/"), stageBadge(r.stage), todo, r.part, artistOf(r), titleOf(r), money(r)].concat(admin ? [showCell(r)] : []);
     }, slot));
   }
   // 보고 진행 현황·신규 섹션의 '다음 할 일': 표에서 바로 고르면 저장(자동 안내는 아래 작은 칩)
@@ -1064,7 +1097,7 @@
     const b = elText("span", "stage-badge2 " + (kind === "확정" ? "done2" : kind === "종료" ? "closed2" : "s" + Math.min(5, Math.max(0, i)) + "2"), name || "—");
     return b;
   }
-  function reportTable(cols, list, rowFn, slot) {
+  function reportTable(cols, list, rowFn, slot, readOnly) {
     const t = el("table", "data-table2 report-table2");
     const hr = el("tr", null); cols.forEach(c => hr.appendChild(elText("th", null, c)));
     const th = el("thead", null); th.appendChild(hr); t.appendChild(th);
@@ -1072,16 +1105,20 @@
     list.forEach(r => {
       const tr = el("tr", "clickable2");
       rowFn(r).forEach(cell => { const td = el("td", null); if (cell instanceof Node) td.appendChild(cell); else td.textContent = cell == null ? "" : String(cell); tr.appendChild(td); });
-      tr.title = "누르면 사업 원장 입력 양식이 열립니다";
-      tr.addEventListener("click", () => { if (!COLLAB.user) { openUserPicker(false); return; } openRecordForm("deals", r, () => loadReportSection(slot)); });
+      if (readOnly) tr.className = "";
+      else {
+        tr.title = "누르면 사업 원장 입력 양식이 열립니다";
+        tr.addEventListener("click", () => { if (!COLLAB.user) { openUserPicker(false); return; } openRecordForm("deals", r, () => loadReportSection(slot)); });
+      }
       tb.appendChild(tr);
     });
     t.appendChild(tb);
     const w = el("div", "data-table-wrap2"); w.appendChild(t);
     return w;
   }
-  function renderReport(body, rows, slot) {
+  function renderReport(body, rows, slot, past) {
     body.innerHTML = "";
+    if (past) body.appendChild(elText("p", "past-note2", past.snapshot ? `${weekTitle(selectedWeekKey)}(${weekSpanText(selectedWeekKey)}) 마지막 상태 — ${String(past.recordedAt).slice(5, 16)} 기록 · 지난 주차는 보기 전용` : `${weekTitle(selectedWeekKey)} 기록이 없어 현재 상태를 보여드려요(매주 금 18시 자동 기록) · 보기 전용`));
     const stages = COLLAB.meta.codes.stages;
     const order = name => { const i = stages.findIndex(x => x.name === name); return i < 0 ? 99 : i; };
     const artistOf = r => (r.artist && r.artist !== r.group ? `${r.group} · ${r.artist}` : (r.group || r.artist || ""));
@@ -1101,7 +1138,7 @@
       b.type = "button";
       b.appendChild(document.createTextNode(c.label + " "));
       b.appendChild(elText("b", null, String(c.n)));
-      b.addEventListener("click", () => { reportFilter = reportFilter === c.name ? "" : c.name; renderReport(body, rows, slot); });
+      b.addEventListener("click", () => { reportFilter = reportFilter === c.name ? "" : c.name; renderReport(body, rows, slot, past); });
       chips.appendChild(b);
     });
     body.appendChild(chips);
@@ -1110,9 +1147,9 @@
     body.appendChild(elText("h3", "report-h2", `진행 중 프로젝트 ${shown.length}건` + (reportFilter ? ` — ${reportFilter}` : "")));
     if (shown.length) {
       body.appendChild(reportTable(["진행 단계", "다음 할 일", "구분", "아티스트", "브랜드 · 사업명", "계약금액", "단계 변경일", "담당자"], shown, r => {
-        const todo = nextActionCell(r);
+        const todo = past ? elText("span", "todo-chip2 memo2", r.nextAction || "—") : nextActionCell(r);
         return [stageBadge(r.stage), todo, r.part, artistOf(r), titleOf(r), money(r), r.stageDate || "—", r.owner || "—"];
-      }, slot));
+      }, slot, !!past));
     } else body.appendChild(elText("p", "state-msg2", "진행 중인 프로젝트가 없어요."));
 
     body.appendChild(elText("h3", "report-h2", `진행 확정 · 계약 체결 완료 ${done.length}건 (${CFG_YEAR}년)`));
@@ -1124,13 +1161,13 @@
         const cnt = el("div", "v-counted2"); dealVirtualCell(cnt, "counted", r);
         const on = elText("span", "count-badge2" + (r.approval === "승인" ? " on2" : ""), r.approval === "승인" ? "반영 ON" : "반영 OFF");
         return [stageBadge(r.stage), r.part, artistOf(r), titleOf(r), money(r), paid, period, when, cnt, on];
-      }, slot));
+      }, slot, !!past));
     } else body.appendChild(elText("p", "state-msg2", "확정된 건이 없어요."));
 
     if (closed.length) {
       const det = document.createElement("details"); det.className = "report-closed2";
       det.appendChild(elText("summary", null, `진행 불발 · 보류 ${closed.length}건 보기`));
-      det.appendChild(reportTable(["진행 단계", "구분", "아티스트", "브랜드 · 사업명", "계약금액", "사유"], closed, r => [stageBadge(r.stage), r.part, artistOf(r), titleOf(r), money(r), r.reason || "—"], slot));
+      det.appendChild(reportTable(["진행 단계", "구분", "아티스트", "브랜드 · 사업명", "계약금액", "사유"], closed, r => [stageBadge(r.stage), r.part, artistOf(r), titleOf(r), money(r), r.reason || "—"], slot, !!past));
       body.appendChild(det);
     }
   }
@@ -1560,6 +1597,12 @@
     if (halvesBlock) left.appendChild(halvesBlock);
     body.appendChild(left);
 
+    if (chartPoints && chartPoints.wow) {
+      body.appendChild(kpiWowPanel(chartPoints));
+      outer.appendChild(body);
+      if (showLegend) { const lg = kpiLegend(); lg.classList.add("kpi-hero-legend2"); outer.appendChild(lg); }
+      return outer;
+    }
     const right = el("div", "kpi-hero-right2");
     const sh = el("div", "spark-head2");
     sh.appendChild(elText("p", "kpi-block-kicker2", "주별 달성률 추이"));
@@ -1588,6 +1631,53 @@
     return outer;
   }
 
+  // 전주 대비 증감: ▲ 상승 · ▼ 하락 · – 변동 없음, 비교할 전주가 없으면 —
+  function kpiWowPanel(w) {
+    const right = el("div", "kpi-hero-right2 wow2");
+    const sh = el("div", "spark-head2");
+    sh.appendChild(elText("p", "kpi-block-kicker2", "전주 대비"));
+    sh.appendChild(elText("span", "wow-sub2", w.prevLabel ? `${w.prevLabel} → ${w.curLabel}` : "비교할 전주 기록 없음"));
+    right.appendChild(sh);
+    const list = el("div", "wow-list2");
+    w.wow.forEach(([name, now, prev, unit]) => {
+      const row = el("div", "wow-row2");
+      row.appendChild(elText("span", "wow-name2", name));
+      const nv = kpiNum(now), pv = kpiNum(prev);
+      row.appendChild(elText("b", "wow-now2", nv == null ? "—" : fmtAmt(nv) + (unit || "억")));
+      let cls = "flat2", txt = "—", icon = "";
+      if (nv != null && pv != null) {
+        if (pv === 0) { if (nv > 0) { cls = "up2"; icon = "\u25B2"; txt = "신규"; } else { icon = "\u2013"; txt = "0%"; } }
+        else {
+          const pct = (nv - pv) / Math.abs(pv) * 100;
+          if (Math.abs(pct) < 0.05) { icon = "\u2013"; txt = "0.0%"; }
+          else { cls = pct > 0 ? "up2" : "down2"; icon = pct > 0 ? "\u25B2" : "\u25BC"; txt = (pct > 0 ? "+" : "") + pct.toFixed(1) + "%"; }
+        }
+      }
+      const ch = el("span", "wow-chg2 " + cls);
+      if (icon) ch.appendChild(elText("i", "wow-ico2", icon));
+      ch.appendChild(document.createTextNode(txt));
+      row.appendChild(ch);
+      row.appendChild(elText("span", "wow-prev2", pv == null ? "" : `전주 ${fmtAmt(pv)}${unit || "억"}`));
+      list.appendChild(row);
+    });
+    right.appendChild(list);
+    return right;
+  }
+  function kpiWowRows(key) {
+    const byWeek = (sectionCache.kpi && sectionCache.kpi.byWeek) || {};
+    const cur = byWeek[key] && byWeek[key].data;
+    const i = GLOBAL_WEEKS.findIndex(x => x.key === key);
+    const prevKey = i >= 0 && GLOBAL_WEEKS[i + 1] ? GLOBAL_WEEKS[i + 1].key : null; // 운영 시작 이전 주차와는 비교하지 않음
+    const prev = prevKey && byWeek[prevKey] && byWeek[prevKey].data;
+    const g = (st, k) => st && st[k] ? st[k].actual : null;
+    const part = (st, n) => { const p = st && (st.parts || []).find(x => x.name === n); return p && p.annual ? p.annual.actual : null; };
+    const pipe = st => st && st.pipeline && kpiNum(st.pipeline.active) != null ? st.pipeline.active : null;
+    const rows = [["연간 실적", g(cur, "annual"), g(prev, "annual")], ["상반기", g(cur, "h1"), g(prev, "h1")], ["하반기", g(cur, "h2"), g(prev, "h2")]];
+    if (part(cur, "광고") != null) rows.push(["광고 실적", part(cur, "광고"), part(prev, "광고")]);
+    if (part(cur, "IP") != null) rows.push(["IP 실적", part(cur, "IP"), part(prev, "IP")]);
+    if (pipe(cur) != null) rows.push(["진행 중 파이프라인", pipe(cur), pipe(prev)]);
+    return { wow: prev ? rows : rows.map(r => [r[0], r[1], null]), prevLabel: prev ? weekTitle(prevKey) : "", curLabel: weekTitle(key) };
+  }
   function renderKpiPlaceholder() {
     const card = kpiHeader("예시");
     const demo = [0.1, 0.14, 0.2, 0.25, 0.28, 0.3, 0.32, 0.34].map((v, i) => ({ actual: v, base: v * 1.2, label: (i + 1) + "주" }));
@@ -1781,7 +1871,7 @@
     if (showDetail) {
       card.appendChild(kpiPartsBody(parts));
     } else {
-      const trendPoints = buildKpiTrendPoints(key);
+      const trendPoints = kpiWowRows(key); // 주별 추이 그래프 대신 전주 대비 증감
       const annualBlock = kpiCompareBlock(`${CFG_YEAR}년 전체`, String(fmtAmt(annual.actual)), sbRows(annual));
       const halves = [
         { name: "상반기", p: kpiPeriod(status.h1, null) },
@@ -2005,7 +2095,7 @@
     return new Date(d.year, d.month - 1, d.day);
   }
   function startOfToday() {
-    const t = new Date();
+    const t = dashRefDate(); // 고른 주차 기준(이번 주면 오늘)
     return new Date(t.getFullYear(), t.getMonth(), t.getDate());
   }
 
@@ -2213,7 +2303,7 @@
       return bizEventPending[key];
     }
     try {
-      const today = new Date();
+      const today = dashRefDate();
       let navYear = today.getFullYear(), navMonth = today.getMonth() + 1;
       const [data] = await Promise.all([callBackend("businessCalendar"), loadBizEvents(navYear, navMonth), overridesReady]);
       if (!data.ok) throw new Error(data.message || data.error || "알 수 없는 오류");
@@ -2454,7 +2544,7 @@
   // 앞으로 10일 범위 안에 있는 일정 전체(키워드 상관없이)를 가져옴 — 편집 패널의 체크리스트와
   // 자동/직접 선택 계산이 이 목록 하나를 공유한다.
   async function fetchUpcomingWindowEvents() {
-    const range = upcomingInsightRange(new Date());
+    const range = upcomingInsightRange(dashRefDate());
     const monthKeys = new Set([
       `${range.start.getFullYear()}-${range.start.getMonth() + 1}`,
       `${range.end.getFullYear()}-${range.end.getMonth() + 1}`,
@@ -2701,7 +2791,7 @@
     card.appendChild(nav);
     card.appendChild(gridSlot);
 
-    const today = new Date();
+    const today = dashRefDate();
     let year = today.getFullYear(), month = today.getMonth() + 1;
 
     async function render() {
@@ -2882,6 +2972,31 @@
   const MONTH_ABBR = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
   function weekOrder(monthAbbr, weekNum) { return MONTH_ABBR.indexOf(monthAbbr) * 100 + weekNum; }
   function krMonth(monthAbbr) { return MONTH_ABBR.indexOf(monthAbbr) + 1; }
+  // 주차 기준(2026-11): 월~일 한 주, 그 주 목요일이 속한 달의 n번째 목요일 = n주차(작성은 목·금)
+  function weekThu(d) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7) + 3); return x; }
+  function weekKeyOfDate(d) { const t = weekThu(d); return MONTH_ABBR[t.getMonth()] + "_" + Math.ceil(t.getDate() / 7); }
+  function weekYearOfDate(d) { return weekThu(d).getFullYear(); }
+  function weekRangeOf(year, key) {
+    const p = String(key).split("_"), mi = MONTH_ABBR.indexOf(p[0]), w = parseInt(p[1], 10);
+    const first = new Date(year, mi, 1), thu = 1 + ((4 - first.getDay() + 7) % 7) + 7 * (w - 1);
+    return { start: new Date(year, mi, thu - 3), end: new Date(year, mi, thu + 3, 23, 59, 59) };
+  }
+  function mmdd(d) { return (d.getMonth() + 1) + "/" + d.getDate(); }
+  function weekSpanText(key, year) { const r = weekRangeOf(year || CFG_YEAR, key); return mmdd(r.start) + "~" + mmdd(r.end); }
+  function ymdStr(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+  const DASH_START = (PLATFORM_UI.general && PLATFORM_UI.general.startDate) || "2026-11-30";
+  function startWeekInfo() { const p = DASH_START.split("-").map(Number), d = new Date(p[0], p[1] - 1, p[2]); return { key: weekKeyOfDate(d), year: weekYearOfDate(d) }; }
+  function keyOrder(key) { const p = String(key).split("_"); return weekOrder(p[0], parseInt(p[1], 10)); }
+  function isValidWeek(key, year) { year = year || CFG_YEAR; const st = startWeekInfo(); return year !== st.year ? year > st.year : keyOrder(key) >= keyOrder(st.key); }
+  function isCurrentWeekKey(key) { const n = new Date(); return key === weekKeyOfDate(n) && CFG_YEAR === weekYearOfDate(n); }
+  // 대시보드 기준 시각: 이번 주면 지금, 지난 주차면 그 주 금요일 18시(주간 자동 기록 시각)
+  function dashRefDate() {
+    if (!selectedWeekKey || isCurrentWeekKey(selectedWeekKey)) return new Date();
+    const r = weekRangeOf(CFG_YEAR, selectedWeekKey);
+    return new Date(r.start.getFullYear(), r.start.getMonth(), r.start.getDate() + 4, 18);
+  }
+  function dashWeek() { const n = new Date(); return selectedWeekKey ? { key: selectedWeekKey, year: CFG_YEAR } : { key: weekKeyOfDate(n), year: weekYearOfDate(n) }; }
+  let PRESTART = false;
   function weekLabel(entry, fallbackKey) {
     return entry ? `${krMonth(entry.monthAbbr)}월 ${entry.weekNum}주차` : (fallbackKey || "");
   }
@@ -2916,8 +3031,18 @@
       });
     });
     GLOBAL_WEEKS = Array.from(keyMap.entries())
-      .map(([key, v]) => ({ key, monthAbbr: v.monthAbbr, weekNum: v.weekNum, title: `${krMonth(v.monthAbbr)}월 ${v.weekNum}주차` }))
+      .map(([key, v]) => ({ key, monthAbbr: v.monthAbbr, weekNum: v.weekNum, title: `${krMonth(v.monthAbbr)}월 ${v.weekNum}주차 (${weekSpanText(key)})` }))
       .sort((a, b) => weekOrder(b.monthAbbr, b.weekNum) - weekOrder(a.monthAbbr, a.weekNum));
+    // 운영 시작 주차 이전은 보여주지 않음. 시작 전이면 이번 주만 '운영 준비'로
+    const valid = GLOBAL_WEEKS.filter(w => isValidWeek(w.key));
+    PRESTART = !valid.length;
+    if (PRESTART) { const ck = weekKeyOfDate(new Date()); valid.push(...GLOBAL_WEEKS.filter(w => w.key === ck)); }
+    GLOBAL_WEEKS = valid;
+    const pre = document.getElementById("prestartSlot");
+    if (pre) {
+      pre.innerHTML = "";
+      if (PRESTART) { const st = startWeekInfo(); pre.appendChild(elText("div", "prestart2", `운영 준비 중 — 대시보드는 ${weekTitle(st.key)}(${weekSpanText(st.key, st.year)})부터 정식으로 표시됩니다. 지금은 이번 주만 미리 보여드려요.`)); }
+    }
   }
 
   function renderGlobalWeekOptions() {
@@ -2951,6 +3076,14 @@
     loadAgendaForWeek(key);
     loadTrendForWeek(key);
     loadInsightForWeek(key);
+    if (weekSectionsReady) reloadWeekSections(); // 신규 사업·보고 진행 현황·사업 캘린더·팀 일정도 그 주 기준으로
+  }
+  let weekSectionsReady = false;
+  function reloadWeekSections() {
+    if (secVisible("newdeals")) loadNewDealsSection(document.getElementById("newDealsSlot"));
+    if (secVisible("report")) loadReportSection(document.getElementById("reportSlot"));
+    if (secVisible("bizcal")) loadCalSection(document.getElementById("calSlot"));
+    if (secVisible("teamcal")) loadTeamCalSection(document.getElementById("teamCalSlot"));
   }
 
   globalWeekSelect.addEventListener("change", () => {
@@ -3049,6 +3182,7 @@
   }
 
   async function loadAll() {
+    weekSectionsReady = false;
     document.getElementById("connState").textContent = "불러오는 중…";
     showLoadingOverlay2();
     const tasks = [];
@@ -3079,6 +3213,7 @@
     else tasks.push(loadAdminAlerts());
     if (secVisible("teamcal")) tasks.push(loadTeamCalSection(document.getElementById("teamCalSlot")).then(() => markSectionsDone2(["팀 일정 캘린더"])));
     await Promise.all(tasks);
+    weekSectionsReady = true;
     COLLAB.dealsOnce = null; // 이후 저장·새로고침은 새로 받음
     const now = new Date();
     document.getElementById("connState").textContent = `최근 갱신 ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")} · 다른 분의 변경은 최대 1분 뒤 반영`;
@@ -3356,7 +3491,8 @@
   }
   function updateUserChip() {
     const chip = document.getElementById("userChip");
-    if (chip) chip.textContent = "\u{1F464} " + (COLLAB.user || "이름 선택");
+    const ww = currentWriteWeek();
+    if (chip) chip.textContent = "\u{1F464} " + (COLLAB.user || "이름 선택") + (COLLAB.user && ww ? ` · ${weekTitle(ww.key)} 작성` : "");
   }
   function switchView(key) {
     if (COLLAB.view === "deals" && key !== "deals" && COLLAB.kpiPending && COLLAB.kpiPending.size &&
@@ -3405,9 +3541,42 @@
     return !members.length || members.some(mb => mb.name === name);
   }
   // 이름 선택: 팀원 탭에 '사용'으로 등록된 사람만 고를 수 있음(직접 입력 없음). 명단이 비어 있을 때만 직접 입력.
+  function writeWeekOptions() { return (COLLAB.meta && COLLAB.meta.writeWeeks) || []; }
+  function currentWriteWeek() {
+    const opts = writeWeekOptions();
+    if (COLLAB.writeWeek && opts.some(o => o.key === COLLAB.writeWeek.key && o.year === COLLAB.writeWeek.year)) return COLLAB.writeWeek;
+    let saved = ""; try { saved = localStorage.getItem("dashWriteWeek") || ""; } catch (e) {}
+    const hit = opts.find(o => `${o.year}|${o.key}` === saved) || opts.find(o => o.current) || null;
+    COLLAB.writeWeek = hit;
+    return hit;
+  }
+  function writeWeekPicker(onPick) {
+    const opts = writeWeekOptions();
+    const box = el("div", "write-week2");
+    if (!opts.length) return box;
+    box.appendChild(elText("p", "write-week-title2", "몇 주차 내용을 작성하시나요?"));
+    const row = el("div", "write-week-row2");
+    const cur = currentWriteWeek();
+    opts.forEach(o => {
+      const b = el("button", "write-week-btn2" + (cur && cur.key === o.key && cur.year === o.year ? " on2" : ""));
+      b.type = "button";
+      b.appendChild(elText("b", null, weekTitle(o.key)));
+      b.appendChild(elText("span", null, `${o.start.slice(5).replace("-", "/")}~${o.end.slice(5).replace("-", "/")}` + (o.current ? " · 이번 주" : "")));
+      b.addEventListener("click", () => {
+        COLLAB.writeWeek = o; try { localStorage.setItem("dashWriteWeek", `${o.year}|${o.key}`); } catch (e) {}
+        row.querySelectorAll(".write-week-btn2").forEach(x => x.classList.remove("on2")); b.classList.add("on2");
+        updateUserChip(); if (onPick) onPick(o);
+      });
+      row.appendChild(b);
+    });
+    box.appendChild(row);
+    box.appendChild(elText("p", "form-hint2", "고른 주차로 팀 AGENDA·트렌드 리포트를 작성합니다(입력 양식의 주차가 자동으로 채워짐). 상단 이름을 누르면 바꿀 수 있어요."));
+    return box;
+  }
   function openUserPicker(closable) {
     const members = (COLLAB.meta && COLLAB.meta.members) || [];
-    const m = openModal("이름 선택", closable, members.length > 12);
+    const m = openModal("이름 · 작성 주차 선택", closable, members.length > 12);
+    m.body.appendChild(writeWeekPicker());
     let recent = "";
     try { recent = localStorage.getItem("dashUser") || ""; } catch (e) {}
     if (!members.length) {
@@ -3540,6 +3709,7 @@
       { path: "general.title", label: "대시보드 제목", help: "무엇: 화면 맨 위 큰 제목\n예: 주간회의 대시보드\n영향: 모든 팀원 화면의 제목·브라우저 탭 이름" },
       { path: "general.teamName", label: "팀명", help: "무엇: 제목 위 작은 팀 이름\n예: 광고IP사업팀\n영향: 화면 상단 표시만 바뀜(데이터 영향 없음)" },
       { path: "general.teamNameEn", label: "팀명(영문)", help: "무엇: 팀명 옆 영문 표기\n예: AD/IP BUSINESS\n영향: 화면 상단 표시만 바뀜" },
+      { path: "general.startDate", label: "대시보드 운영 시작일", help: "무엇: 이 날짜가 속한 주(월~일)부터 대시보드에 표시\n예: 2026-11-30 → 12월 1주차(11/30~12/6)부터\n영향: 그 이전 주차는 대시보드 주차 목록에서 숨김(데이터는 그대로), 시작 전에는 이번 주만 '운영 준비'로 표시\n형식: 2026-11-30" },
     ] },
     { id: "data", title: "② 데이터 연결", desc: "데이터는 모두 플랫폼에서 입력해 협업 DB에 저장됩니다. 여기서는 저장 위치와 외부 연결만 정합니다.", fields: [
       { path: "sources.bisFolder", label: "BIS 업로드 폴더", id: true, help: "무엇: BIS 매출현황·진행현황 엑셀을 넣어 두는 구글 드라이브 폴더\n예: https://drive.google.com/drive/folders/…  (주소를 그대로 붙여 넣기)\n영향: 사업 원장 [BIS 업로드]가 이 폴더의 최신 파일을 자동으로 읽음\n주의: 플랫폼을 배포한 구글 계정이 이 폴더를 열 수 있어야 함(공유: 뷰어 이상)" },
@@ -4084,7 +4254,7 @@
 
   function defaultFilters(table) {
     const f = COLLAB.filters[table] || (COLLAB.filters[table] = { q: "", year: String(CFG_YEAR), week: "", part: "", stage: "" });
-    if ((table === "agenda" || table === "trend") && !f.week) f.week = COLLAB.meta.currentWeek;
+    if ((table === "agenda" || table === "trend") && !f.week) { const ww = currentWriteWeek(); f.week = ww ? ww.key : COLLAB.meta.currentWeek; }
     return f;
   }
 
@@ -4374,8 +4544,9 @@
     const f = defaultFilters(table);
     const year = COLLAB.meta.operatingYear || COLLAB.meta.year;
     if (table === "deals") return { part: "광고", year, stage: codeNames("stages")[0], cur: "KRW", ctype: "신규계약" };
-    if (table === "agenda") return { year, week: f.week || COLLAB.meta.currentWeek, kind: "WIN" };
-    if (table === "trend") return { year, week: f.week || COLLAB.meta.currentWeek, kind: "외부" };
+    const ww = currentWriteWeek();
+    if (table === "agenda") return { year: ww ? ww.year : year, week: ww ? ww.key : (f.week || COLLAB.meta.currentWeek), kind: "WIN" };
+    if (table === "trend") return { year: ww ? ww.year : year, week: ww ? ww.key : (f.week || COLLAB.meta.currentWeek), kind: "외부" };
     if (table === "kpiGoals") return { year, part: "전체", period: "연간" };
     if (table === "fx") return { year, unit: 1 };
     if (table === "members") return { role: "팀원", active: "사용" };
@@ -4629,7 +4800,8 @@
     } else if (col.type === "select") {
       input = document.createElement("select");
       if (!col.required) input.appendChild(new Option("—", ""));
-      const names = col.codes === "weeks" ? COLLAB.meta.codes.weeks : codeNames(col.codes);
+      const wwOpts = writeWeekOptions();
+      const names = col.codes === "weeks" ? ((table === "agenda" || table === "trend") && wwOpts.length ? wwOpts.map(o => o.key) : COLLAB.meta.codes.weeks) : codeNames(col.codes); // 작성 주차: 지난·이번·다음 주만
       names.forEach(n => input.appendChild(new Option(col.codes === "weeks" ? weekTitle(n) : n, n)));
       if (value && !names.includes(String(value))) input.appendChild(new Option(String(value) + " (목록에 없음)", value));
       input.value = value == null ? "" : String(value);
