@@ -65,6 +65,10 @@ var DB_TABLES = {
       { key: 'kpiFixedKrw', label: '확정 KPI 금액(KRW)', type: 'number', adminOnly: true },
       // 관리자 확인 사항: 중복 의심 등(서버가 자동으로 채우고, 관리자가 [확인 완료]로 지움)
       { key: 'dupCheck', label: '관리자 확인 사항', type: 'auto' },
+      // 다음 할 일(직접 입력) — 진행 단계와 함께 작성자가 적는 다음 액션(자동 안내와 함께 표시)
+      { key: 'nextAction', label: '다음 할 일(직접 입력)', type: 'text' },
+      // 등록일시 — 처음 저장(화면 입력·엑셀·BIS 업로드)된 시각. 이번 주 등록 건은 '신규' 표시
+      { key: 'createdAt', label: '등록일시', type: 'auto' },
     ],
   },
   kpiGoals: {
@@ -540,6 +544,7 @@ function dbSave_(key, input, user, baseUpdatedAt, isAdmin) {
     if (key === 'deals') {
       rec.source = existing ? existing.source : (input.source || '화면 입력');
       rec.dupCheck = existing ? (existing.dupCheck || '') : dupSuspect_(rec, rows, '');
+      rec.createdAt = existing ? (existing.createdAt || '') : nowStamp_();
       if (!isAdmin) { // 실적 인정 기준·확정 금액은 관리자만
         rec.kpiBasis = existing ? (existing.kpiBasis || '') : '';
         rec.kpiFixedKrw = existing ? existing.kpiFixedKrw : '';
@@ -649,7 +654,7 @@ var DEAL_ALIASES = {
   '계약 유형': 'ctype', '계약 구분': 'ckind', '상세내용': 'name', '브랜드': 'brand', '진행 상태': 'stage', '최종 압축 날짜': 'shortDate',
   '확정/불발 날짜': 'decidedDate', '최종입금금액(KRW)': 'paidKrw', '계약기간': 'monthsText', '분류 (광고/IP)': 'part', '브랜드/파트너사명': 'brand',
   // 간편 양식(사업 원장 정리용 16칸)
-  '사업명': 'name', '그룹': 'group', '실적 연도': 'year', '반기': 'kpiHalfManual', '실적 반기': 'kpiHalfManual',
+  '사업명': 'name', '다음 할 일': 'nextAction', '다음할일': 'nextAction', '그룹': 'group', '실적 연도': 'year', '반기': 'kpiHalfManual', '실적 반기': 'kpiHalfManual',
   'KPI 인정 금액(원)': 'kpiFixedKrw', 'KPI 인정 금액': 'kpiFixedKrw', '실적 반영': 'countFlag', '실적 반영(O/X)': 'countFlag',
 };
 // 간편 양식 머리글 순서(다운로드·안내에 사용)
@@ -989,7 +994,7 @@ function dbImport_(key, rawRows, user, commit, opts) {
       if (status === 'new') {
         rec.id = nextId_(key, rec, seq);
         rec.source = mapped._source || '엑셀 업로드 (' + nowStamp_().slice(0, 10) + ')';
-        if (key === 'deals') rec.dupCheck = suspect;
+        if (key === 'deals') { rec.dupCheck = suspect; rec.createdAt = nowStamp_(); }
         // 엑셀로 들어온 사업은 '오늘 단계가 바뀐 것'이 아니므로 엑셀의 확정/불발일을 단계 변경일로 씀(없으면 빈칸)
         if (key === 'deals') { rec.stageDate = rec.decidedDate || ''; applyFlag(rec); computeDeal_(rec, fxRows); }
         rec.updatedBy = user; rec.updatedAt = nowStamp_();
@@ -1526,6 +1531,27 @@ function startPlatform_(user) {
 }
 
 // 진행 단계 체계 변경(2026-11): 예전 단계 이름으로 저장된 사업을 새 단계로 한 번 변환
+function ensureCreatedAtV1_() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('CREATED_AT_V1') === '1' || !dbReady_()) return;
+  withLock_(function () {
+    if (props.getProperty('CREATED_AT_V1') === '1') return;
+    var first = {};
+    readTable_('log').forEach(function (l) {
+      if ((l.table !== DB_TABLES.deals.sheet && l.table !== 'deals') || !/추가/.test(l.action || '')) return; // 변경로그에는 시트 이름(사업_원장)으로 남음
+      if (!first[l.recordId] || String(l.at) < first[l.recordId]) first[l.recordId] = String(l.at);
+    });
+    var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.deals.sheet);
+    readTable_('deals').forEach(function (d) {
+      if (d.createdAt || !first[d.id]) return; // 시트에서 옮겨 온 예전 건(추가 기록 없음)은 비워 둠 → 신규 아님
+      d.createdAt = first[d.id];
+      var row = recordToRow_('deals', d);
+      sh.getRange(d._row, 1, 1, row.length).setValues([row]);
+    });
+    props.setProperty('CREATED_AT_V1', '1');
+  });
+}
+
 function ensureStagesV2_() {
   var props = PropertiesService.getScriptProperties();
   if (props.getProperty('STAGES_V2') === '1' || !dbReady_()) return;
@@ -1727,6 +1753,7 @@ function dbApi(action, password, user, payloadJson) {
   var adminDenied = payload.adminPw ? checkAdminPassword_(payload.adminPw) : { error: 'forbidden' };
   var isAdmin = !adminDenied;
   try { ensureStagesV2_(); } catch (e) {} // 진행 단계 체계 변경 — 한 번만
+  try { ensureCreatedAtV1_(); } catch (e) {} // 기존 건 등록일시 채우기 — 한 번만
   var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, parseFile: 1, bisDrive: 1, setBisFolder: 1, bisPreview: 1, bisCommit: 1, clearCheck: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
   // 입력·저장은 팀원 명단(사용)에 있는 이름만. 관리자 모드는 예외, 명단이 비어 있으면(최초 설정) 허용.
   var WRITE_ACTIONS = { save: 1, delete: 1, restore: 1, bulkKpi: 1, deleteMany: 1 };
