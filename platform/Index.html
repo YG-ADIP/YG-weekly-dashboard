@@ -689,6 +689,9 @@
   .new-badge2 { display: inline-block; margin-right: 5px; padding: 1px 6px; border-radius: 999px; background: #ff5a36; color: #fff; font-size: 10px; font-weight: 700; line-height: 15px; vertical-align: 1px; }
   .stage-chip2.new2 b { color: #e0431f; } .stage-chip2.new2.on2 { border-color: #ff5a36; background: #fff1ec; }
   .new-sum2 { font-size: 13px; margin: 2px 0 10px; } .new-sum2 b { color: #e0431f; }
+  .next-sel2 { font: inherit; font-size: 12px; padding: 4px 6px; border: 1px solid rgba(20,32,66,0.18); border-radius: 8px; background: #fff; max-width: 190px; }
+  .next-sel2.saved2 { border-color: var(--good); box-shadow: 0 0 0 2px rgba(47,107,82,.2); }
+  .next-auto2 { margin-top: 4px; }
   .todo-chip2.memo2 { background: #eef3ff; color: #2b4aa0; border-color: #d6e0fb; }
   body:not(.admin-mode2) .app-tab2[data-view="admin"] { display: none; }
   .help2 { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #e8eefb; color: var(--accent-700); font-size: 11px; font-weight: 700; cursor: help; vertical-align: middle; }
@@ -715,6 +718,9 @@
   .adm-adv2 { margin-top: 12px; font-size: 12.5px; } .adm-adv2 summary { cursor: pointer; color: var(--soft); }
   .adm-hist2 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid #eef0f4; font-size: 12.5px; } .adm-hist2.cur2 b { color: var(--accent-700); }
   #adm-history .btn-danger2 { margin-top: 10px; }
+  .adm-stage-table2 input[type=text] { font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid rgba(20,32,66,0.16); border-radius: 8px; width: 100%; box-sizing: border-box; }
+  .adm-stage-table2 select { font: inherit; font-size: 12.5px; padding: 5px 6px; border-radius: 8px; border: 1px solid rgba(20,32,66,0.16); }
+  .adm-used2 { white-space: nowrap; color: var(--soft); } .form-hint2.ok2 { color: var(--good); font-weight: 700; }
   .adm-bar2 { position: sticky; bottom: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border: 1px solid var(--hairline); border-radius: 14px; background: rgba(255,255,255,.97); box-shadow: 0 -4px 16px rgba(20,32,66,.08); z-index: 5; }
   .adm-bar2 input { flex: 1 1 200px; font: inherit; font-size: 13px; padding: 7px 10px; border: 1px solid rgba(20,32,66,0.16); border-radius: 10px; }
   .adm-status2 { font-size: 12.5px; font-weight: 700; color: var(--soft); flex: 1 1 100%; } .adm-status2.dirty2 { color: #8a6420; } .adm-status2.ok2 { color: var(--good); } .adm-status2.err2 { color: var(--bad); }
@@ -1019,9 +1025,36 @@
     const titleOf = r => { const box = el("div", null); box.appendChild(newBadge()); box.appendChild(elText("b", null, r.brand || "")); if (r.name) box.appendChild(elText("div", "report-sub2", r.name)); return box; };
     const money = r => (r.amount === "" || r.amount == null ? "—" : `${r.cur || ""} ${fmtNum(r.amount)}`.trim());
     body.appendChild(reportTable(["등록일", "진행 단계", "다음 할 일", "구분", "아티스트", "브랜드 · 사업명", "계약금액"], list, r => {
-      const todo = el("div", null); todoChips(todo, dealTodos(r));
+      const todo = nextActionCell(r);
       return [String(r.createdAt).slice(5, 10).replace("-", "/"), stageBadge(r.stage), todo, r.part, artistOf(r), titleOf(r), money(r)];
     }, slot));
+  }
+  // 보고 진행 현황·신규 섹션의 '다음 할 일': 표에서 바로 고르면 저장(자동 안내는 아래 작은 칩)
+  function nextActionCell(r, onSaved) {
+    const box = el("div", "next-cell2");
+    const sel = document.createElement("select"); sel.className = "next-sel2"; sel.title = "다음 할 일 — 고르면 바로 저장";
+    sel.appendChild(new Option("— 선택 —", ""));
+    const opts = codeNames("nextActions");
+    opts.forEach(n => sel.appendChild(new Option(n, n)));
+    if (r.nextAction && !opts.includes(r.nextAction)) sel.appendChild(new Option(r.nextAction + " (목록에 없음)", r.nextAction));
+    sel.value = r.nextAction || "";
+    sel.addEventListener("click", e => e.stopPropagation());
+    sel.addEventListener("change", async e => {
+      e.stopPropagation();
+      if (!COLLAB.user) { sel.value = r.nextAction || ""; openUserPicker(false); return; } // 이름을 고른 뒤에 저장
+      const v = sel.value; sel.disabled = true;
+      const rec = Object.assign({}, r, { nextAction: v }); delete rec._row;
+      const res = await callDb("save", { table: "deals", record: rec, baseUpdatedAt: r.updatedAt });
+      sel.disabled = false;
+      if (!res.ok) { alert("저장하지 못했어요: " + (res.message || res.error)); sel.value = r.nextAction || ""; return; }
+      Object.assign(r, res.record); COLLAB.dashDirty = true;
+      sel.classList.add("saved2"); setTimeout(() => sel.classList.remove("saved2"), 1200);
+      if (onSaved) onSaved(r);
+    });
+    box.appendChild(sel);
+    const auto = dealTodos(r).filter(x => x.who !== "메모");
+    if (auto.length) { const chips = el("div", "next-auto2"); todoChips(chips, auto); box.appendChild(chips); }
+    return box;
   }
   function stageBadge(name) {
     const stages = (COLLAB.meta && COLLAB.meta.codes && COLLAB.meta.codes.stages) || [];
@@ -1077,7 +1110,7 @@
     body.appendChild(elText("h3", "report-h2", `진행 중 프로젝트 ${shown.length}건` + (reportFilter ? ` — ${reportFilter}` : "")));
     if (shown.length) {
       body.appendChild(reportTable(["진행 단계", "다음 할 일", "구분", "아티스트", "브랜드 · 사업명", "계약금액", "단계 변경일", "담당자"], shown, r => {
-        const todo = el("div", null); todoChips(todo, dealTodos(r));
+        const todo = nextActionCell(r);
         return [stageBadge(r.stage), todo, r.part, artistOf(r), titleOf(r), money(r), r.stageDate || "—", r.owner || "—"];
       }, slot));
     } else body.appendChild(elText("p", "state-msg2", "진행 중인 프로젝트가 없어요."));
@@ -3650,7 +3683,7 @@
     };
     const security = () => {
       const sec = el("section", "adm-group2"); sec.id = "adm-security";
-      sec.append(elText("h3", null, "④ 보안 — 비밀번호"), elText("p", "data-desc2", "바꿀 비밀번호만 입력하세요(4자 이상)."));
+      sec.append(elText("h3", null, "⑤ 보안 — 비밀번호"), elText("p", "data-desc2", "바꿀 비밀번호만 입력하세요(4자 이상)."));
       const grid = el("div", "adm-grid2");
       const mk = (label, help) => { const r = el("label", "adm-field2"); const h = el("span", "adm-label2"); h.append(document.createTextNode(label + " "), helpTip(help)); const i = document.createElement("input"); i.type = "password"; i.autocomplete = "new-password"; r.append(h, i); grid.appendChild(r); return i; };
       const dash = mk("새 대시보드 비밀번호", "무엇: 팀원 모두가 대시보드에 들어올 때 쓰는 공통 비밀번호\n영향: 바꾸면 모든 팀원이 새 비밀번호로 다시 들어와야 함 → 팀원에게 꼭 공유");
@@ -3671,10 +3704,77 @@
       sec.append(grid, row);
       return sec;
     };
+
+    // ④ 진행 단계: 이름·구분·설명·순서 편집, 단계 추가, 사용 중인 단계는 삭제 불가, 이름을 바꾸면 그 단계의 사업도 함께 변경
+    const stageBox = el("section", "adm-group2"); stageBox.id = "adm-stages";
+    const drawStages = async () => {
+      stageBox.innerHTML = "";
+      const h = el("h3", null);
+      h.append(document.createTextNode("④ 진행 단계 "), helpTip("무엇: 사업 원장 '진행 단계' 선택 목록과 순서(보고 진행 현황도 이 순서)\n구분: 진행 중 = 보고 진행 현황에 표시 · 확정 = 실적 반영 대상 · 종료 = 불발·보류\n이름을 바꾸면 그 단계였던 사업도 자동으로 새 이름으로 바뀜(변경 이력 기록)\n사용 중인 단계는 지울 수 없음(먼저 사업의 단계를 바꾸거나 이름만 변경)"));
+      stageBox.append(h, elText("p", "data-desc2", "단계 추가·이름 변경·순서(▲▼)·구분을 바꾼 뒤 [진행 단계 저장]을 누르세요. 위쪽 [저장]과는 따로 저장됩니다."));
+      if (!COLLAB.meta || !COLLAB.meta.ready) { stageBox.appendChild(elText("p", "form-hint2", "협업 DB를 시작한 뒤 편집할 수 있어요.")); return; }
+      let used = {};
+      try { const r = await callDb("list", { table: "deals" }); if (r.ok) r.rows.forEach(d => { used[d.stage] = (used[d.stage] || 0) + 1; }); } catch (e) {}
+      const rows = COLLAB.meta.codes.stages.map(x => ({ name: x.name, kind: x.weight >= 100 ? "확정" : x.weight <= 0 ? "종료" : "진행 중", desc: x.desc || "", orig: x.name }));
+      const t = el("table", "data-table2 adm-sec-table2 adm-stage-table2");
+      const th = el("thead", null); const hr = el("tr", null);
+      [["순서", ""], ["단계 이름", "목록에 보이는 이름(최대 20자). 바꾸면 이 단계였던 사업도 함께 바뀜"], ["구분", "진행 중: 보고 진행 현황에 프로젝트별 표시\n확정: 실적 반영 대상(관리자가 ON)\n종료: 불발·보류(불발이면 사유 입력 필요)"], ["설명", "입력 양식에서 단계 아래 작은 글씨로 보이는 안내(선택)"], ["사용", "지금 이 단계인 사업 수"], ["", ""]].forEach(([tx, tip]) => { const c = el("th", null); c.appendChild(document.createTextNode(tx + " ")); if (tip) c.appendChild(helpTip(tip)); hr.appendChild(c); });
+      th.appendChild(hr); t.appendChild(th);
+      const tb = el("tbody", null); t.appendChild(tb);
+      const msg = elText("p", "form-hint2", "");
+      const draw = () => {
+        tb.innerHTML = "";
+        rows.forEach((r, i) => {
+          const tr = el("tr", null);
+          const ord = el("td", "adm-ord2");
+          [["▲", -1], ["▼", 1]].forEach(([tx, d]) => { const b = elText("button", "btn-line2 small2", tx); b.type = "button"; b.disabled = (d < 0 && i === 0) || (d > 0 && i === rows.length - 1); b.addEventListener("click", () => { const j = i + d; [rows[i], rows[j]] = [rows[j], rows[i]]; draw(); }); ord.appendChild(b); });
+          const nm = el("td", null); const ni = document.createElement("input"); ni.type = "text"; ni.maxLength = 20; ni.value = r.name; ni.placeholder = "예: 계약서 검토 중";
+          const rnHint = elText("div", "form-hint2", "");
+          const showRn = () => { rnHint.textContent = r.orig && r.name.trim() && r.name.trim() !== r.orig ? "이름 변경: " + r.orig + " → 저장 시 이 단계 사업 " + (used[r.orig] || 0) + "건도 함께 바뀜" : ""; };
+          ni.addEventListener("input", () => { r.name = ni.value; showRn(); }); nm.append(ni, rnHint); showRn();
+          const kd = el("td", null); const ks = document.createElement("select"); ["진행 중", "확정", "종료"].forEach(k => ks.appendChild(new Option(k, k))); ks.value = r.kind; ks.addEventListener("change", () => { r.kind = ks.value; }); kd.appendChild(ks);
+          const ds = el("td", null); const di = document.createElement("input"); di.type = "text"; di.maxLength = 60; di.value = r.desc; di.addEventListener("input", () => { r.desc = di.value; }); ds.appendChild(di);
+          const n = r.orig ? (used[r.orig] || 0) : 0;
+          const us = elText("td", "adm-used2", n + "건");
+          const dl = el("td", null); const db = elText("button", "btn-danger2 small2", "삭제"); db.type = "button";
+          db.disabled = n > 0; db.title = n > 0 ? `이 단계인 사업이 ${n}건 있어 지울 수 없어요` : "이 단계를 목록에서 지움";
+          db.addEventListener("click", () => { if (!confirm(`'${r.name || "(이름 없음)"}' 단계를 목록에서 지울까요? (저장해야 반영)`)) return; rows.splice(i, 1); draw(); });
+          dl.appendChild(db);
+          tr.append(ord, nm, kd, ds, us, dl); tb.appendChild(tr);
+        });
+      };
+      draw();
+      const addB = elText("button", "btn-line2", "＋ 단계 추가"); addB.type = "button";
+      addB.addEventListener("click", () => { if (rows.length >= 12) { alert("진행 단계는 최대 12개까지예요."); return; } rows.push({ name: "", kind: "진행 중", desc: "", orig: null }); draw(); const last = tb.querySelector("tr:last-child input[type=text]"); if (last) last.focus(); });
+      const saveB = elText("button", "btn-primary2", "진행 단계 저장"); saveB.type = "button";
+      saveB.addEventListener("click", async () => {
+        const names = rows.map(r => r.name.trim());
+        if (names.some(n => !n)) { alert("이름이 빈 단계가 있어요."); return; }
+        if (new Set(names).size !== names.length) { alert("같은 이름의 단계가 있어요."); return; }
+        if (!rows.some(r => r.kind === "진행 중") || !rows.some(r => r.kind === "확정")) { alert("'진행 중' 단계와 '확정' 단계가 각각 하나 이상 있어야 해요."); return; }
+        const renames = {}; rows.forEach(r => { if (r.orig && r.name.trim() !== r.orig) renames[r.orig] = r.name.trim(); });
+        const rn = Object.keys(renames);
+        if (!confirm("진행 단계를 저장할까요?" + (rn.length ? "\n\n이름 변경(그 단계의 사업도 함께 바뀜):\n" + rn.map(o => `· ${o} → ${renames[o]} (${used[o] || 0}건)`).join("\n") : ""))) return;
+        saveB.disabled = true; msg.textContent = "저장 중…";
+        try {
+          const stages = rows.map(r => ({ name: r.name.trim(), weight: r.kind === "확정" ? 100 : r.kind === "종료" ? 0 : 50, desc: r.desc.trim() }));
+          const res = await callDb("saveCodes", { codes: { stages, renames } });
+          if (!res.ok) throw new Error(res.message || res.error);
+          COLLAB.meta.codes = res.codes; COLLAB.dashDirty = true; COLLAB.rows = {};
+          msg.textContent = "저장했어요." + (res.codes.renamedDeals ? ` 이름이 바뀐 단계의 사업 ${res.codes.renamedDeals}건도 함께 바꿨어요.` : "");
+          const done = msg.textContent;
+          await drawStages();
+          stageBox.appendChild(elText("p", "form-hint2 ok2", done));
+        } catch (e) { msg.textContent = "저장하지 못했어요: " + e.message; saveB.disabled = false; }
+      });
+      const row = el("div", "adm-testrow2"); row.append(addB, saveB, msg);
+      const wrapT = el("div", "data-table-wrap2"); wrapT.appendChild(t);
+      stageBox.append(wrapT, row);
+    };
     const historyBox = el("section", "adm-group2"); historyBox.id = "adm-history";
     const drawHistory = () => {
       historyBox.innerHTML = "";
-      const h = el("h3", null); h.append(document.createTextNode("⑤ 변경 이력 "), helpTip("무엇: 설정을 저장할 때마다 그 시점 설정 전체가 기록됨(최근 20건)\n[되돌리기]: 그 시점 설정으로 즉시 복원(현재 설정도 이력에 남음)\n[기본값으로 복원]: 처음 설정으로(데이터 연결 주소도 초기화되니 주의)"));
+      const h = el("h3", null); h.append(document.createTextNode("⑥ 변경 이력 "), helpTip("무엇: 설정을 저장할 때마다 그 시점 설정 전체가 기록됨(최근 20건)\n[되돌리기]: 그 시점 설정으로 즉시 복원(현재 설정도 이력에 남음)\n[기본값으로 복원]: 처음 설정으로(데이터 연결 주소도 초기화되니 주의)"));
       historyBox.appendChild(h);
       if (!st.history.length) historyBox.appendChild(elText("p", "form-hint2", "아직 저장 이력이 없어요."));
       st.history.forEach((x, i) => {
@@ -3725,6 +3825,7 @@
     const drawAll = () => {
       body.innerHTML = ""; Object.keys(fieldEls).forEach(k => delete fieldEls[k]);
       ADMIN_GROUPS.forEach(g => body.appendChild(group(g)));
+      body.appendChild(stageBox); drawStages();
       body.appendChild(security());
       body.appendChild(historyBox); drawHistory();
     };
@@ -3938,7 +4039,7 @@
     const tw = el("div", "data-table-wrap2"); tw.appendChild(t); stageBox.appendChild(tw);
     wrap.appendChild(stageBox);
     // 드롭다운 목록
-    const lists = [["groups", "아티스트 그룹"], ["ctypes", "계약유형"], ["ckinds", "계약구분"], ["items", "품목"], ["currencies", "계약통화"]];
+    const lists = [["groups", "아티스트 그룹"], ["ctypes", "계약유형"], ["ckinds", "계약구분"], ["items", "품목"], ["currencies", "계약통화"], ["nextActions", "다음 할 일"]];
     const listBox = el("div", "settings-block2");
     listBox.appendChild(elText("h3", "data-table-title2", "선택 목록"));
     const grid = el("div", "form-grid2");
@@ -3946,21 +4047,18 @@
     lists.forEach(([k, label]) => {
       const f = el("label", "form-field2");
       f.appendChild(elText("span", "form-label2", label));
-      const ta = document.createElement("textarea"); ta.rows = 3; ta.value = (codes[k] || []).join(", "); ta.disabled = !admin;
+      const ta = document.createElement("textarea"); ta.rows = 3; ta.disabled = !admin;
+      ta.value = (codes[k] || []).join(", ");
+      if (k === "nextActions") f.appendChild(elText("span", "form-hint2", "보고 진행 현황·입력 양식에서 고르는 목록(진행 단계와 따로 관리)"));
       inputs[k] = ta; f.appendChild(ta); grid.appendChild(f);
     });
-    const stageField = el("label", "form-field2 full2");
-    stageField.appendChild(elText("span", "form-label2", "진행 단계 (한 줄에 이름|구분|설명 — 구분은 진행 중 / 확정 / 종료)"));
-    const stageTa = document.createElement("textarea"); stageTa.rows = 8; stageTa.disabled = !admin;
-    stageTa.value = codes.stages.map(st => `${st.name}|${stageKind(st.name)}|${st.desc || ""}`).join("\n");
-    stageField.appendChild(stageTa);
-    if (admin) grid.appendChild(stageField);
     listBox.appendChild(grid);
+    listBox.appendChild(elText("p", "data-desc2", "진행 단계(이름·구분·순서·추가)는 관리자 모드 → [관리자 설정] 탭 → ④ 진행 단계에서 바꿉니다."));
     if (admin) {
       const save = elText("button", "btn-primary2", "기준 정보 저장"); save.type = "button";
       save.addEventListener("click", async () => {
-        if (!confirm("기준 정보를 저장할까요? 진행 단계 이름을 바꾸면 그 단계로 저장된 사업도 함께 확인해 주세요.")) return;
-        const payload = { stages: stageTa.value.split("\n").map(x => x.trim()).filter(Boolean) };
+        if (!confirm("선택 목록을 저장할까요?")) return;
+        const payload = {};
         lists.forEach(([k]) => { payload[k] = inputs[k].value.split(/[,\n]/).map(x => x.trim()).filter(Boolean); });
         const res = await callDb("saveCodes", { codes: payload });
         if (!res.ok) { alert("실패: " + (res.message || res.error)); return; }

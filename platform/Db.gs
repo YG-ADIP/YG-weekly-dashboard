@@ -65,8 +65,8 @@ var DB_TABLES = {
       { key: 'kpiFixedKrw', label: '확정 KPI 금액(KRW)', type: 'number', adminOnly: true },
       // 관리자 확인 사항: 중복 의심 등(서버가 자동으로 채우고, 관리자가 [확인 완료]로 지움)
       { key: 'dupCheck', label: '관리자 확인 사항', type: 'auto' },
-      // 다음 할 일(직접 입력) — 진행 단계와 함께 작성자가 적는 다음 액션(자동 안내와 함께 표시)
-      { key: 'nextAction', label: '다음 할 일(직접 입력)', type: 'text' },
+      // 다음 할 일 — 목록에서 직접 선택(목록은 기준 정보에서 관리, 진행 단계와 연동 안 함). 예전에 직접 적은 값도 그대로 인정(loose)
+      { key: 'nextAction', label: '다음 할 일', type: 'select', codes: 'nextActions', loose: true },
       // 등록일시 — 처음 저장(화면 입력·엑셀·BIS 업로드)된 시각. 이번 주 등록 건은 '신규' 표시
       { key: 'createdAt', label: '등록일시', type: 'auto' },
     ],
@@ -220,6 +220,8 @@ function dbCodes_() {
   Object.keys(DEFAULT_CODES).forEach(function (k) { out[k] = c[k] && c[k].length ? c[k] : DEFAULT_CODES[k]; });
   if (out.stages !== DEFAULT_CODES.stages && out.stages.some(function (x) { return OLD_STAGE_NAMES.indexOf(x.name || x) >= 0; })) out.stages = DEFAULT_CODES.stages; // 예전 단계 체계 → 새 보고 진행 체계
   Object.keys(FIXED_CODES).forEach(function (k) { out[k] = FIXED_CODES[k]; });
+  // 다음 할 일 목록: 진행 단계와 연동하지 않음(따로 관리). 처음 값만 기본 진행 단계 이름과 같음
+  out.nextActions = c.nextActions && c.nextActions.length ? c.nextActions : DEFAULT_CODES.stages.map(function (x) { return x.name; });
   out.weeks = weekKeysOfYear_();
   return out;
 }
@@ -485,7 +487,7 @@ function cleanRecord_(key, input, errors) {
     } else {
       rec[c.key] = v === undefined || v === null ? '' : String(v).trim();
     }
-    if (c.type === 'select' && rec[c.key] !== '') {
+    if (c.type === 'select' && rec[c.key] !== '' && !c.loose) {
       var list = codes[c.codes] || [];
       var names = list.map(function (x) { return typeof x === 'string' ? x : x.name; });
       if (names.indexOf(rec[c.key]) < 0) errors.push(c.label + ': 목록에 없는 값("' + rec[c.key] + '") — ' + names.slice(0, 8).join(', ') + (names.length > 8 ? ' …' : ''));
@@ -1510,17 +1512,46 @@ function setOperatingYear_(year, user) {
 }
 
 function saveCodes_(codes, user) {
+  codes = JSON.parse(JSON.stringify(codes || {}));
+  var renames = codes.renames && typeof codes.renames === 'object' ? codes.renames : {};
+  delete codes.renames;
   var c = JSON.parse(JSON.stringify(cfg_()));
+  var oldStages = dbCodes_().stages.map(function (x) { return x.name; });
   var before = JSON.stringify(dbCodes_().stages);
-  c.codes = codes || {};
+  if (codes.stages && dbReady_()) {
+    // 새 목록에 없고 이름 변경도 아닌(=삭제) 단계를 쓰는 사업이 있으면 저장하지 않음
+    var newNames = sanitizeCodes_({ stages: codes.stages }).stages || [];
+    newNames = newNames.map(function (x) { return x.name; });
+    var removed = oldStages.filter(function (n) { return newNames.indexOf(n) < 0 && !(renames[n] && newNames.indexOf(renames[n]) >= 0); });
+    var deals = readTable_('deals');
+    var inUse = removed.map(function (n) { return [n, deals.filter(function (d) { return d.stage === n; }).length]; }).filter(function (x) { return x[1] > 0; });
+    if (inUse.length) throw new Error('사용 중인 진행 단계는 지울 수 없어요: ' + inUse.map(function (x) { return x[0] + '(' + x[1] + '건)'; }).join(', ') + ' — 그 사업들의 단계를 먼저 바꾸거나, 지우지 말고 이름만 바꿔 주세요.');
+  }
+  c.codes = Object.assign({}, c.codes || {}, codes); // 보낸 항목만 바꿈
   saveConfig_(sanitizeConfig_(c), user, '기준 정보(코드) 변경');
+  var renamed = 0;
   if (dbReady_()) {
     withLock_(function () {
-      appendLogs_([{ user: user, table: '기준 정보', recordId: '', action: '기준 정보 변경', field: '진행 단계 등', before: before, after: JSON.stringify(dbCodes_().stages) }]);
-      recalcDeals_(user); // 가중치가 바뀌었을 수 있으므로 다시 계산
+      var logs = [{ user: user, table: '기준 정보', recordId: '', action: '기준 정보 변경', field: '진행 단계 등', before: before, after: JSON.stringify(dbCodes_().stages) }];
+      var keys = Object.keys(renames).filter(function (o) { return renames[o] && renames[o] !== o; });
+      if (keys.length) {
+        var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.deals.sheet);
+        readTable_('deals').forEach(function (d) {
+          var ch = false;
+          if (renames[d.stage] && keys.indexOf(d.stage) >= 0) { logs.push({ user: user, table: 'deals', recordId: d.id, action: '수정', field: '진행 단계(이름 변경)', before: d.stage, after: renames[d.stage] }); d.stage = renames[d.stage]; ch = true; }
+          if (!ch) return;
+          var row = recordToRow_('deals', d);
+          sh.getRange(d._row, 1, 1, row.length).setValues([row]);
+          renamed++;
+        });
+      }
+      appendLogs_(logs);
+      recalcDeals_(user); // 구분(진행 중/확정/종료)이 바뀌었을 수 있으므로 다시 계산
     });
   }
-  return dbCodes_();
+  var out = dbCodes_();
+  out.renamedDeals = renamed;
+  return out;
 }
 
 function startPlatform_(user) {
