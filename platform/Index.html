@@ -686,6 +686,10 @@
   .fx-half2 { font-size: 11px; font-weight: 700; color: var(--soft); width: 40px; flex-shrink: 0; }
   .sel-bar2 { position: sticky; left: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fff7f5; border-bottom: 1px solid #f3d3cc; font-size: 12px; }
   .sel-bar2[hidden] { display: none; }
+  .new-badge2 { display: inline-block; margin-right: 5px; padding: 1px 6px; border-radius: 999px; background: #ff5a36; color: #fff; font-size: 10px; font-weight: 700; line-height: 15px; vertical-align: 1px; }
+  .stage-chip2.new2 b { color: #e0431f; } .stage-chip2.new2.on2 { border-color: #ff5a36; background: #fff1ec; }
+  .new-sum2 { font-size: 13px; margin: 2px 0 10px; } .new-sum2 b { color: #e0431f; }
+  .todo-chip2.memo2 { background: #eef3ff; color: #2b4aa0; border-color: #d6e0fb; }
   body:not(.admin-mode2) .app-tab2[data-view="admin"] { display: none; }
   .help2 { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #e8eefb; color: var(--accent-700); font-size: 11px; font-weight: 700; cursor: help; vertical-align: middle; }
   .help2 .tip2 { display: none; position: absolute; left: -8px; top: calc(100% + 8px); z-index: 50; width: 300px; padding: 10px 12px; border-radius: 10px; background: #1f2a44; color: #fff; font-size: 12px; font-weight: 400; line-height: 1.55; white-space: pre-line; text-align: left; box-shadow: 0 8px 24px rgba(20,32,66,.25); }
@@ -857,6 +861,7 @@
   <!-- 섹션 순서·표시 여부·이름은 관리자 설정값대로 applySectionLayout()이 다시 배치 -->
   <div id="sectionsRoot">
     <div id="kpiSlot"></div>
+    <div id="newDealsSlot"></div>
     <div id="reportSlot"></div>
     <div id="agendaSlot"></div>
     <div id="calSlot"></div>
@@ -876,7 +881,7 @@
   let CFG_YEAR = PLATFORM_UI.general.year; // 보고 있는 연도(상단 연도 선택). 운영 연도 전환은 관리자 모드 → 기준 정보
 
   // 섹션 구성 — 설정의 순서대로 번호(01, 02…)를 매기고, 숨긴 섹션은 번호에서 빠짐.
-  const SECTION_SLOT = { kpi: "kpiSlot", report: "reportSlot", agenda: "agendaSlot", bizcal: "calSlot", trend: "trendSlot", teamcal: "teamCalSlot" };
+  const SECTION_SLOT = { kpi: "kpiSlot", newdeals: "newDealsSlot", report: "reportSlot", agenda: "agendaSlot", bizcal: "calSlot", trend: "trendSlot", teamcal: "teamCalSlot" };
   const VISIBLE_SECTIONS = PLATFORM_UI.sections.filter(sec => sec.visible);
   function secVisible(key) { return VISIBLE_SECTIONS.some(sec => sec.key === key); }
   function secNum(key) { return String(VISIBLE_SECTIONS.findIndex(sec => sec.key === key) + 1).padStart(2, "0"); }
@@ -962,7 +967,7 @@
     try {
       if (!COLLAB.meta || !COLLAB.meta.codes) { const meta = await callDb("meta"); if (meta.ok) COLLAB.meta = Object.assign(COLLAB.meta || {}, meta); }
       if (!COLLAB.meta || !COLLAB.meta.ready) { body.innerHTML = ""; body.appendChild(elText("p", "state-msg2", "협업 DB를 시작하면 사업 원장의 진행 단계가 여기에 프로젝트별로 표시됩니다.")); return; }
-      const res = await callDb("list", { table: "deals" });
+      const res = await dealsOnce();
       if (!res.ok) throw new Error(res.message || res.error);
       COLLAB.rows.deals = res.rows;
       renderReport(body, res.rows, slot);
@@ -971,6 +976,52 @@
       body.innerHTML = "";
       body.appendChild(elText("p", "state-msg2 err2", "불러오지 못했어요: " + e.message));
     }
+  }
+  // ---- 이번 주 신규(월~일 사이에 처음 등록된 사업) ----
+  function weekStartStr() {
+    const d = new Date(); const back = (d.getDay() + 6) % 7; d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - back);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function isNewDeal(r) { return !!(r && r.createdAt && String(r.createdAt).slice(0, 10) >= weekStartStr()); }
+  function newBadge() { const b = elText("span", "new-badge2", "신규"); b.title = "이번 주(월요일부터) 새로 등록된 사업"; return b; }
+  function dealsOnce() {
+    if (!COLLAB.dealsOnce) COLLAB.dealsOnce = callDb("list", { table: "deals" }).catch(e => { COLLAB.dealsOnce = null; throw e; });
+    return COLLAB.dealsOnce;
+  }
+  async function loadNewDealsSection(slot) {
+    slot.innerHTML = "";
+    const card = sectionShell(false, "report-sec2");
+    card.appendChild(sectionHead(secNum("newdeals"), secTitle("newdeals"), false, null, null));
+    const body = el("div", "report-body2");
+    card.appendChild(body); slot.appendChild(card);
+    body.appendChild(elText("p", "state-msg2", "불러오는 중…"));
+    try {
+      if (!COLLAB.meta || !COLLAB.meta.codes) { const meta = await callDb("meta"); if (meta.ok) COLLAB.meta = Object.assign(COLLAB.meta || {}, meta); }
+      if (!COLLAB.meta || !COLLAB.meta.ready) { body.innerHTML = ""; body.appendChild(elText("p", "state-msg2", "협업 DB를 시작하면 이번 주 새로 등록된 사업이 여기에 표시됩니다.")); return; }
+      const res = await dealsOnce();
+      if (!res.ok) throw new Error(res.message || res.error);
+      renderNewDeals(body, res.rows, slot);
+    } catch (e) { body.innerHTML = ""; body.appendChild(elText("p", "state-msg2 err2", "불러오지 못했어요: " + e.message)); }
+  }
+  function renderNewDeals(body, rows, slot) {
+    body.innerHTML = "";
+    const list = rows.filter(isNewDeal).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    const ws = weekStartStr();
+    const krw = r => (typeof r.kpiKrw === "number" ? r.kpiKrw : 0);
+    const sum = list.reduce((a, r) => a + krw(r), 0);
+    const byPart = p => list.filter(r => r.part === p).length;
+    const head = el("div", "new-sum2");
+    head.appendChild(elText("b", null, `이번 주 신규 ${list.length}건`));
+    head.appendChild(elText("span", null, ` · 광고 ${byPart("광고")} · IP ${byPart("IP")} · 추산 금액 ${(sum / 1e8).toFixed(2)}억 · ${ws.slice(5).replace("-", "/")}(월)부터 등록된 사업`));
+    body.appendChild(head);
+    if (!list.length) { body.appendChild(elText("p", "state-msg2", "이번 주에 새로 등록된 사업이 아직 없어요.")); return; }
+    const artistOf = r => (r.artist && r.artist !== r.group ? `${r.group} · ${r.artist}` : (r.group || r.artist || ""));
+    const titleOf = r => { const box = el("div", null); box.appendChild(newBadge()); box.appendChild(elText("b", null, r.brand || "")); if (r.name) box.appendChild(elText("div", "report-sub2", r.name)); return box; };
+    const money = r => (r.amount === "" || r.amount == null ? "—" : `${r.cur || ""} ${fmtNum(r.amount)}`.trim());
+    body.appendChild(reportTable(["등록일", "진행 단계", "다음 할 일", "구분", "아티스트", "브랜드 · 사업명", "계약금액"], list, r => {
+      const todo = el("div", null); todoChips(todo, dealTodos(r));
+      return [String(r.createdAt).slice(5, 10).replace("-", "/"), stageBadge(r.stage), todo, r.part, artistOf(r), titleOf(r), money(r)];
+    }, slot));
   }
   function stageBadge(name) {
     const stages = (COLLAB.meta && COLLAB.meta.codes && COLLAB.meta.codes.stages) || [];
@@ -1001,7 +1052,7 @@
     const stages = COLLAB.meta.codes.stages;
     const order = name => { const i = stages.findIndex(x => x.name === name); return i < 0 ? 99 : i; };
     const artistOf = r => (r.artist && r.artist !== r.group ? `${r.group} · ${r.artist}` : (r.group || r.artist || ""));
-    const titleOf = r => { const box = el("div", null); box.appendChild(elText("b", null, r.brand || "")); if (r.name) box.appendChild(elText("div", "report-sub2", r.name)); return box; };
+    const titleOf = r => { const box = el("div", null); if (isNewDeal(r)) box.appendChild(newBadge()); box.appendChild(elText("b", null, r.brand || "")); if (r.name) box.appendChild(elText("div", "report-sub2", r.name)); return box; };
     const money = r => (r.amount === "" || r.amount == null ? "—" : `${r.cur || ""} ${fmtNum(r.amount)}`.trim());
     const active = rows.filter(r => stageKind(r.stage) === "진행 중" && Number(r.year) >= CFG_YEAR)
       .sort((a, b) => order(a.stage) - order(b.stage) || String(b.stageDate || b.updatedAt || "").localeCompare(String(a.stageDate || a.updatedAt || "")));
@@ -1025,9 +1076,9 @@
     const shown = reportFilter ? active.filter(r => r.stage === reportFilter) : active;
     body.appendChild(elText("h3", "report-h2", `진행 중 프로젝트 ${shown.length}건` + (reportFilter ? ` — ${reportFilter}` : "")));
     if (shown.length) {
-      body.appendChild(reportTable(["진행 단계", "구분", "아티스트", "브랜드 · 사업명", "계약금액", "단계 변경일", "담당자", "다음 할 일"], shown, r => {
+      body.appendChild(reportTable(["진행 단계", "다음 할 일", "구분", "아티스트", "브랜드 · 사업명", "계약금액", "단계 변경일", "담당자"], shown, r => {
         const todo = el("div", null); todoChips(todo, dealTodos(r));
-        return [stageBadge(r.stage), r.part, artistOf(r), titleOf(r), money(r), r.stageDate || "—", r.owner || "—", todo];
+        return [stageBadge(r.stage), todo, r.part, artistOf(r), titleOf(r), money(r), r.stageDate || "—", r.owner || "—"];
       }, slot));
     } else body.appendChild(elText("p", "state-msg2", "진행 중인 프로젝트가 없어요."));
 
@@ -2899,7 +2950,7 @@
   // 채우므로 그 작업 하나가 끝나면 체크리스트 4칸이 동시에 켜진다(실제로 그 넷이 같은 순간에
   // 준비되는 게 맞아서 오해 소지 없음).
   // ============================================================
-  const LOADING_NAME_BY_KEY = { kpi: "KPI 실적", report: "보고 진행 현황", agenda: "팀 AGENDA", bizcal: "사업 캘린더", trend: "트렌드 리포트", teamcal: "팀 일정 캘린더" };
+  const LOADING_NAME_BY_KEY = { kpi: "KPI 실적", newdeals: "이번 주 신규 사업", report: "보고 진행 현황", agenda: "팀 AGENDA", bizcal: "사업 캘린더", trend: "트렌드 리포트", teamcal: "팀 일정 캘린더" };
   const LOADING_SECTIONS2 = ["인사이트"].concat(VISIBLE_SECTIONS.map(sec => LOADING_NAME_BY_KEY[sec.key]));
   const CHECK_SVG2 = '<svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg>';
   let loadingOverlayEl2 = null;
@@ -2989,10 +3040,13 @@
       }
     })());
     if (secVisible("bizcal")) tasks.push(loadCalSection(document.getElementById("calSlot")).then(() => markSectionsDone2(["사업 캘린더"])));
+    COLLAB.dealsOnce = null; // 이번 불러오기에서 사업 원장은 한 번만 요청
+    if (secVisible("newdeals")) tasks.push(loadNewDealsSection(document.getElementById("newDealsSlot")).then(() => markSectionsDone2(["이번 주 신규 사업"])));
     if (secVisible("report")) tasks.push(loadReportSection(document.getElementById("reportSlot")).then(() => markSectionsDone2(["보고 진행 현황"])));
     else tasks.push(loadAdminAlerts());
     if (secVisible("teamcal")) tasks.push(loadTeamCalSection(document.getElementById("teamCalSlot")).then(() => markSectionsDone2(["팀 일정 캘린더"])));
     await Promise.all(tasks);
+    COLLAB.dealsOnce = null; // 이후 저장·새로고침은 새로 받음
     const now = new Date();
     document.getElementById("connState").textContent = `최근 갱신 ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")} · 다른 분의 변경은 최대 1분 뒤 반영`;
     hideLoadingOverlay2();
@@ -3068,7 +3122,7 @@
   // 사업 원장 입력 양식: 꼭 필요한 칸만 먼저 보이고, 나머지는 [추가 정보]에 접어 둠. 자동 계산 칸은 맨 위 한 줄 요약.
   const DEAL_CORE_GROUPS = [
     ["어떤 사업인가요?", ["part", "group", "artist", "brand", "ckind", "name"]],
-    ["진행 단계", ["stage", "reason"]],
+    ["진행 단계", ["stage", "nextAction", "reason"]],
     ["금액 · 계약 기간", ["cur", "amount", "startDate", "endDate"]],
     ["입금 (회계 확인 후 입력)", ["paidKrw", "paidDate"]],
     ["비고", ["note"]],
@@ -3106,6 +3160,7 @@
   function dealTodos(r) {
     const w = stageWeight(r.stage), out = [];
     const add = (t, who) => out.push({ t, who: who || "작성자" });
+    if (r.nextAction) out.push({ t: String(r.nextAction), who: "메모" }); // 직접 입력한 다음 할 일(맨 앞)
     if (/확인 필요/.test(r.note || "")) add("브랜드 확인 필요(시트 이관)");
     if (/매출현황 누락/.test(r.source || "")) add("매출현황 누락 확인(BIS 진행확정)", "관리자");
     if (r.dupCheck) add("중복 의심 확인", "관리자");
@@ -3468,7 +3523,7 @@
       { path: "teamCal.upcomingDays", label: "'차주엔~' 미리보기 기간(일)", num: true, help: "무엇: 오늘부터 며칠 뒤 일정까지 배지에 보여줄지(1~31)\n예: 10" },
     ] },
   ];
-  const ADMIN_SECTION_LABEL = { kpi: "KPI 현황", report: "보고 진행 현황", agenda: "팀 AGENDA", bizcal: "사업 캘린더", trend: "트렌드 리포트", teamcal: "팀 일정 캘린더" };
+  const ADMIN_SECTION_LABEL = { kpi: "KPI 현황", newdeals: "이번 주 신규 사업", report: "보고 진행 현황", agenda: "팀 AGENDA", bizcal: "사업 캘린더", trend: "트렌드 리포트", teamcal: "팀 일정 캘린더" };
   function getPath2(o, path) { return path.split(".").reduce((x, k) => (x == null ? x : x[k]), o); }
   function setPath2(o, path, v) { const ks = path.split("."); let x = o; ks.slice(0, -1).forEach(k => { x = x[k] = x[k] || {}; }); x[ks[ks.length - 1]] = v; }
 
@@ -3944,6 +3999,7 @@
       if (f.part && r.part !== f.part) return false;
       if (f.stage && r.stage !== f.stage) return false;
       if (f.approval && r.approval !== f.approval) return false;
+      if (f.newOnly && table === "deals" && !isNewDeal(r)) return false;
       if (f.todo && table === "deals") {
         if (f.todo === "관리자 확인") { if (!needsAdminCheck(r)) return false; }
         else { const need = dealTodos(r).some(x => x.who === "작성자"); if ((f.todo === "확인 필요") !== need) return false; }
@@ -4083,6 +4139,17 @@
       }
     }
     if (table === "deals") {
+      const nw = rows.filter(isNewDeal);
+      if (nw.length) {
+        const chip = el("button", "stage-chip2 new2" + (defaultFilters(table).newOnly ? " on2" : ""));
+        chip.type = "button";
+        chip.appendChild(elText("b", null, "이번 주 신규"));
+        chip.appendChild(document.createTextNode(` ${nw.length}건`));
+        chip.addEventListener("click", () => { const f = defaultFilters(table); f.newOnly = !f.newOnly; drawTable(wrap, summary, table, rows); });
+        summary.appendChild(chip);
+      }
+    }
+    if (table === "deals") {
       const need = list.filter(r => dealTodos(r).some(x => x.who === "작성자"));
       if (need.length) {
         const chip = el("button", "stage-chip2 todo2" + (defaultFilters(table).todo === "확인 필요" ? " on2" : ""));
@@ -4160,6 +4227,7 @@
         if (table === "deals" && k === "approval") { const td = el("td", "count-cell2"); countCell(td, r); tr.appendChild(td); return; }
         if (table === "deals" && VIRTUAL_COLS[k]) { const td = el("td", "v-" + k + "2"); if (k === "kpiWhen" && COLLAB.user) td.dataset.editable = "1"; if (k === "counted" && pendOf(r)) td.classList.add("stale2"); dealVirtualCell(td, k, r); tr.appendChild(td); return; }
         const td = elText("td", ["content", "before", "after", "name"].includes(k) ? "long2" : null, cellText(table, k, r[k]));
+        if (table === "deals" && k === "brand" && isNewDeal(r)) td.prepend(newBadge());
         if (k === "approval" && r.approval) td.classList.add(r.approval === "승인" ? "appr-ok2" : "appr-wait2");
         if (k === "stage" && r.stage) td.dataset.weight = String(((COLLAB.meta.codes.stages.find(s => s.name === r.stage) || {}).weight) || 0);
         tr.appendChild(td);
@@ -4400,7 +4468,7 @@
   function todoChips(box, todos) {
     box.innerHTML = "";
     if (!todos.length) { box.appendChild(elText("span", "todo-none2", "—")); return; }
-    todos.forEach(x => box.appendChild(elText("span", "todo-chip2" + (x.who === "관리자" ? " admin2" : x.who === "회계" ? " acct2" : ""), x.t)));
+    todos.forEach(x => box.appendChild(elText("span", "todo-chip2" + (x.who === "관리자" ? " admin2" : x.who === "회계" ? " acct2" : x.who === "메모" ? " memo2" : ""), x.t)));
   }
   // 날짜 칸: [일자 | 월만 | 미정] 중 고르고 달력으로 선택. 실제 저장값은 숨은 칸(data-key)에 'YYYY-MM-DD'/'YYYY-MM'/''로.
   function flexDateInput(col, value) {
