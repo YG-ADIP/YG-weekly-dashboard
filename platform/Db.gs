@@ -400,13 +400,16 @@ function recordToRow_(key, rec) {
 
 function nowStamp_() { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss'); }
 
+// 변경 이력 ID: 같은 밀리초에 여러 번 기록돼도 겹치지 않게 실행 내 일련번호 + 임의 글자
+var LOG_SEQ_ = 0;
 function appendLogs_(entries) {
   if (!entries.length) return;
+  var stamp = new Date().getTime(), salt = Math.random().toString(36).slice(2, 6);
   var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.log.sheet) || ensureTable_(dbSpreadsheet_(), 'log');
   var base = sh.getLastRow();
   var rows = entries.map(function (e, i) {
     return recordToRow_('log', {
-      id: 'LG-' + new Date().getTime() + '-' + i, at: nowStamp_(), user: e.user || '(이름 없음)', table: DB_TABLES[e.table] ? DB_TABLES[e.table].sheet : e.table,
+      id: 'LG-' + stamp + '-' + (LOG_SEQ_++) + salt, at: nowStamp_(), user: e.user || '(이름 없음)', table: DB_TABLES[e.table] ? DB_TABLES[e.table].sheet : e.table,
       recordId: e.recordId || '', action: e.action, field: e.field || '', before: truncate_(e.before), after: truncate_(e.after),
     });
   });
@@ -628,7 +631,7 @@ function dbDeleteMany_(key, ids, user) {
 
 function dbRestore_(logId, user, isAdmin) {
   return withLock_(function () {
-    var entry = readTable_('log').filter(function (l) { return l.id === logId; })[0];
+    var entry = readTable_('log').filter(function (l) { return l.id === logId && l.action === '삭제'; })[0]; // 예전 기록은 ID가 겹칠 수 있어 '삭제' 기록만 찾음
     if (!entry || entry.action !== '삭제') throw new Error('복원할 수 있는 삭제 기록이 아닙니다.');
     var key = Object.keys(DB_TABLES).filter(function (k) { return DB_TABLES[k].sheet === entry.table; })[0];
     if (DB_TABLES[key].adminOnly && !isAdmin) throw new Error(entry.table + ' 항목은 관리자 모드에서만 복원할 수 있습니다.');
