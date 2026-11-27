@@ -693,7 +693,6 @@
   .wow-name2 { grid-area: n; font-size: 13px; opacity: .85; } .wow-now2 { grid-area: now; font-size: 15px; } .wow-prev2 { grid-area: prev; font-size: 11px; opacity: .55; text-align: right; }
   .wow-chg2 { grid-area: chg; min-width: 78px; text-align: right; font-weight: 700; font-size: 13px; } .wow-ico2 { font-style: normal; margin-right: 4px; font-size: 11px; }
   .wow-chg2.up2 { color: #6aa8ff; } .wow-chg2.down2 { color: #ff6b6b; } .wow-chg2.flat2 { color: #9aa3b2; }
-  .past-note2 { font-size: 12px; color: #2b4aa0; background: #f5f8ff; border: 1px solid #dfe7fb; border-radius: 10px; padding: 7px 10px; margin: 0 0 10px; }
   .new-show2 { font-size: 12px; white-space: nowrap; cursor: pointer; }
   .write-week2 { margin: 0 0 14px; padding: 12px 14px; border: 1px solid #dfe7fb; border-radius: 14px; background: #f7f9ff; }
   .write-week-title2 { margin: 0 0 8px; font-weight: 700; font-size: 13.5px; }
@@ -883,7 +882,6 @@
   <div id="sectionsRoot">
     <div id="kpiSlot"></div>
     <div id="newDealsSlot"></div>
-    <div id="reportSlot"></div>
     <div id="agendaSlot"></div>
     <div id="calSlot"></div>
     <div id="trendSlot"></div>
@@ -902,7 +900,7 @@
   let CFG_YEAR = PLATFORM_UI.general.year; // 보고 있는 연도(상단 연도 선택). 운영 연도 전환은 관리자 모드 → 기준 정보
 
   // 섹션 구성 — 설정의 순서대로 번호(01, 02…)를 매기고, 숨긴 섹션은 번호에서 빠짐.
-  const SECTION_SLOT = { kpi: "kpiSlot", newdeals: "newDealsSlot", report: "reportSlot", agenda: "agendaSlot", bizcal: "calSlot", trend: "trendSlot", teamcal: "teamCalSlot" };
+  const SECTION_SLOT = { kpi: "kpiSlot", newdeals: "newDealsSlot", agenda: "agendaSlot", bizcal: "calSlot", trend: "trendSlot", teamcal: "teamCalSlot" };
   const VISIBLE_SECTIONS = PLATFORM_UI.sections.filter(sec => sec.visible);
   function secVisible(key) { return VISIBLE_SECTIONS.some(sec => sec.key === key); }
   function secNum(key) { return String(VISIBLE_SECTIONS.findIndex(sec => sec.key === key) + 1).padStart(2, "0"); }
@@ -977,23 +975,20 @@
   // 보고 진행 현황(대시보드): 진행 중 프로젝트를 보고 단계별로, 확정 건은 아래 표로
   // ============================================================
   let reportFilter = "";
-  async function loadReportSection(slot) {
-    slot.innerHTML = "";
-    const card = sectionShell(false, "report-sec2");
-    card.appendChild(sectionHead(secNum("report"), secTitle("report"), false, null, null));
+  // 보고 진행 현황 탭(2026-11 대시보드에서 분리): 항상 현재 상태, 다음 할 일은 표에서 바로 선택
+  async function renderReportView(card) {
     const body = el("div", "report-body2");
     card.appendChild(body);
-    slot.appendChild(card);
+    const reload = () => renderDataView("report");
     body.appendChild(elText("p", "state-msg2", "불러오는 중…"));
     try {
       if (!COLLAB.meta || !COLLAB.meta.codes) { const meta = await callDb("meta"); if (meta.ok) COLLAB.meta = Object.assign(COLLAB.meta || {}, meta); }
       if (!COLLAB.meta || !COLLAB.meta.ready) { body.innerHTML = ""; body.appendChild(elText("p", "state-msg2", "협업 DB를 시작하면 사업 원장의 진행 단계가 여기에 프로젝트별로 표시됩니다.")); return; }
-      const past = !!(selectedWeekKey && !isCurrentWeekKey(selectedWeekKey));
-      const res = past ? await callDb("dealsAt", { year: CFG_YEAR, week: selectedWeekKey }) : await dealsOnce();
+      const res = await callDb("list", { table: "deals" });
       if (!res.ok) throw new Error(res.message || res.error);
-      if (!past) COLLAB.rows.deals = res.rows;
-      renderReport(body, res.rows, slot, past ? { snapshot: res.snapshot, recordedAt: res.recordedAt } : null);
-      if (!past) renderAdminAlerts(res.rows);
+      COLLAB.rows.deals = res.rows;
+      renderReport(body, res.rows, reload, null);
+      renderAdminAlerts(res.rows);
     } catch (e) {
       body.innerHTML = "";
       body.appendChild(elText("p", "state-msg2 err2", "불러오지 못했어요: " + e.message));
@@ -1060,7 +1055,7 @@
     body.appendChild(reportTable(cols, list, r => {
       const todo = nextActionCell(r);
       return [String(r.createdAt).slice(5, 10).replace("-", "/"), stageBadge(r.stage), todo, r.part, artistOf(r), titleOf(r), money(r)].concat(admin ? [showCell(r)] : []);
-    }, slot));
+    }, () => loadNewDealsSection(slot)));
   }
   // 보고 진행 현황·신규 섹션의 '다음 할 일': 표에서 바로 고르면 저장(자동 안내는 아래 작은 칩)
   function nextActionCell(r, onSaved) {
@@ -1108,7 +1103,7 @@
       if (readOnly) tr.className = "";
       else {
         tr.title = "누르면 사업 원장 입력 양식이 열립니다";
-        tr.addEventListener("click", () => { if (!COLLAB.user) { openUserPicker(false); return; } openRecordForm("deals", r, () => loadReportSection(slot)); });
+        tr.addEventListener("click", () => { if (!COLLAB.user) { openUserPicker(false); return; } openRecordForm("deals", r, () => (typeof slot === "function" ? slot() : null)); });
       }
       tb.appendChild(tr);
     });
@@ -1118,7 +1113,6 @@
   }
   function renderReport(body, rows, slot, past) {
     body.innerHTML = "";
-    if (past) body.appendChild(elText("p", "past-note2", past.snapshot ? `${weekTitle(selectedWeekKey)}(${weekSpanText(selectedWeekKey)}) 마지막 상태 — ${String(past.recordedAt).slice(5, 16)} 기록 · 지난 주차는 보기 전용` : `${weekTitle(selectedWeekKey)} 기록이 없어 현재 상태를 보여드려요(매주 금 18시 자동 기록) · 보기 전용`));
     const stages = COLLAB.meta.codes.stages;
     const order = name => { const i = stages.findIndex(x => x.name === name); return i < 0 ? 99 : i; };
     const artistOf = r => (r.artist && r.artist !== r.group ? `${r.group} · ${r.artist}` : (r.group || r.artist || ""));
@@ -3081,7 +3075,6 @@
   let weekSectionsReady = false;
   function reloadWeekSections() {
     if (secVisible("newdeals")) loadNewDealsSection(document.getElementById("newDealsSlot"));
-    if (secVisible("report")) loadReportSection(document.getElementById("reportSlot"));
     if (secVisible("bizcal")) loadCalSection(document.getElementById("calSlot"));
     if (secVisible("teamcal")) loadTeamCalSection(document.getElementById("teamCalSlot"));
   }
@@ -3116,7 +3109,7 @@
   // 채우므로 그 작업 하나가 끝나면 체크리스트 4칸이 동시에 켜진다(실제로 그 넷이 같은 순간에
   // 준비되는 게 맞아서 오해 소지 없음).
   // ============================================================
-  const LOADING_NAME_BY_KEY = { kpi: "KPI 실적", newdeals: "이번 주 신규 사업", report: "보고 진행 현황", agenda: "팀 AGENDA", bizcal: "사업 캘린더", trend: "트렌드 리포트", teamcal: "팀 일정 캘린더" };
+  const LOADING_NAME_BY_KEY = { kpi: "KPI 실적", newdeals: "이번 주 신규 사업", agenda: "팀 AGENDA", bizcal: "사업 캘린더", trend: "트렌드 리포트", teamcal: "팀 일정 캘린더" };
   const LOADING_SECTIONS2 = ["인사이트"].concat(VISIBLE_SECTIONS.map(sec => LOADING_NAME_BY_KEY[sec.key]));
   const CHECK_SVG2 = '<svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.2 3.2L13 4.5"/></svg>';
   let loadingOverlayEl2 = null;
@@ -3209,8 +3202,7 @@
     if (secVisible("bizcal")) tasks.push(loadCalSection(document.getElementById("calSlot")).then(() => markSectionsDone2(["사업 캘린더"])));
     COLLAB.dealsOnce = null; // 이번 불러오기에서 사업 원장은 한 번만 요청
     if (secVisible("newdeals")) tasks.push(loadNewDealsSection(document.getElementById("newDealsSlot")).then(() => markSectionsDone2(["이번 주 신규 사업"])));
-    if (secVisible("report")) tasks.push(loadReportSection(document.getElementById("reportSlot")).then(() => markSectionsDone2(["보고 진행 현황"])));
-    else tasks.push(loadAdminAlerts());
+    tasks.push(loadAdminAlerts());
     if (secVisible("teamcal")) tasks.push(loadTeamCalSection(document.getElementById("teamCalSlot")).then(() => markSectionsDone2(["팀 일정 캘린더"])));
     await Promise.all(tasks);
     weekSectionsReady = true;
@@ -3272,6 +3264,7 @@
     { key: "trend", title: "트렌드 리포트", tables: ["trend"], desc: "주차별 업계 트렌드를 작성합니다. 내용 칸의 줄바꿈 1줄이 대시보드 카드의 글머리 1줄이 됩니다." },
     { key: "members", title: "팀원", tables: ["members"], desc: "입장할 때 고르는 이름 목록입니다(관리자 모드에서 등록). 저장 기록의 작성자로 표시됩니다." },
     { key: "log", title: "변경 이력", tables: ["log"], desc: "누가·언제·무엇을 바꿨는지 자동으로 기록됩니다. 삭제된 항목은 [복원]으로 되살릴 수 있습니다." },
+    { key: "report", title: "보고 진행 현황", tables: [], desc: "진행 중 프로젝트를 보고 단계별로 봅니다(항상 현재 상태). '다음 할 일'은 표에서 바로 고르면 저장되고, 행을 누르면 사업 원장 입력 양식이 열립니다. 확정 건은 아래 표로 모아 보여줍니다." },
     { key: "settings", title: "기준 정보", tables: [], desc: "운영 연도와 진행 단계·드롭다운 목록입니다. 관리자 모드에서 바꿀 수 있습니다." },
     { key: "admin", title: "관리자 설정", tables: [], adminOnly: true, desc: "대시보드 제목·데이터 연결·화면 구성·비밀번호를 바꿉니다. 각 칸의 ? 에 마우스를 올리면 무엇을 넣는지와 영향이 나옵니다." },
   ];
@@ -3680,6 +3673,7 @@
       return;
     }
     if (viewKey === "settings") { card.appendChild(renderSettingsView()); return; }
+    if (viewKey === "report") { await renderReportView(card); return; }
     if (viewKey === "kpi") { const fxBox = el("div", "fx-panel2"); card.appendChild(fxBox); renderFxPanel(fxBox); }
     for (const t of view.tables) {
       const section = el("div", "data-table-block2");
@@ -3726,7 +3720,7 @@
       { path: "teamCal.upcomingDays", label: "'차주엔~' 미리보기 기간(일)", num: true, help: "무엇: 오늘부터 며칠 뒤 일정까지 배지에 보여줄지(1~31)\n예: 10" },
     ] },
   ];
-  const ADMIN_SECTION_LABEL = { kpi: "KPI 현황", newdeals: "이번 주 신규 사업", report: "보고 진행 현황", agenda: "팀 AGENDA", bizcal: "사업 캘린더", trend: "트렌드 리포트", teamcal: "팀 일정 캘린더" };
+  const ADMIN_SECTION_LABEL = { kpi: "KPI 현황", newdeals: "이번 주 신규 사업", agenda: "팀 AGENDA", bizcal: "사업 캘린더", trend: "트렌드 리포트", teamcal: "팀 일정 캘린더" };
   function getPath2(o, path) { return path.split(".").reduce((x, k) => (x == null ? x : x[k]), o); }
   function setPath2(o, path, v) { const ks = path.split("."); let x = o; ks.slice(0, -1).forEach(k => { x = x[k] = x[k] || {}; }); x[ks[ks.length - 1]] = v; }
 

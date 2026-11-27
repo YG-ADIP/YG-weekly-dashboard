@@ -143,19 +143,6 @@ var DB_TABLES = {
       { key: 'updatedAt', label: '최종 수정일시', type: 'auto' },
     ],
   },
-  // 사업별 주간 상태(매주 금 18시 자동 기록) — 지난 주차를 고르면 보고 진행 현황을 그 주 마지막 상태로 보여줌
-  dealSnaps: {
-    sheet: '사업_주간기록', idPrefix: 'DS', editable: false,
-    cols: [
-      { key: 'id', label: 'ID', type: 'auto' },
-      { key: 'year', label: '연도', type: 'auto' },
-      { key: 'week', label: '주차', type: 'auto' },
-      { key: 'dealId', label: '사업ID', type: 'auto' },
-      { key: 'stage', label: '진행 단계', type: 'auto' },
-      { key: 'nextAction', label: '다음 할 일', type: 'auto' },
-      { key: 'recordedAt', label: '기록일시', type: 'auto' },
-    ],
-  },
   snapshots: {
     sheet: 'KPI_주간기록', idPrefix: 'SN', editable: false,
     cols: [
@@ -190,7 +177,7 @@ var DB_TABLES = {
     ],
   },
 };
-var DB_TABLE_ORDER = ['deals', 'kpiGoals', 'fx', 'agenda', 'trend', 'members', 'snapshots', 'dealSnaps', 'log'];
+var DB_TABLE_ORDER = ['deals', 'kpiGoals', 'fx', 'agenda', 'trend', 'members', 'snapshots', 'log'];
 
 // 코드(드롭다운) 기본값 — 진행 단계·아티스트 그룹 등은 관리자 설정에서 바꿀 수 있음(cfg_().codes).
 var DEFAULT_CODES = {
@@ -1186,33 +1173,30 @@ function weeklySnapshotJob() {
   if (now.getFullYear() !== year) return; // 운영 연도가 지난(또는 아직인) 해에는 기록하지 않음
   var status = kpiStatusFromDeals_(year, readTable_('deals'), readTable_('kpiGoals'));
   upsertSnapshot_(year, weekKeyOf_(now), status, true);
-  recordDealSnaps_(year, weekKeyOf_(now));
+  purgeOldWeekly_(now); // 팀 AGENDA·트렌드 리포트는 최근 1개월만 보관
   PropertiesService.getScriptProperties().setProperty('WEEKLY_SNAPSHOT_LAST', nowStamp_() + ' · ' + weekKeyOf_(now));
 }
-function recordDealSnaps_(year, week) {
-  withLock_(function () {
-    var stamp = nowStamp_();
-    var rows = readTable_('deals').filter(function (d) { return d.stage; }).map(function (d, i) {
-      return recordToRow_('dealSnaps', { id: 'DS-' + year + '-' + week + '-' + d.id + '-' + stamp.replace(/\D/g, ''), year: year, week: week, dealId: d.id, stage: d.stage, nextAction: d.nextAction || '', recordedAt: stamp });
+// 팀 AGENDA·트렌드 리포트: 주차가 끝난 지 31일이 지난 행은 지움(변경 이력에 행 전체가 남아 [복원] 가능)
+var WEEKLY_KEEP_DAYS = 31;
+function purgeOldWeekly_(now) {
+  var cutoff = new Date((now || new Date()).getTime() - WEEKLY_KEEP_DAYS * 86400000);
+  return withLock_(function () {
+    var removed = 0;
+    ['agenda', 'trend'].forEach(function (key) {
+      var old = readTable_(key).filter(function (r) {
+        if (!r.year || !r.week) return false;
+        try { return weekRange_(Number(r.year), r.week).end < cutoff; } catch (e) { return false; }
+      }).sort(function (x, y) { return y._row - x._row; }); // 아래 행부터
+      if (!old.length) return;
+      var sh = dbSpreadsheet_().getSheetByName(DB_TABLES[key].sheet);
+      old.forEach(function (r) { sh.deleteRow(r._row); });
+      appendLogs_(old.map(function (r) { return { user: '시스템', table: key, recordId: r.id, action: '삭제', field: '보관 기간(1개월) 지남', before: stripRow_(r), after: '' }; }));
+      removed += old.length;
     });
-    if (!rows.length) return;
-    var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.dealSnaps.sheet) || ensureTable_(dbSpreadsheet_(), 'dealSnaps');
-    sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows); // 한 번에(같은 주 여러 번이면 마지막 기록 사용)
+    return removed;
   });
 }
-// 지난 주차의 사업 목록: 그 주 마지막 기록의 진행 단계·다음 할 일로(그 주 이후 등록된 사업은 제외)
-function dbDealsAt_(year, week) {
-  var r = weekRange_(Number(year), week), endStr = Utilities.formatDate(r.end, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
-  var snaps = readTable_('dealSnaps').filter(function (s) { return Number(s.year) === Number(year) && s.week === week; });
-  var last = {};
-  snaps.forEach(function (s) { if (!last[s.dealId] || String(s.recordedAt) > String(last[s.dealId].recordedAt)) last[s.dealId] = s; });
-  var rows = readTable_('deals').filter(function (d) { return !d.createdAt || String(d.createdAt) <= endStr; }).map(function (d) {
-    var o = stripRow_(d), s = last[d.id];
-    if (s) { o.stage = s.stage; o.nextAction = s.nextAction; }
-    return o;
-  });
-  return { ok: true, rows: rows, snapshot: snaps.length > 0, recordedAt: snaps.length ? snaps.map(function (s) { return String(s.recordedAt); }).sort().pop() : '' };
-}
+
 function dbSetNewShow_(id, show, user) {
   return withLock_(function () {
     var d = readTable_('deals').filter(function (x) { return x.id === id; })[0];
@@ -1890,7 +1874,6 @@ function dbApi(action, password, user, payloadJson) {
       case 'clearCheck': res = dbClearCheck_(payload.ids, user); break;
       case 'bisDrive': res = dbBisDrive_(payload); break;
       case 'bulkKpi': res = dbBulkKpi_(payload.changes, user, isAdmin); break;
-      case 'dealsAt': res = dbDealsAt_(payload.year, String(payload.week || '')); break;
       case 'setNewShow': res = dbSetNewShow_(String(payload.id || ''), !!payload.show, user); break;
       case 'setBisFolder': res = dbSetBisFolder_(payload.folder, user); break;
       case 'bisPreview': res = { ok: true, result: dbBisImport_(payload, user, false) }; break;

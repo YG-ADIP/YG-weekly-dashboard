@@ -26,7 +26,7 @@ var MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP',
 // ============================================================
 // 플랫폼 설정 — 관리자 설정 화면에서 바꾸는 값들의 기본값(2026 운영값)
 // ============================================================
-var PLATFORM_SECTION_KEYS = ['kpi', 'newdeals', 'report', 'agenda', 'bizcal', 'trend', 'teamcal']; // 월별 트래킹은 2026-11 삭제, 보고 진행 현황 2026-11 추가
+var PLATFORM_SECTION_KEYS = ['kpi', 'newdeals', 'agenda', 'bizcal', 'trend', 'teamcal']; // 보고 진행 현황은 2026-11 별도 탭으로 // 월별 트래킹은 2026-11 삭제, 보고 진행 현황 2026-11 추가
 var DEFAULT_CONFIG = {
   // startDate: 대시보드 운영 시작일 — 이 날짜가 속한 주(월~일)부터 대시보드에 표시, 그 이전 주차는 숨김
   general: { title: '주간회의 대시보드', teamName: '광고IP사업팀', teamNameEn: 'AD/IP BUSINESS', year: 2026, startDate: '2026-11-30' },
@@ -46,7 +46,6 @@ var DEFAULT_CONFIG = {
   sections: [
     { key: 'kpi', title: '{year} KPI 현황', visible: true },
     { key: 'newdeals', title: '이번 주 신규 사업', visible: true },
-    { key: 'report', title: '보고 진행 현황', visible: true },
     { key: 'agenda', title: '팀 AGENDA', visible: true },
     { key: 'bizcal', title: '사업 캘린더', visible: true },
     { key: 'trend', title: '트렌드 리포트', visible: true },
