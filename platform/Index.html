@@ -721,6 +721,8 @@
   .nav-menu2.hold-closed2:not(.open2) .nav-drop2 { display: none; }
   .nav-drop2::before { content: ""; position: absolute; left: 0; right: 0; top: -6px; height: 6px; } /* 머리 → 목록으로 마우스 옮길 때 닫히지 않게 */
   .nav-item2 { text-align: left; width: 100%; white-space: nowrap; }
+  .filter-clear2:disabled { opacity: .45; cursor: default; }
+  .filter-clear2.on2 { border-color: #f59e0b; color: #b45309; background: #fffbeb; }
   .help2 { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #e8eefb; color: var(--accent-700); font-size: 11px; font-weight: 700; cursor: help; vertical-align: middle; }
   .help2 .tip2 { display: none; position: absolute; left: -8px; top: calc(100% + 8px); z-index: 50; width: 300px; padding: 10px 12px; border-radius: 10px; background: #1f2a44; color: #fff; font-size: 12px; font-weight: 400; line-height: 1.55; white-space: pre-line; text-align: left; box-shadow: 0 8px 24px rgba(20,32,66,.25); }
   .help2:hover .tip2, .help2:focus .tip2, .help2.open2 .tip2 { display: block; }
@@ -4382,8 +4384,8 @@
   }
 
   function defaultFilters(table) {
-    const f = COLLAB.filters[table] || (COLLAB.filters[table] = { q: "", year: String(CFG_YEAR), week: "", part: "", stage: "" });
-    if ((table === "agenda" || table === "trend") && !f.week) { const ww = currentWriteWeek(); f.week = ww ? ww.key : COLLAB.meta.currentWeek; }
+    const f = COLLAB.filters[table] || (COLLAB.filters[table] = { q: "", year: String(CFG_YEAR), part: "", stage: "" });
+    if (f.week === undefined) { const ww = currentWriteWeek(); f.week = (table === "agenda" || table === "trend") ? (ww ? ww.key : COLLAB.meta.currentWeek) : ""; }
     return f;
   }
 
@@ -4454,6 +4456,16 @@
       addSelect("실적 반영", [{ value: "승인 대기", label: "OFF(반영 대기)" }, { value: "승인", label: "ON(반영)" }], f.approval || "", v => { f.approval = v; });
       addSelect("다음 할 일", [{ value: "확인 필요", label: "확인 필요(작성자)" }].concat(isAdminUser() ? [{ value: "관리자 확인", label: "관리자 확인 필요" }] : []).concat([{ value: "없음", label: "없음" }]), f.todo || "", v => { f.todo = v; });
     }
+    // [필터 해제]: 검색·연도·주차·파트·단계·실적 반영·다음 할 일·칩 필터를 한 번에 풀기
+    const clr = elText("button", "btn-line2 filter-clear2", "필터 해제"); clr.type = "button";
+    clr._sync = () => {
+      const on = !!(String(f.q || "").trim() || f.year || f.week || f.part || f.stage || f.approval || f.todo || f.newOnly);
+      clr.classList.toggle("on2", on);
+      clr.textContent = on ? `필터 해제 (전체 ${rows.length}건 중 ${filteredRows(table, rows).length}건 표시)` : "필터 없음";
+      clr.disabled = !on;
+    };
+    clr.addEventListener("click", () => { Object.assign(f, { q: "", year: "", week: "", part: "", stage: "", approval: "", todo: "", newOnly: false }); rerender(); });
+    toolbar.appendChild(clr);
     const spacer = el("span", "data-spacer2");
     toolbar.appendChild(spacer);
     if (canEdit(table)) {
@@ -4472,7 +4484,7 @@
       bis.addEventListener("click", () => openBisUpload(rerender));
       toolbar.appendChild(bis);
     }
-    if (def.editable && isAdminMode()) {
+    if (def.editable && isAdminMode() && table !== "deals") { // 사업 원장은 BIS 업로드·직접 입력으로(2026-11 엑셀 업로드 삭제)
       const up = elText("button", "btn-line2", "엑셀 업로드"); up.type = "button";
       up.addEventListener("click", () => pickExcel(table, rerender));
       toolbar.appendChild(up);
@@ -4493,19 +4505,11 @@
     const down = elText("button", "btn-line2", "엑셀 다운로드"); down.type = "button";
     down.addEventListener("click", () => downloadExcel([table], filteredRows(table, rows)));
     toolbar.appendChild(down);
-    if (table === "deals") {
-      const simple = elText("button", "btn-line2", "간편 양식 엑셀"); simple.type = "button";
-      simple.title = "사업 원장을 16칸 간편 양식으로 내려받아 정리한 뒤, 관리자 모드 [엑셀 업로드]로 올리면 반영됩니다.";
-      simple.addEventListener("click", () => downloadSimpleDeals(filteredRows(table, rows)));
-      toolbar.appendChild(simple);
-      const all = elText("button", "btn-line2", "전체 DB 엑셀"); all.type = "button";
-      all.addEventListener("click", () => downloadAllDb());
-      toolbar.appendChild(all);
-    }
     redraw();
   }
 
   function drawTable(wrap, summary, table, rows) {
+    setTimeout(() => { const c = document.querySelector("#dataView .filter-clear2"); if (c && c._sync) c._sync(); }, 0);
     if (table === "deals") renderAdminAlerts(rows);
     const def = tableDef(table);
     const list = filteredRows(table, rows);
