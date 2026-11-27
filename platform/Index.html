@@ -731,6 +731,11 @@
   .adm-adv2 { margin-top: 12px; font-size: 12.5px; } .adm-adv2 summary { cursor: pointer; color: var(--soft); }
   .adm-hist2 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px solid #eef0f4; font-size: 12.5px; } .adm-hist2.cur2 b { color: var(--accent-700); }
   #adm-history .btn-danger2 { margin-top: 10px; }
+  .dup-opts2 { display: grid; gap: 8px; margin: 12px 0; }
+  .dup-opt2 { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line, #e3e6ea); border-radius: 8px; cursor: pointer; }
+  .dup-opt2 input { margin-top: 3px; }
+  .dup-memo2 { width: 100%; }
+  .adm-dup-table2 td { vertical-align: top; }
   .adm-stage-table2 input[type=text] { font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid rgba(20,32,66,0.16); border-radius: 8px; width: 100%; box-sizing: border-box; }
   .adm-stage-table2 select { font: inherit; font-size: 12.5px; padding: 5px 6px; border-radius: 8px; border: 1px solid rgba(20,32,66,0.16); }
   .adm-used2 { white-space: nowrap; color: var(--soft); } .form-hint2.ok2 { color: var(--good); font-weight: 700; }
@@ -1212,8 +1217,13 @@
       const ul = el("ul", null);
       flagged.slice(0, 10).forEach(r => {
         const li = elText("li", null, `${r.id} · ${r.group} · ${r.brand} — ${r.dupCheck || "진행현황은 진행확정인데 매출현황에 없음"} `);
-        const b = elText("button", "link-btn2 ack-btn2", "확인"); b.type = "button"; b.title = "확인했음 — 알림에서 지움";
-        b.addEventListener("click", () => ack([r.id]));
+        const b = elText("button", "link-btn2 ack-btn2", r.dupCheck ? "해결" : "확인"); b.type = "button";
+        b.title = r.dupCheck ? "같은 브랜드 표기 / 다른 사업 / 확인만 중 골라 메모와 함께 해결" : "확인했음 — 알림에서 지움";
+        b.addEventListener("click", () => {
+          if (!r.dupCheck) { ack([r.id]); return; }
+          if (!isAdminMode()) { alert("관리자 모드를 켠 뒤 해결할 수 있어요."); const chip = document.getElementById("adminChip"); if (chip) chip.click(); return; }
+          openDupResolve(r, () => { r.dupCheck = ""; COLLAB.dashDirty = true; renderAdminAlerts(rows); if (COLLAB.view === "deals") renderDataView("deals"); });
+        });
         li.appendChild(b); ul.appendChild(li);
       });
       if (n > 10) ul.appendChild(elText("li", null, `외 ${n - 10}건 — [확인하러 가기]에서 확인`));
@@ -1224,6 +1234,43 @@
       bar.appendChild(close);
     }
     slot.appendChild(bar);
+  }
+  // 중복 의심 해결(관리자): 해결 방법 + 메모 → 규칙으로 저장해 같은 경우가 다시 뜨지 않게
+  function openDupResolve(r, onDone) {
+    const m = openModal("중복 의심 해결 — " + r.id);
+    m.body.appendChild(elText("p", "data-desc2", `${r.group || ""} · ${r.brand || ""}${r.name ? " · " + r.name : ""}`));
+    m.body.appendChild(elText("p", "import-errbox2 warn-box2", r.dupCheck));
+    const opts = [
+      ["alias", "같은 브랜드 표기", "예: CK = 캘빈클라인. 두 표기를 앞으로 같은 브랜드로 판단(BIS 가져오기 자동 인식에도 반영). 실제로 같은 사업이 두 건이면 사업 원장에서 한 건을 삭제하세요."],
+      ["notdup", "다른 사업", "이름·금액이 비슷할 뿐 다른 계약. 이 조합은 앞으로 중복 의심으로 띄우지 않음."],
+      ["ack", "확인만", "규칙은 만들지 않고 이번 알림만 지움."],
+    ];
+    const list = el("div", "dup-opts2");
+    opts.forEach(([v, label, help], i) => {
+      const row = el("label", "dup-opt2");
+      const rb = document.createElement("input"); rb.type = "radio"; rb.name = "dupKind"; rb.value = v; if (i === 0) rb.checked = true;
+      const tx = el("span", null); tx.append(elText("b", null, label), elText("span", "form-hint2", " — " + help));
+      row.append(rb, tx); list.appendChild(row);
+    });
+    m.body.appendChild(list);
+    const memo = document.createElement("input"); memo.type = "text"; memo.maxLength = 100; memo.className = "dup-memo2"; memo.placeholder = "해결 메모(필수, 확인만은 선택) — 예: CK는 캘빈클라인 약칭";
+    const lab = el("label", "adm-field2"); lab.append(elText("span", "adm-label2", "해결 메모"), memo);
+    m.body.appendChild(lab);
+    const msg = elText("p", "form-hint2", "");
+    const okB = elText("button", "btn-primary2", "해결"); okB.type = "button";
+    okB.addEventListener("click", async () => {
+      const kind = (m.body.querySelector('input[name="dupKind"]:checked') || {}).value;
+      if (kind !== "ack" && !memo.value.trim()) { msg.textContent = "해결 메모를 남겨 주세요."; memo.focus(); return; }
+      okB.disabled = true; msg.textContent = "저장 중…";
+      const res = await callDb("resolveDup", { id: r.id, kind, memo: memo.value.trim() });
+      if (!res.ok) { msg.textContent = "실패: " + (res.message || res.error); okB.disabled = false; return; }
+      m.close();
+      if (res.rules && res.rules.length) alert(`해결했어요. 중복 판단 규칙 ${res.rules.length}개를 등록했어요(관리자 설정 → 중복 판단 규칙에서 확인·삭제).`);
+      onDone && onDone();
+    });
+    const row = el("div", "form-actions2"); row.append(okB, msg);
+    m.body.appendChild(row);
+    memo.focus();
   }
   async function loadAdminAlerts() {
     if (!isAdminUser()) { renderAdminAlerts(null); return; }
@@ -2181,7 +2228,7 @@
   function renderContractGroup(items, year, month) {
     const today = startOfToday();
     const cards = contractIssuesInMonth(items, year, month).map(({ item, alert, date }) => {
-      const meta = [item.category, `계약 종료 ${fmtDateYMD(item.endDate)}`, fmtDDay(item.dDay)].filter(Boolean).join(" · ");
+      const meta = [item.category, item.startDate ? `계약 ${fmtDateYMD(item.startDate)} ~ ${fmtDateYMD(item.endDate)}` : `계약 종료 ${fmtDateYMD(item.endDate)}`, fmtDDay(item.dDay)].filter(Boolean).join(" · ");
       return issueCard("contract2 " + contractAlertCls(alert.months), fmtMonthDayDow(date), alert.months + "개월 전", item.project, meta, date < today);
     });
     return issueGroup("계약", cards, `이번 달 계약 알림(${CONTRACT_ALERT_TEXT})이 없어요.`, `계약 종료일 기준 ${CONTRACT_ALERT_TEXT} 알림 / 종료일 미정 계약은 제외`);
@@ -3324,7 +3371,7 @@
     if (r.nextAction) out.push({ t: String(r.nextAction), who: "메모" }); // 직접 입력한 다음 할 일(맨 앞)
     if (/확인 필요/.test(r.note || "")) add("브랜드 확인 필요(시트 이관)");
     if (/매출현황 누락/.test(r.source || "")) add("매출현황 누락 확인(BIS 진행확정)", "관리자");
-    if (r.dupCheck) add("중복 의심 확인", "관리자");
+    if (r.dupCheck && isAdminUser()) add("중복 의심 확인", "관리자"); // 중복 의심은 관리자에게만 보임
     if (r.group === "기타" && !r.artist) add("아티스트 확인 필요");
     if (w === 0 && /불발/.test(r.stage || "") && !r.reason) add("불발 사유 입력 필요");
     if (w === 0 && /보류/.test(r.stage || "") && !r.reason) add("보류 사유 입력 필요");
@@ -3707,6 +3754,7 @@
     ] },
     { id: "data", title: "② 데이터 연결", desc: "데이터는 모두 플랫폼에서 입력해 협업 DB에 저장됩니다. 여기서는 저장 위치와 외부 연결만 정합니다.", fields: [
       { path: "sources.bisFolder", label: "BIS 업로드 폴더", id: true, help: "무엇: BIS 매출현황·진행현황 엑셀을 넣어 두는 구글 드라이브 폴더\n예: https://drive.google.com/drive/folders/…  (주소를 그대로 붙여 넣기)\n영향: 사업 원장 [BIS 업로드]가 이 폴더의 최신 파일을 자동으로 읽음\n주의: 플랫폼을 배포한 구글 계정이 이 폴더를 열 수 있어야 함(공유: 뷰어 이상)" },
+      { path: "sources.totalList", label: "사업 캘린더 토탈리스트", id: true, help: "무엇: '광고IP사업 토탈리스트' 구글 시트 — 사업 캘린더의 계약 알림을 이 시트의 계약시작·계약종료일 기준으로 표시\n예: https://docs.google.com/spreadsheets/d/…  (주소를 그대로 붙여 넣기)\n탭: 이름에 '토탈리스트'가 들어간 탭 중 가장 최근 월(예: _26.12월)을 자동으로 읽음\n영향: 사업 캘린더만 바뀜(읽기 전용 — 사업 원장에는 영향 없음). 비우면 사업 원장 확정 건 기준\n주의: 플랫폼을 배포한 구글 계정이 이 시트를 열 수 있어야 함(공유: 뷰어 이상)" },
       { path: "sources.teamCalendar", label: "팀 구글 캘린더", id: true, help: "무엇: 대시보드 '팀 일정 캘린더'에 보여줄 구글 캘린더\n예: …@group.calendar.google.com 또는 캘린더 공유 링크\n영향: 팀 일정 섹션·'차주엔~' 배지·사업 일정 표시" },
       { path: "sources.teamCalendarLabel", label: "캘린더 표시 이름", help: "무엇: 팀 일정 섹션에 보이는 캘린더 이름\n예: 광고 IP 사업팀 캘린더\n영향: 표시만 바뀜" },
       { path: "sources.dbSheet", label: "협업 DB 시트", id: true, advanced: true, help: "무엇: 모든 입력 데이터(사업 원장·KPI·AGENDA·트렌드·변경 이력)가 저장되는 구글 시트\n[플랫폼 시작하기]로 자동 생성·연결됩니다.\n주의: 다른 시트로 바꾸면 그 시트의 데이터를 보게 됩니다. 평소에는 바꾸지 마세요." },
@@ -3847,7 +3895,7 @@
     };
     const security = () => {
       const sec = el("section", "adm-group2"); sec.id = "adm-security";
-      sec.append(elText("h3", null, "⑤ 보안 — 비밀번호"), elText("p", "data-desc2", "바꿀 비밀번호만 입력하세요(4자 이상)."));
+      sec.append(elText("h3", null, "⑥ 보안 — 비밀번호"), elText("p", "data-desc2", "바꿀 비밀번호만 입력하세요(4자 이상)."));
       const grid = el("div", "adm-grid2");
       const mk = (label, help) => { const r = el("label", "adm-field2"); const h = el("span", "adm-label2"); h.append(document.createTextNode(label + " "), helpTip(help)); const i = document.createElement("input"); i.type = "password"; i.autocomplete = "new-password"; r.append(h, i); grid.appendChild(r); return i; };
       const dash = mk("새 대시보드 비밀번호", "무엇: 팀원 모두가 대시보드에 들어올 때 쓰는 공통 비밀번호\n영향: 바꾸면 모든 팀원이 새 비밀번호로 다시 들어와야 함 → 팀원에게 꼭 공유");
@@ -3935,10 +3983,43 @@
       const wrapT = el("div", "data-table-wrap2"); wrapT.appendChild(t);
       stageBox.append(wrapT, row);
     };
+    // ⑤ 중복 판단 규칙: 중복 의심을 [해결]할 때 남긴 규칙(같은 브랜드 표기 / 다른 사업) 목록·삭제
+    const dupBox = el("section", "adm-group2"); dupBox.id = "adm-duprules";
+    const drawDupRules = async () => {
+      dupBox.innerHTML = "";
+      const h = el("h3", null);
+      h.append(document.createTextNode("⑤ 중복 판단 규칙 "), helpTip("무엇: 사업 원장 '중복 의심'을 [해결]할 때 남긴 규칙\n같은 브랜드 표기: 두 표기를 같은 브랜드로 판단(예: CK = 캘빈클라인) — 중복 판단·BIS 자동 인식에 반영\n다른 사업: 이 조합은 다시 중복 의심으로 띄우지 않음\n규칙을 지우면 다음 입력·업로드부터 다시 원래 기준으로 판단"));
+      dupBox.append(h, elText("p", "data-desc2", "중복 의심 알림의 [해결]에서 메모와 함께 자동으로 쌓입니다. 잘못 등록한 규칙은 [삭제]하세요."));
+      if (!COLLAB.meta || !COLLAB.meta.ready) { dupBox.appendChild(elText("p", "form-hint2", "협업 DB를 시작한 뒤 볼 수 있어요.")); return; }
+      let rules = [];
+      try { const r = await callDb("dupRules", {}); if (!r.ok) throw new Error(r.message || r.error); rules = r.rules || []; }
+      catch (e) { dupBox.appendChild(elText("p", "err2", "규칙을 불러오지 못했어요: " + e.message)); return; }
+      if (!rules.length) { dupBox.appendChild(elText("p", "form-hint2", "아직 등록된 규칙이 없어요.")); return; }
+      const t = el("table", "data-table2 adm-dup-table2");
+      const hr = el("tr", null); ["구분", "대상", "해결 메모", "등록", ""].forEach(x => hr.appendChild(elText("th", null, x)));
+      const th = el("thead", null); th.appendChild(hr); t.appendChild(th);
+      const tb = el("tbody", null);
+      rules.slice().reverse().forEach(r => {
+        const tr = el("tr", null);
+        const target = r.type === "alias" ? `${r.a} = ${r.b}` : r.ids ? `${r.ids.join(" ↔ ")}${r.a ? " (" + r.a + ")" : ""}` : `${r.a} ≠ ${r.b}`;
+        const del = elText("button", "btn-danger2 small2", "삭제"); del.type = "button";
+        del.addEventListener("click", async () => {
+          if (!confirm(`이 규칙을 지울까요?\n${target}\n(다음 입력·업로드부터 원래 기준으로 판단, 변경 이력에 남음)`)) return;
+          const res = await callDb("deleteDupRule", { ruleId: r.id });
+          if (!res.ok) { alert("실패: " + (res.message || res.error)); return; }
+          drawDupRules();
+        });
+        const dc = el("td", null); dc.appendChild(del);
+        tr.append(elText("td", null, r.type === "alias" ? "같은 브랜드 표기" : "다른 사업"), elText("td", null, target), elText("td", "long2", r.memo || ""), elText("td", null, `${String(r.at || "").slice(0, 10)} ${r.by || ""}`), dc);
+        tb.appendChild(tr);
+      });
+      t.appendChild(tb);
+      const w = el("div", "data-table-wrap2"); w.appendChild(t); dupBox.appendChild(w);
+    };
     const historyBox = el("section", "adm-group2"); historyBox.id = "adm-history";
     const drawHistory = () => {
       historyBox.innerHTML = "";
-      const h = el("h3", null); h.append(document.createTextNode("⑥ 변경 이력 "), helpTip("무엇: 설정을 저장할 때마다 그 시점 설정 전체가 기록됨(최근 20건)\n[되돌리기]: 그 시점 설정으로 즉시 복원(현재 설정도 이력에 남음)\n[기본값으로 복원]: 처음 설정으로(데이터 연결 주소도 초기화되니 주의)"));
+      const h = el("h3", null); h.append(document.createTextNode("⑦ 변경 이력 "), helpTip("무엇: 설정을 저장할 때마다 그 시점 설정 전체가 기록됨(최근 20건)\n[되돌리기]: 그 시점 설정으로 즉시 복원(현재 설정도 이력에 남음)\n[기본값으로 복원]: 처음 설정으로(데이터 연결 주소도 초기화되니 주의)"));
       historyBox.appendChild(h);
       if (!st.history.length) historyBox.appendChild(elText("p", "form-hint2", "아직 저장 이력이 없어요."));
       st.history.forEach((x, i) => {
@@ -3966,6 +4047,7 @@
           [s2.db.ready, "협업 DB 연결", s2.db.ready ? "연결됨" : "없음 — 기준 정보 탭 [플랫폼 시작하기]", "data", s2.db.url],
           [s2.bisFolder.set, "BIS 업로드 폴더", s2.bisFolder.set ? "지정됨" : "지정 필요 — 아래 ② 데이터 연결", "data", s2.bisFolder.url],
           [s2.weekly.installed, "주간 자동 기록(금 18시)", s2.weekly.installed ? ("예약됨" + (s2.weekly.last ? " · 마지막 " + s2.weekly.last : "")) : "예약 필요 — Apps Script 편집기에서 setupWeeklySnapshot 1회 실행", "data", ""],
+          [true, "사업 캘린더 기준", s2.totalList && s2.totalList.set ? "토탈리스트 시트(계약시작·종료일)" : "사업 원장 확정 건(토탈리스트를 쓰려면 ② 데이터 연결에 주소 입력)", "data", s2.totalList && s2.totalList.url],
           [s2.teamCalendar.set, "팀 구글 캘린더", s2.teamCalendar.set ? "지정됨" : "지정 필요 — 아래 ② 데이터 연결", "data", ""],
         ];
         const ul = el("div", "adm-check-list2");
@@ -3990,6 +4072,7 @@
       body.innerHTML = ""; Object.keys(fieldEls).forEach(k => delete fieldEls[k]);
       ADMIN_GROUPS.forEach(g => body.appendChild(group(g)));
       body.appendChild(stageBox); drawStages();
+      body.appendChild(dupBox); drawDupRules();
       body.appendChild(security());
       body.appendChild(historyBox); drawHistory();
     };
@@ -4317,7 +4400,7 @@
       addSelect("파트", codeNames("parts"), f.part, v => { f.part = v; });
       addSelect("단계", codeNames("stages"), f.stage, v => { f.stage = v; });
       addSelect("실적 반영", [{ value: "승인 대기", label: "OFF(반영 대기)" }, { value: "승인", label: "ON(반영)" }], f.approval || "", v => { f.approval = v; });
-      addSelect("다음 할 일", [{ value: "확인 필요", label: "확인 필요(작성자)" }, { value: "관리자 확인", label: "관리자 확인 필요" }, { value: "없음", label: "없음" }], f.todo || "", v => { f.todo = v; });
+      addSelect("다음 할 일", [{ value: "확인 필요", label: "확인 필요(작성자)" }].concat(isAdminUser() ? [{ value: "관리자 확인", label: "관리자 확인 필요" }] : []).concat([{ value: "없음", label: "없음" }]), f.todo || "", v => { f.todo = v; });
     }
     const spacer = el("span", "data-spacer2");
     toolbar.appendChild(spacer);
@@ -4837,20 +4920,18 @@
       if (rec.source) parts.push("출처: " + rec.source);
       form.appendChild(elText("div", "deal-auto2", parts.join(" · ") || "자동 계산 값 없음"));
     }
-    if (!isNew && rec.dupCheck) {
+    if (!isNew && rec.dupCheck && isAdminUser()) { // 중복 의심은 관리자에게만
       const box = el("div", "import-errbox2 warn-box2 dup-box2");
       box.appendChild(elText("p", null, "관리자 확인 사항: " + rec.dupCheck));
       if (isAdminMode()) {
-        const ok = elText("button", "btn-line2 small2", "확인 완료(중복 아님)"); ok.type = "button";
-        ok.addEventListener("click", async () => {
-          const res = await callDb("clearCheck", { ids: [rec.id] });
-          if (!res.ok) { alert("실패: " + (res.message || res.error)); return; }
+        const ok = elText("button", "btn-line2 small2", "해결"); ok.type = "button";
+        ok.addEventListener("click", () => openDupResolve(rec, () => {
           rec.dupCheck = ""; box.remove(); COLLAB.dashDirty = true;
           if (COLLAB.rows.deals) { const t = COLLAB.rows.deals.find(x => x.id === rec.id); if (t) t.dupCheck = ""; renderAdminAlerts(COLLAB.rows.deals); }
-        });
+        }));
         box.appendChild(ok);
-        box.appendChild(elText("span", "form-hint2", " 정말 중복이면 [삭제]로 한 건을 지우세요(변경 이력에서 복원 가능)."));
-      }
+        box.appendChild(elText("span", "form-hint2", " 같은 브랜드 표기 / 다른 사업 / 확인만 중 골라 메모를 남기면 같은 경우는 다시 뜨지 않아요. 정말 중복이면 [삭제]로 한 건을 지우세요."));
+      } else box.appendChild(elText("span", "form-hint2", " 관리자 모드를 켜면 [해결]할 수 있어요."));
       form.appendChild(box);
     }
     const todoBox = el("div", "todo-box2");
@@ -5027,7 +5108,7 @@
         COLLAB.dashDirty = true;
         if (table === "members") refreshMeta();
         m.close();
-        if (res.dupCheck) alert("비슷한 사업이 이미 있어 '관리자 확인 필요(중복 의심)'로 표시했어요.\n" + res.dupCheck);
+        if (res.dupCheck && isAdminUser()) alert("비슷한 사업이 이미 있어 '관리자 확인 필요(중복 의심)'로 표시했어요.\n" + res.dupCheck); // 작성자에게는 안 띄움
         if (res.approvalReset) alert("KPI 관련 내용(금액·연도·단계 등)이 바뀌어 실적 반영이 꺼졌습니다(OFF). 관리자가 다시 켜야 실적에 집계됩니다.");
         onDone && onDone();
       } catch (err) {
