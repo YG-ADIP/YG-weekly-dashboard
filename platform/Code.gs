@@ -35,6 +35,7 @@ var DEFAULT_CONFIG = {
     bisFolder: '',  // BIS 업로드 폴더(드라이브) — BIS 매출현황·진행현황 엑셀을 넣어 두면 [드라이브에서 가져오기]로 반영
     teamCalendar: 'c_ba39a76170dcab8c99022cc72144d5706bda1be2cfd589a88eabe857259799a3@group.calendar.google.com',
     teamCalendarLabel: '광고 IP 사업팀 캘린더',
+    totalList: '', // 사업 캘린더용 광고IP사업 토탈리스트(구글 시트, 읽기 전용) — 비우면 사업 원장 기준
     dbSheet: '', // 협업 DB(구글 시트) — 관리자 모드 [플랫폼 시작하기]로 생성. 모든 화면이 여기서 읽고 씀
   },
   bizCal: {
@@ -148,6 +149,7 @@ function sanitizeConfig_(input) {
       teamCalendar: extractId_(src.teamCalendar) || d.sources.teamCalendar,
       teamCalendarLabel: cleanText_(src.teamCalendarLabel, 40, d.sources.teamCalendarLabel),
       dbSheet: extractId_(src.dbSheet),
+      totalList: extractId_(src.totalList),
     },
     bizCal: {
       alertMonths: months.length ? months : d.bizCal.alertMonths.slice(),
@@ -295,7 +297,9 @@ function handleApiInner_(params) {
         return { ok: true };
       case 'agenda': return dbReady_() ? getAgendaDataDb_() : { ok: true, byWeek: {} };
       case 'trend': return dbReady_() ? getTrendDataDb_() : { ok: true, byWeek: {} };
-      case 'businessCalendar': return dbReady_() ? getBusinessCalendarDataDb_() : { ok: true, items: [] };
+      case 'businessCalendar':
+        if (cfg_().sources.totalList) return totalListCalendar_(cfg_().sources.totalList, !!params.fresh); // 토탈리스트는 DB 없이도 읽음
+        return dbReady_() ? getBusinessCalendarDataDb_() : { ok: true, items: [] };
       case 'teamCalendar':
         return getTeamCalendarData_(parseInt(params.year, 10), parseInt(params.month, 10), !!params.fresh);
       case 'upcomingSelection': return { ok: true, selection: getUpcomingSelection_() };
@@ -415,6 +419,7 @@ function keepCodes_(config) { config.codes = JSON.parse(JSON.stringify(cfg_().co
 // 연결 대상이 바뀌면 60초 캐시에 남은 예전 시트 데이터가 보이지 않게 비움.
 function clearDataCaches_(config) {
   var keys = ['kpiByWeek', 'insightByWeek'];
+  if (config.sources.totalList) keys.push('totalList_' + config.sources.totalList); // 토탈리스트 주소를 바꾸거나 저장하면 바로 새로 읽음
   var y = config.general.year;
   [y - 1, y, y + 1].forEach(function (yy) { for (var m = 1; m <= 12; m++) keys.push('teamCal_' + yy + '_' + m); });
   try { CacheService.getScriptCache().removeAll(keys); } catch (e) {}
@@ -458,6 +463,12 @@ function testConnections_(config) {
         ? { ok: true, detail: r.folder + ' · 매출현황 ' + n('sales') + '개 · 진행현황 ' + n('pipe') + '개 확인' }
         : { ok: true, detail: r.folder + ' · 열림(아직 BIS 엑셀 없음)' };
     });
+    add('사업 캘린더 토탈리스트', function () {
+      if (!config.sources.totalList) return { ok: true, detail: '지정 안 됨 — 사업 캘린더는 사업 원장(확정 건) 기준으로 표시' };
+      var t = readTotalList_(config.sources.totalList);
+      var n = t.rows.filter(function (x) { return parseTotalDate_(x.end, true); }).length;
+      return { ok: true, detail: t.file + ' · \'' + t.tab + '\' 탭 · ' + t.rows.length + '건(계약종료일 있음 ' + n + '건)' };
+    });
     add('주간 자동 기록(금 18시)', function () {
       var st = weeklySnapshotState_();
       return st.installed
@@ -484,6 +495,7 @@ function adminStatus_() {
     ok: true,
     db: { ready: !!c.sources.dbSheet, url: c.sources.dbSheet ? 'https://docs.google.com/spreadsheets/d/' + c.sources.dbSheet + '/edit' : '' },
     bisFolder: { set: !!c.sources.bisFolder, url: c.sources.bisFolder ? 'https://drive.google.com/drive/folders/' + c.sources.bisFolder : '' },
+    totalList: { set: !!c.sources.totalList, url: c.sources.totalList ? 'https://docs.google.com/spreadsheets/d/' + c.sources.totalList + '/edit' : '' },
     weekly: weekly,
     teamCalendar: { set: !!c.sources.teamCalendar },
   };

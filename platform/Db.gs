@@ -803,6 +803,7 @@ function dupSuspect_(rec, deals, selfId) {
   var g = String(rec.group || '').toUpperCase(), amt = numOrBlank_(rec.amount);
   var hits = deals.filter(function (d) {
     if (d.id === selfId || String(d.group || '').toUpperCase() !== g || stageInfo_(d.stage).weight === 0) return false;
+    if (notDupPair_(rec, d)) return false; // 관리자가 '다른 사업'으로 정리한 조합
     var sameAmt = typeof amt === 'number' && amt > 0 && numOrBlank_(d.amount) === amt && String(d.cur || '') === String(rec.cur || '');
     var month = sameMonth_(d.startDate, rec.startDate), noDates = !d.startDate || !rec.startDate;
     return (sameBrand_(d.brand, rec.brand) && (sameAmt || month || (noDates && d.ckind === rec.ckind))) || (sameAmt && month);
@@ -1328,6 +1329,92 @@ function getBusinessCalendarDataDb_() {
   return { ok: true, items: items };
 }
 
+// ============================================================
+// 사업 캘린더 ← 광고IP사업 토탈리스트(구글 시트, 읽기 전용)
+//  · 탭 이름에 '토탈리스트'가 들어간 탭 중 가장 최근 월(예: _26.12월)을 자동 선택
+//  · 머리글 이름으로 열을 찾음: 아티스트·분류·요약·광고/사업명·계약시작·계약종료(위치가 바뀌어도 됨)
+//  · 계약시작·종료일만 날짜 기준으로 쓰고, 이름은 캘린더 표시용. 사업 원장에는 쓰지 않음.
+// ============================================================
+function totalListTab_(ss) {
+  var best = null, bestKey = -1;
+  ss.getSheets().forEach(function (sh, i) {
+    var name = sh.getName();
+    if (!/토탈\s*리스트/.test(name)) return;
+    var m = name.match(/(\d{2,4})\s*[.\-\/년]\s*(\d{1,2})\s*월?/);
+    var key = m ? (Number(m[1]) % 100) * 100 + Number(m[2]) : 0;
+    if (key > bestKey) { bestKey = key; best = sh; }
+  });
+  return best || ss.getSheets()[0];
+}
+function parseTotalDate_(v, isEnd) {
+  var s = String(v || '').trim();
+  var m = s.match(/(\d{4})\s*[.\-\/년]\s*(\d{1,2})(?:\s*[.\-\/월]\s*(\d{1,2}))?/);
+  if (!m) return null;
+  var y = +m[1], mo = +m[2];
+  if (mo < 1 || mo > 12) return null;
+  var day = m[3] ? +m[3] : (isEnd ? new Date(y, mo, 0).getDate() : 1);
+  return { year: y, month: mo, day: day, exact: !!m[3] };
+}
+function readTotalList_(id) {
+  var ss = SpreadsheetApp.openById(id), sh = totalListTab_(ss);
+  var values = sh.getDataRange().getDisplayValues();
+  var norm = function (x) { return String(x || '').replace(/\s+/g, ''); };
+  var hr = -1;
+  for (var i = 0; i < Math.min(values.length, 30); i++) {
+    var cells = values[i].map(norm);
+    if (cells.indexOf('계약시작') >= 0 && cells.indexOf('계약종료') >= 0) { hr = i; break; }
+  }
+  if (hr < 0) throw new Error('\'' + sh.getName() + '\' 탭에서 \'계약시작\'·\'계약종료\' 머리글을 찾지 못했어요.');
+  var label = function (c) { return norm(values[hr][c]) || (hr > 0 ? norm(values[hr - 1][c]) : ''); };
+  var col = {}, width = values[hr].length;
+  for (var c = 0; c < width; c++) {
+    var l = label(c);
+    if (l === '계약시작' && col.start === undefined) col.start = c;
+    else if (l === '계약종료' && col.end === undefined) col.end = c;
+    else if (/사업명/.test(l) && col.name === undefined) col.name = c;
+    else if (l === '아티스트' && col.artist === undefined) col.artist = c;
+    else if (l === '분류' && col.kind === undefined) col.kind = c;
+    else if (l === '요약' && col.status === undefined) col.status = c;
+  }
+  if (col.name === undefined) throw new Error('\'' + sh.getName() + '\' 탭에서 \'광고 / 사업명\' 머리글을 찾지 못했어요.');
+  var get = function (row, k) { return col[k] === undefined ? '' : String(row[col[k]] || '').trim(); };
+  var rows = [], artist = '', kind = '';
+  for (var r = hr + 1; r < values.length; r++) {
+    var row = values[r];
+    if (get(row, 'artist')) artist = get(row, 'artist'); // 병합된 칸은 위 값 이어 씀
+    if (get(row, 'kind')) kind = get(row, 'kind');
+    var name = get(row, 'name');
+    if (!name) continue;
+    rows.push({ name: name, artist: artist, kind: kind, status: get(row, 'status'), start: get(row, 'start'), end: get(row, 'end') });
+  }
+  return { tab: sh.getName(), file: ss.getName(), rows: rows };
+}
+function totalListCalendar_(id, fresh) {
+  var cache = CacheService.getScriptCache(), ck = 'totalList_' + id;
+  if (!fresh) { var hit = cache.get(ck); if (hit) { try { return JSON.parse(hit); } catch (e) {} } }
+  var t;
+  try { t = readTotalList_(id); }
+  catch (e) { return { ok: false, error: 'total_list', message: '토탈리스트를 읽지 못했어요(주소·공유 권한 확인): ' + (e && e.message || e) }; }
+  var today = new Date(); today = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  var items = [];
+  t.rows.forEach(function (x) {
+    var s = parseTotalDate_(x.start, false), e = parseTotalDate_(x.end, true); // '(TBD)' 등은 날짜 없음 → 종료 알림 제외
+    var end = e ? new Date(e.year, e.month - 1, e.day) : null;
+    items.push({
+      project: x.name + (x.artist ? ' (' + x.artist + ')' : '') + (e && !e.exact ? ' (종료 예정월)' : ''),
+      category: [x.kind, x.status].filter(Boolean).join(' · '),
+      startDate: s ? { year: s.year, month: s.month, day: s.day } : null,
+      endDate: e ? { year: e.year, month: e.month, day: e.day } : null,
+      months: null,
+      dDay: end ? Math.round((end - today) / 86400000) : null,
+      markers: [],
+    });
+  });
+  var out = { ok: true, items: items, source: { kind: 'totalList', file: t.file, tab: t.tab } };
+  try { cache.put(ck, JSON.stringify(out), 600); } catch (err) {} // 10분([새로고침]이면 즉시 새로 읽음)
+  return out;
+}
+
 // 인사이트: 그 주에 확정된 사업(확정일 또는 단계 변경일 기준) + 현재 반기 KPI 기여 상위 5건
 function getInsightDataDb_() {
   var year = cfg_().general.year;
@@ -1375,6 +1462,7 @@ function sameBrand_(a, b) {
   var x = brandKey_(a), y = brandKey_(b);
   if (!x || !y) return false;
   if (x === y) return true;
+  if (dupRuleHit_('alias', x, y)) return true; // 관리자가 '같은 브랜드 표기'로 등록(예: CK = 캘빈클라인)
   var short = x.length < y.length ? x : y, long = x.length < y.length ? y : x;
   if (short.length >= 2 && long.indexOf(short) === 0) return true;
   if (short.length >= 3 && long.indexOf(short) >= 0) return true; // '가르니에' ⊂ '로레알 가르니에'
@@ -1469,6 +1557,84 @@ function dbApprove_(ids, approve, user) {
     });
     appendLogs_(logs);
     return { ok: true, done: done, skipped: skipped };
+  });
+}
+
+// ============================================================
+// 중복 판단 규칙(관리자 '해결' 메모) — 스크립트 속성 DUP_RULES_JSON
+//  alias  : 두 브랜드 표기는 같은 브랜드(예: CK = 캘빈클라인) → 중복 판단·BIS 자동 인식에 반영
+//  notdup : 이름이 비슷해도 다른 사업 → 같은 조합은 다시 중복 의심으로 띄우지 않음
+//           (브랜드 표기가 다르면 브랜드 조합으로, 같으면 두 사업 ID 조합으로 기억)
+// ============================================================
+var DUP_RULES_PROP = 'DUP_RULES_JSON', DUP_RULES_MAX_CHARS = 8500, DUP_RULES_CACHE_ = null;
+function dupRules_() {
+  if (DUP_RULES_CACHE_) return DUP_RULES_CACHE_;
+  var raw = PropertiesService.getScriptProperties().getProperty(DUP_RULES_PROP), arr = [];
+  try { arr = JSON.parse(raw || '[]'); } catch (e) { arr = []; }
+  DUP_RULES_CACHE_ = Array.isArray(arr) ? arr : [];
+  return DUP_RULES_CACHE_;
+}
+function saveDupRules_(rules) {
+  var json = JSON.stringify(rules);
+  if (json.length > DUP_RULES_MAX_CHARS) throw new Error('중복 판단 규칙이 너무 많아요. 관리자 설정 → 중복 판단 규칙에서 필요 없는 규칙을 지운 뒤 다시 해 주세요.');
+  PropertiesService.getScriptProperties().setProperty(DUP_RULES_PROP, json);
+  DUP_RULES_CACHE_ = rules;
+}
+function dupRuleHit_(type, x, y) {
+  return dupRules_().some(function (r) {
+    if (r.type !== type || !r.a || !r.b) return false;
+    var a = brandKey_(r.a), b = brandKey_(r.b);
+    return (a === x && b === y) || (a === y && b === x);
+  });
+}
+function notDupPair_(rec, d) {
+  var x = brandKey_(rec.brand), y = brandKey_(d.brand);
+  if (x && y && x !== y && dupRuleHit_('notdup', x, y)) return true;
+  if (!rec.id) return false;
+  return dupRules_().some(function (r) { return r.type === 'notdup' && r.ids && r.ids.indexOf(rec.id) >= 0 && r.ids.indexOf(d.id) >= 0; });
+}
+var DUP_KIND_LABEL = { alias: '같은 브랜드 표기', notdup: '다른 사업', ack: '확인만' };
+// 관리자가 중복 의심을 '해결': kind = alias | notdup | ack, memo = 해결 메모
+function dbResolveDup_(id, kind, memo, user) {
+  if (!DUP_KIND_LABEL[kind]) throw new Error('해결 방법을 골라 주세요.');
+  memo = String(memo || '').trim().slice(0, 100);
+  if (kind !== 'ack' && !memo) throw new Error('해결 메모를 남겨 주세요(예: CK는 캘빈클라인의 약칭).');
+  return withLock_(function () {
+    var deals = readTable_('deals');
+    var d = deals.filter(function (x) { return x.id === id; })[0];
+    if (!d) return { ok: false, error: 'not_found', message: '이미 삭제된 사업입니다.' };
+    var refIds = (String(d.dupCheck || '').match(/\b(?:AD|IP)-\d{4}-\d{4}\b/g) || []).filter(function (x) { return x !== id; });
+    var others = deals.filter(function (x) { return refIds.indexOf(x.id) >= 0; });
+    var rules = dupRules_().slice(), added = [], at = nowStamp_();
+    var addRule = function (r) {
+      var keyOf = function (o) { return o.type + ':' + (o.ids ? o.ids.join('|') : [brandKey_(o.a), brandKey_(o.b)].sort().join('|')); };
+      var dupd = rules.some(function (o) { return keyOf(o) === keyOf(r); });
+      if (dupd) return;
+      r.id = 'DR-' + new Date().getTime() + '-' + rules.length; r.memo = memo; r.by = user; r.at = at;
+      rules.push(r); added.push(r);
+    };
+    others.forEach(function (o) {
+      var same = brandKey_(o.brand) === brandKey_(d.brand);
+      if (kind === 'alias' && !same && o.brand && d.brand) addRule({ type: 'alias', a: o.brand, b: d.brand });
+      if (kind === 'notdup') addRule(same || !o.brand || !d.brand ? { type: 'notdup', ids: [d.id, o.id].sort(), a: d.brand || '', b: o.brand || '' } : { type: 'notdup', a: o.brand, b: d.brand });
+    });
+    if (added.length) saveDupRules_(rules);
+    var before = d.dupCheck || (/매출현황 누락/.test(d.source || '') ? '진행현황은 진행확정인데 매출현황에 없음' : '');
+    d.dupCheck = '';
+    if (/매출현황 누락/.test(d.source || '')) d.source = String(d.source).replace(/\(?매출현황 누락 확인\)?/, '(관리자 확인 완료)');
+    var sh = dbSpreadsheet_().getSheetByName(DB_TABLES.deals.sheet), row = recordToRow_('deals', d);
+    sh.getRange(d._row, 1, 1, row.length).setValues([row]);
+    appendLogs_([{ user: user, table: 'deals', recordId: d.id, action: '관리자 확인 완료', field: '관리자 확인 사항', before: before, after: '해결: ' + DUP_KIND_LABEL[kind] + (memo ? ' — ' + memo : '') + (added.length ? ' (규칙 ' + added.length + '개 등록)' : '') }]);
+    return { ok: true, rules: added };
+  });
+}
+function dbDeleteDupRule_(ruleId, user) {
+  return withLock_(function () {
+    var rules = dupRules_(), r = rules.filter(function (x) { return x.id === ruleId; })[0];
+    if (!r) return { ok: false, error: 'not_found', message: '이미 지운 규칙입니다.' };
+    saveDupRules_(rules.filter(function (x) { return x.id !== ruleId; }));
+    appendLogs_([{ user: user, table: '기준 정보', recordId: ruleId, action: '중복 판단 규칙 삭제', field: DUP_KIND_LABEL[r.type] || r.type, before: JSON.stringify(r), after: '' }]);
+    return { ok: true };
   });
 }
 
@@ -1852,7 +2018,7 @@ function dbApi(action, password, user, payloadJson) {
   var isAdmin = !adminDenied;
   try { ensureStagesV2_(); } catch (e) {} // 진행 단계 체계 변경 — 한 번만
   try { ensureCreatedAtV1_(); } catch (e) {} // 기존 건 등록일시 채우기 — 한 번만
-  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, parseFile: 1, bisDrive: 1, setBisFolder: 1, setNewShow: 1, bisPreview: 1, bisCommit: 1, clearCheck: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
+  var ADMIN_ACTIONS = { importPreview: 1, importCommit: 1, approve: 1, setBasis: 1, saveFx: 1, addMembers: 1, parseFile: 1, bisDrive: 1, setBisFolder: 1, setNewShow: 1, bisPreview: 1, bisCommit: 1, clearCheck: 1, resolveDup: 1, dupRules: 1, deleteDupRule: 1, setYear: 1, saveCodes: 1, start: 1, adminCheck: 1 };
   // 입력·저장은 팀원 명단(사용)에 있는 이름만. 관리자 모드는 예외, 명단이 비어 있으면(최초 설정) 허용.
   var WRITE_ACTIONS = { save: 1, delete: 1, restore: 1, bulkKpi: 1, deleteMany: 1 };
   if (WRITE_ACTIONS[action] && !isAdmin && dbReady_()) {
@@ -1875,6 +2041,9 @@ function dbApi(action, password, user, payloadJson) {
         break;
       case 'parseFile': res = { ok: true, sheets: parseXlsxBase64_(String(payload.b64 || '')) }; break;
       case 'clearCheck': res = dbClearCheck_(payload.ids, user); break;
+      case 'resolveDup': res = dbResolveDup_(String(payload.id || ''), String(payload.kind || ''), payload.memo, user); break;
+      case 'dupRules': res = { ok: true, rules: dupRules_() }; break;
+      case 'deleteDupRule': res = dbDeleteDupRule_(String(payload.ruleId || ''), user); break;
       case 'bisDrive': res = dbBisDrive_(payload); break;
       case 'bulkKpi': res = dbBulkKpi_(payload.changes, user, isAdmin); break;
       case 'setNewShow': res = dbSetNewShow_(String(payload.id || ''), !!payload.show, user); break;
